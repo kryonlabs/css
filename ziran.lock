@@ -2,6 +2,14 @@
   "format": 1,
   "packages": [
     {
+      "commit": "a02feeb703192f1481e72160b1ccff401d17ef9d",
+      "dependencies": {"raylib": "p5a77c9c35110e925"},
+      "id": "p0797a2ec7b9d9b0e",
+      "name": "kryon",
+      "ref": "a02feeb703192f1481e72160b1ccff401d17ef9d",
+      "url": "https://github.com/kryonlabs/kryon.git"
+    },
+    {
       "commit": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e",
       "dependencies": {},
       "id": "p5a77c9c35110e925",
@@ -9,18 +17,10 @@
       "ref": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e",
       "source": true,
       "url": "https://github.com/raysan5/raylib.git"
-    },
-    {
-      "commit": "2ac44793f77531b015bbe49e6697972900de8217",
-      "dependencies": {"raylib": "p5a77c9c35110e925"},
-      "id": "pc510423de8e0b1cb",
-      "name": "kryon",
-      "ref": "master",
-      "url": "https://github.com/kryonlabs/kryon.git"
     }
   ],
   "root": {
-    "dependencies": {"kryon": "pc510423de8e0b1cb"},
+    "dependencies": {"kryon": "p0797a2ec7b9d9b0e"},
     "name": "Kss"
   },
   "toolchain": {

@@ -20,20 +20,20 @@
       "url": "https://github.com/webmproject/libwebp.git"
     },
     {
-      "commit": "7dc62902389544bf8d1fb3a159152cbd3b889c78",
+      "commit": "ead3eb7aa63535447a1116ecae7bb4d712d72034",
       "dependencies": {"libwebp": "p651a2c7a393977c0", "raylib": "p5a77c9c35110e925"},
-      "id": "pcec085fc76d6fd7b",
+      "id": "p79167729f20b4a95",
       "name": "kryon",
-      "ref": "7dc62902389544bf8d1fb3a159152cbd3b889c78",
+      "ref": "ead3eb7aa63535447a1116ecae7bb4d712d72034",
       "url": "https://github.com/kryonlabs/kryon.git"
     }
   ],
   "root": {
-    "dependencies": {"kryon": "pcec085fc76d6fd7b"},
+    "dependencies": {"kryon": "p79167729f20b4a95"},
     "name": "Kss"
   },
   "toolchain": {
-    "commit": "1e2c3994fee8d58b3b56a77a7c339be4644a6447",
+    "commit": "93af347a2a7af4a5a6a88906dbf7808189438b9b",
     "ref": "master",
     "url": "https://github.com/ziranlang/ziran.git"
   }

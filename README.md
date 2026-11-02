@@ -39,6 +39,7 @@ by Kryon widget props. The exporter shares the parser, token resolution and
 environment rules; widget/class/state selectors become scoped DOM selectors,
 numeric units and axis properties are expanded, and media conditions survive.
 Source and saved IR run on C, C++ and Go in `tests/css_export_test.sh`.
+The C++ host compiles Ziran's generated C output as C++17.
 
 The current export subset rejects unresolved imports, KSS layers, nested
 selector functions, native materials, unknown foreign blocks and output

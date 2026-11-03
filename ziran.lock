@@ -2,34 +2,45 @@
   "format": 1,
   "packages": [
     {
-      "commit": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e",
+      "commit": "829a65d769d935c4852f8159e964312c0957260a",
       "dependencies": {},
-      "id": "p5a77c9c35110e925",
-      "name": "raylib",
-      "ref": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e",
+      "id": "p16cd0434af3dff7b",
+      "name": "sdl3",
+      "ref": "829a65d769d935c4852f8159e964312c0957260a",
       "source": true,
-      "url": "https://github.com/raysan5/raylib.git"
+      "url": "https://github.com/libsdl-org/SDL.git"
     },
     {
       "commit": "1844042d1ca751e62e61df7617dba19c98588339",
       "dependencies": {},
-      "id": "p651a2c7a393977c0",
+      "id": "p3b3c785a0e17e605",
       "name": "libwebp",
       "ref": "1844042d1ca751e62e61df7617dba19c98588339",
       "source": true,
       "url": "https://github.com/webmproject/libwebp.git"
     },
     {
-      "commit": "ead3eb7aa63535447a1116ecae7bb4d712d72034",
-      "dependencies": {"libwebp": "p651a2c7a393977c0", "raylib": "p5a77c9c35110e925"},
-      "id": "p79167729f20b4a95",
+      "commit": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e",
+      "dependencies": {},
+      "id": "pcc7aa76725f2fb2f",
+      "name": "raylib",
+      "ref": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e",
+      "source": true,
+      "url": "https://github.com/raysan5/raylib.git"
+    },
+    {
+      "commit": "1cd873fda5d12cd4dd562956da94cee33c3e364c",
+      "dependencies": {"libwebp": "p3b3c785a0e17e605", "raylib": "pcc7aa76725f2fb2f", "sdl3": "p16cd0434af3dff7b"},
+      "dependency_refs": {"libwebp": "1844042d1ca751e62e61df7617dba19c98588339", "raylib": "fafa2cea97d0cb379d832086ba45a989fa6f9c8e", "sdl3": "829a65d769d935c4852f8159e964312c0957260a"},
+      "id": "pe42819128210d99c",
       "name": "kryon",
-      "ref": "ead3eb7aa63535447a1116ecae7bb4d712d72034",
+      "ref": "1cd873fda5d12cd4dd562956da94cee33c3e364c",
       "url": "https://github.com/kryonlabs/kryon.git"
     }
   ],
   "root": {
-    "dependencies": {"kryon": "p79167729f20b4a95"},
+    "dependencies": {"kryon": "pe42819128210d99c"},
+    "dependency_refs": {"kryon": "1cd873fda5d12cd4dd562956da94cee33c3e364c"},
     "name": "Kss"
   },
   "toolchain": {

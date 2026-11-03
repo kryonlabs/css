@@ -8,7 +8,7 @@ ref = "master"
 
 [dependencies.kryon]
 git = "https://github.com/kryonlabs/kryon.git"
-ref = "ead3eb7aa63535447a1116ecae7bb4d712d72034"
+ref = "1cd873fda5d12cd4dd562956da94cee33c3e364c"
 
 [exports]
 Kss = "src/Kss/module.zi"

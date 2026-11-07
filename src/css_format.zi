@@ -1,0 +1,290 @@
+// Kryon CSS formatter: one declaration per line, two-space indentation,
+// `selector {` heads, a blank line between top-level blocks. Strings and
+// comments are copied unchanged. The source must parse, and the formatted
+// text must parse to the same items, so formatting never changes a sheet.
+#import "css_parser"
+#import "kryon/style_sheet"
+
+using CssStatus;
+
+CssFormatResult :: struct {
+    ok: bool
+    count: s32
+    diagnostic: [256]u8
+    diagnostic_length: s32
+}
+
+CssFormatCounts :: struct {
+    ok: bool
+    rules: s32
+    properties: s32
+    keyframes: s32
+    web: s32
+    checksum: u32
+}
+
+css_format_parser: CssParser;
+
+CssFormatMix :: (hash: u32, value: u32) -> u32 {
+    return (hash ^ value) * cast(u32)16777619
+}
+
+CssFormatMixFloat :: (hash: u32, value: float32) -> u32 {
+    return CssFormatMix(hash, cast(u32)cast(s32)(value * 1000.0))
+}
+
+// Parse with every import answered empty; count and hash what it yields.
+CssFormatParse :: (source: string, result: *CssFormatResult) -> CssFormatCounts {
+    counts: CssFormatCounts
+    p: *CssParser = *css_format_parser
+    CssBegin(p, source, "sheet.css")
+    hash: u32 = 2166136261
+    while true {
+        status: s32 = CssStep(p)
+        if status == cast(s32)CssStatusRule {
+            counts.rules += 1
+            rule: StyleRule = p.rule
+            hash = CssFormatMix(hash, cast(u32)rule.selector.kind)
+            hash = CssFormatMix(hash, cast(u32)rule.selector.class_name)
+            hash = CssFormatMix(hash, cast(u32)rule.selector.role)
+            hash = CssFormatMix(hash, cast(u32)rule.selector.tone)
+            hash = CssFormatMix(hash, cast(u32)rule.state)
+            hash = CssFormatMix(hash, cast(u32)rule.layer)
+            hash = CssFormatMix(hash, rule.style.fields)
+            hash = CssFormatMix(hash, rule.style.background)
+            hash = CssFormatMix(hash, rule.style.foreground)
+            hash = CssFormatMix(hash, rule.style.border)
+            hash = CssFormatMixFloat(hash, rule.style.padding_x)
+            hash = CssFormatMixFloat(hash, rule.style.font_size)
+            hash = CssFormatMix(hash, cast(u32)p.rule_ref_count)
+        } else if status == cast(s32)CssStatusProperty {
+            counts.properties += 1
+            hash = CssFormatMix(hash, cast(u32)p.definition.kind)
+            hash = CssFormatMix(hash, p.definition.color)
+            hash = CssFormatMixFloat(hash, p.definition.number)
+        } else if status == cast(s32)CssStatusKeyframes {
+            counts.keyframes += 1
+        } else if status == cast(s32)CssStatusNeedImport {
+            name: [64]u8
+            CssProvideImport(p, "", CssPendingImport(p, name[:]))
+        } else if status == cast(s32)CssStatusDone {
+            counts.ok = true
+            counts.web = p.web_declarations
+            counts.checksum = hash
+            return counts
+        } else if status == cast(s32)CssStatusError {
+            text: [256]u8
+            message: string = CssDiagnostic(p, text[:])
+            result.diagnostic_length = 0
+            for index: cast(s32)0..cast(s32)message.count - 1 {
+                result.diagnostic[index] = message[index]
+            }
+            result.diagnostic_length = cast(s32)message.count
+            return counts
+        }
+    }
+    return counts
+}
+
+CssFormatter :: struct {
+    output: []u8
+    count: s32
+    overflow: bool
+    depth: s32
+    // Text of the statement being collected, spaces collapsed.
+    line: [4096]u8
+    line_length: s32
+    line_space: bool
+    // Each open block is a rule body (declarations) or an at-rule group.
+    declarations: [32]bool
+    blank: bool
+}
+
+css_formatter: CssFormatter;
+
+CssFormatRaw :: (f: *CssFormatter, byte: u8) {
+    if f.count >= cast(s32)f.output.count {
+        f.overflow = true
+        return
+    }
+    f.output[f.count] = byte
+    f.count += 1
+}
+
+CssFormatIndent :: (f: *CssFormatter) {
+    for level: cast(s32)0..f.depth - 1 {
+        CssFormatRaw(f, 32)
+        CssFormatRaw(f, 32)
+    }
+}
+
+// A blank line before the next item, never at the start or after `{`.
+CssFormatBlank :: (f: *CssFormatter) {
+    if f.blank { CssFormatRaw(f, 10) }
+    f.blank = false
+}
+
+CssFormatLineByte :: (f: *CssFormatter, byte: u8) {
+    if f.line_length >= cast(s32)f.line.count {
+        f.overflow = true
+        return
+    }
+    if f.line_space && f.line_length > 0 {
+        f.line[f.line_length] = 32
+        f.line_length += 1
+        if f.line_length >= cast(s32)f.line.count {
+            f.overflow = true
+            return
+        }
+    }
+    f.line_space = false
+    f.line[f.line_length] = byte
+    f.line_length += 1
+}
+
+// Write the collected statement as one line; declarations get `name: value`.
+CssFormatFlush :: (f: *CssFormatter, end: string) {
+    if f.line_length == 0 && end.count == 0 { return }
+    CssFormatBlank(f)
+    CssFormatIndent(f)
+    declaration: bool = f.depth > 0 && f.declarations[f.depth - 1] && end == ";"
+    colon: s32 = -1
+    if declaration {
+        for index: cast(s32)0..f.line_length - 1 {
+            if f.line[index] == #char ":" {
+                colon = index
+                break
+            }
+        }
+    }
+    if colon >= 0 {
+        name_end: s32 = colon
+        while name_end > 0 && f.line[name_end - 1] == 32 { name_end -= 1 }
+        for index: cast(s32)0..name_end - 1 { CssFormatRaw(f, f.line[index]) }
+        CssFormatRaw(f, #char ":")
+        value: s32 = colon + 1
+        while value < f.line_length && f.line[value] == 32 { value += 1 }
+        if value < f.line_length { CssFormatRaw(f, 32) }
+        for index: value..f.line_length - 1 { CssFormatRaw(f, f.line[index]) }
+    } else {
+        for index: cast(s32)0..f.line_length - 1 { CssFormatRaw(f, f.line[index]) }
+    }
+    for byte: end { CssFormatRaw(f, byte) }
+    CssFormatRaw(f, 10)
+    f.line_length = 0
+    f.line_space = false
+}
+
+#program_export
+CssFormat :: (source: string, output: []u8) -> CssFormatResult {
+    result: CssFormatResult
+    before: CssFormatCounts = CssFormatParse(source, *result)
+    if !before.ok { return result }
+    f: *CssFormatter = *css_formatter
+    f.output = output
+    f.count = 0
+    f.overflow = false
+    f.depth = 0
+    f.line_length = 0
+    f.line_space = false
+    f.blank = false
+    parens: s32 = 0
+    newlines: s32 = 0
+    at: s32 = 0
+    count: s32 = cast(s32)source.count
+    while at < count && !f.overflow {
+        byte: u8 = source[at]
+        if byte == 32 || byte == 9 || byte == 10 || byte == 13 || byte == 12 {
+            if byte == 10 { newlines += 1 }
+            f.line_space = true
+            at += 1
+            continue
+        }
+        // A blank line between items in the source stays one blank line.
+        if newlines >= 2 && f.line_length == 0 && f.count > 0 { f.blank = true }
+        newlines = 0
+        if byte == #char "/" && at + 1 < count && source[at + 1] == #char "*" {
+            end: s32 = at + 2
+            while end + 1 < count && !(source[end] == #char "*" && source[end + 1] == #char "/") { end += 1 }
+            end += 2
+            if f.line_length == 0 {
+                CssFormatBlank(f)
+                CssFormatIndent(f)
+                for index: at..end - 1 { CssFormatRaw(f, source[index]) }
+                CssFormatRaw(f, 10)
+                f.line_space = false
+            } else {
+                for index: at..end - 1 { CssFormatLineByte(f, source[index]) }
+                f.line_space = true
+            }
+            at = end
+            continue
+        }
+        if byte == #char "\"" || byte == #char "'" {
+            end: s32 = at + 1
+            while end < count && source[end] != byte { end += 1 }
+            end += 1
+            for index: at..end - 1 { CssFormatLineByte(f, source[index]) }
+            at = end
+            continue
+        }
+        if byte == #char "(" { parens += 1 }
+        if byte == #char ")" && parens > 0 { parens -= 1 }
+        if parens > 0 {
+            CssFormatLineByte(f, byte)
+            at += 1
+            continue
+        }
+        if byte == #char "{" {
+            // At-rule groups hold rules (or keyframe blocks); rule bodies
+            // and keyframe blocks hold declarations.
+            group: bool = f.line_length > 0 && f.line[0] == #char "@"
+            CssFormatFlush(f, " {")
+            if f.depth < 32 { f.declarations[f.depth] = !group }
+            f.depth += 1
+            at += 1
+            continue
+        }
+        if byte == #char ";" {
+            CssFormatFlush(f, ";")
+            at += 1
+            continue
+        }
+        if byte == #char "}" {
+            if f.line_length > 0 { CssFormatFlush(f, ";") }
+            f.blank = false
+            if f.depth > 0 { f.depth -= 1 }
+            CssFormatIndent(f)
+            CssFormatRaw(f, #char "}")
+            CssFormatRaw(f, 10)
+            if f.depth == 0 { f.blank = true }
+            at += 1
+            continue
+        }
+        CssFormatLineByte(f, byte)
+        at += 1
+    }
+    if f.line_length > 0 { CssFormatFlush(f, "") }
+    if f.overflow {
+        CssFormatFailText(*result, "the formatted sheet does not fit")
+        return result
+    }
+    after: CssFormatCounts = CssFormatParse(TextView(output[:f.count]), *result)
+    if !after.ok || after.rules != before.rules || after.properties != before.properties ||
+        after.keyframes != before.keyframes || after.web != before.web || after.checksum != before.checksum {
+        CssFormatFailText(*result, "formatting would change this sheet; it is left as written")
+        return result
+    }
+    result.ok = true
+    result.count = f.count
+    return result
+}
+
+CssFormatFailText :: (result: *CssFormatResult, message: string) {
+    result.ok = false
+    result.diagnostic_length = 0
+    for index: cast(s32)0..cast(s32)message.count - 1 {
+        result.diagnostic[index] = message[index]
+    }
+    result.diagnostic_length = cast(s32)message.count
+}

@@ -1,0 +1,764 @@
+#import "css_parser"
+#import "kryon/style"
+#import "kryon/style_sheet"
+#import "kryon/drawing_props"
+#import "kryon/control_props"
+Binary :: #import "std/binary";
+
+using CssStatus;
+using CssTokenKind;
+using CssValueKind;
+using CssField;
+using StyleField;
+
+// A sheet is what every host installs: the rules of one or more parsed or
+// compiled sources, each with its media condition, their var() references,
+// and the custom property definitions. Installing evaluates the conditions
+// for one environment, picks each custom property's final value, fills the
+// references and replaces Kryon's style table in one step. A failed install
+// leaves the previous style untouched.
+
+CssSheetRuleCapacity :: 1024
+CssSheetRefCapacity :: 4096
+CssSheetDefinitionCapacity :: 768
+CssSheetConditionCapacity :: 64
+CssSheetTypefaceCapacity :: 16
+
+CssSheetRule :: struct {
+    rule: StyleRule
+    // Index into conditions, or -1 for always.
+    condition: s32
+}
+
+CssSheetRef :: struct {
+    rule: s32
+    name: s32
+    field: s32
+    fallback: bool
+    file: s32
+    line: s32
+}
+
+CssSheetDefinition :: struct {
+    name: s32
+    condition: s32
+    kind: s32
+    color: u32
+    number: float32
+    material: s32
+    alias: s32
+    file: s32
+    line: s32
+}
+
+// Host values that replace custom properties whatever the sheet says, such
+// as a system palette. Names are without '--'.
+CssOverrides :: struct {
+    tokens: [128]CssToken
+    count: s32
+}
+
+CssSheet :: struct {
+    rules: [CssSheetRuleCapacity]CssSheetRule
+    rule_count: s32
+    refs: [CssSheetRefCapacity]CssSheetRef
+    ref_count: s32
+    definitions: [CssSheetDefinitionCapacity]CssSheetDefinition
+    definition_count: s32
+    conditions: [CssSheetConditionCapacity]CssCondition
+    condition_count: s32
+    names: [CssNameCapacity]CssName
+    name_count: s32
+    themes: [CssThemeCapacity]CssName
+    theme_count: s32
+    layers: [12]CssName
+    layer_count: s32
+    files: [16]CssSourceFile
+    file_count: s32
+    // Final custom property values of the last resolve, by name index.
+    final: [CssNameCapacity]CssToken
+    web_declarations: s32
+    diagnostic: [256]u8
+    diagnostic_length: s32
+    failed: bool
+}
+
+CssSheetResult :: struct {
+    ok: bool
+    rules: s32
+}
+
+#program_export
+CssSheetReset :: (sheet: *CssSheet) {
+    sheet.rule_count = 0
+    sheet.ref_count = 0
+    sheet.definition_count = 0
+    sheet.condition_count = 0
+    sheet.name_count = 0
+    sheet.theme_count = 0
+    sheet.layer_count = 0
+    sheet.file_count = 0
+    sheet.web_declarations = 0
+    sheet.diagnostic_length = 0
+    sheet.failed = false
+}
+
+CssSheetAppend :: (sheet: *CssSheet, text: string) {
+    for index: cast(s32)0..cast(s32)text.count - 1 {
+        if sheet.diagnostic_length >= 255 { return }
+        sheet.diagnostic[sheet.diagnostic_length] = text[index]
+        sheet.diagnostic_length += 1
+    }
+}
+
+CssSheetAppendInt :: (sheet: *CssSheet, value: s32) {
+    digits: [12]u8
+    count: s32 = 0
+    remaining: s32 = value
+    if remaining <= 0 {
+        CssSheetAppend(sheet, "0")
+        return
+    }
+    while remaining > 0 && count < 12 {
+        digits[count] = cast(u8)(48 + remaining % 10)
+        remaining = remaining / 10
+        count += 1
+    }
+    while count > 0 {
+        count -= 1
+        if sheet.diagnostic_length < 255 {
+            sheet.diagnostic[sheet.diagnostic_length] = digits[count]
+            sheet.diagnostic_length += 1
+        }
+    }
+}
+
+CssSheetFail :: (sheet: *CssSheet, message: string) {
+    if sheet.failed { return }
+    sheet.failed = true
+    sheet.diagnostic_length = 0
+    CssSheetAppend(sheet, message)
+}
+
+// "message '--name' at file:line".
+CssSheetFailAt :: (sheet: *CssSheet, message: string, name: s32, file: s32, line: s32) {
+    if sheet.failed { return }
+    sheet.failed = true
+    sheet.diagnostic_length = 0
+    CssSheetAppend(sheet, message)
+    if name >= 0 && name < sheet.name_count {
+        CssSheetAppend(sheet, " '--")
+        CssSheetAppend(sheet, TextView(sheet.names[name].bytes[:sheet.names[name].length]))
+        CssSheetAppend(sheet, "'")
+    }
+    if line > 0 {
+        CssSheetAppend(sheet, " at ")
+        if file >= 0 && file < sheet.file_count {
+            CssSheetAppend(sheet, TextView(sheet.files[file].name[:sheet.files[file].length]))
+            CssSheetAppend(sheet, ":")
+        }
+        CssSheetAppendInt(sheet, line)
+    }
+}
+
+#program_export
+CssSheetDiagnostic :: (sheet: *CssSheet, output: []u8) -> string {
+    count: s32 = sheet.diagnostic_length
+    if count > cast(s32)output.count { count = cast(s32)output.count }
+    for index: cast(s32)0..count - 1 { output[index] = sheet.diagnostic[index] }
+    return TextView(output[:count])
+}
+
+CssSheetName :: (sheet: *CssSheet, name: CssName) -> s32 {
+    for index: cast(s32)0..sheet.name_count - 1 {
+        if CssNameSame(sheet.names[index], name) { return index }
+    }
+    if sheet.name_count >= CssNameCapacity {
+        CssSheetFail(sheet, "more than 256 custom properties")
+        return -1
+    }
+    sheet.names[sheet.name_count] = name
+    sheet.name_count += 1
+    return sheet.name_count - 1
+}
+
+CssSheetTheme :: (sheet: *CssSheet, name: CssName) -> s32 {
+    for index: cast(s32)0..sheet.theme_count - 1 {
+        if CssNameEqualsName(sheet.themes[index], name) { return index }
+    }
+    if sheet.theme_count >= CssThemeCapacity {
+        CssSheetFail(sheet, "more than 32 -kryon-theme names")
+        return -1
+    }
+    sheet.themes[sheet.theme_count] = name
+    sheet.theme_count += 1
+    return sheet.theme_count - 1
+}
+
+CssSheetLayer :: (sheet: *CssSheet, name: CssName) -> s32 {
+    for index: cast(s32)0..sheet.layer_count - 1 {
+        if CssNameEqualsName(sheet.layers[index], name) { return index }
+    }
+    if sheet.layer_count >= 12 {
+        CssSheetFail(sheet, "more than 12 layers")
+        return -1
+    }
+    sheet.layers[sheet.layer_count] = name
+    sheet.layer_count += 1
+    return sheet.layer_count - 1
+}
+
+CssSheetFile :: (sheet: *CssSheet, file: CssSourceFile) -> s32 {
+    for index: cast(s32)0..sheet.file_count - 1 {
+        if TextView(sheet.files[index].name[:sheet.files[index].length]) ==
+            TextView(file.name[:file.length]) {
+            return index
+        }
+    }
+    if sheet.file_count >= 16 { return -1 }
+    sheet.files[sheet.file_count] = file
+    sheet.file_count += 1
+    return sheet.file_count - 1
+}
+
+CssConditionSame :: (a: *CssCondition, b: *CssCondition) -> bool {
+    if a.count != b.count || a.never != b.never { return false }
+    for index: cast(s32)0..a.count - 1 {
+        if a.branches[index].mask != b.branches[index].mask ||
+            a.branches[index].theme != b.branches[index].theme ||
+            a.branches[index].viewport_count != b.branches[index].viewport_count {
+            return false
+        }
+    }
+    return true
+}
+
+// The parser's condition in sheet terms: themes renumbered. Viewport text is
+// not kept; native hosts only need to know a viewport feature is present.
+CssSheetCondition :: (sheet: *CssSheet, p: *CssParser, condition: CssCondition) -> s32 {
+    if condition.count == 0 && !condition.never { return -1 }
+    mapped: CssCondition = condition
+    for index: cast(s32)0..mapped.count - 1 {
+        theme: s32 = mapped.branches[index].theme
+        if theme >= 0 { mapped.branches[index].theme = CssSheetTheme(sheet, p.themes[theme]) }
+        for span: cast(s32)0..3 {
+            mapped.branches[index].viewport[span].start = 0
+            mapped.branches[index].viewport[span].length = 0
+        }
+    }
+    for index: cast(s32)0..sheet.condition_count - 1 {
+        if CssConditionSame(*sheet.conditions[index], *mapped) { return index }
+    }
+    if sheet.condition_count >= CssSheetConditionCapacity {
+        CssSheetFail(sheet, "more than 64 distinct media conditions")
+        return -1
+    }
+    sheet.conditions[sheet.condition_count] = mapped
+    sheet.condition_count += 1
+    return sheet.condition_count - 1
+}
+
+// Take the item the parser just yielded (a rule or a custom property).
+#program_export
+CssSheetTake :: (sheet: *CssSheet, p: *CssParser) {
+    if sheet.failed { return }
+    // Layers rank in the order the parser met them, '@layer a, b;' included,
+    // not in the order their first rule arrives.
+    for index: cast(s32)0..p.layer_count - 1 { unused CssSheetLayer(sheet, p.layer_names[index]) }
+    if sheet.failed { return }
+    file: s32 = CssSheetFile(sheet, p.files[p.cursor.file])
+    if p.status == cast(s32)CssStatusProperty {
+        if sheet.definition_count >= CssSheetDefinitionCapacity {
+            CssSheetFail(sheet, "more than 768 custom property definitions")
+            return
+        }
+        definition: CssSheetDefinition
+        definition.name = CssSheetName(sheet, p.definition.name)
+        definition.condition = CssSheetCondition(sheet, p, p.rule_condition)
+        definition.kind = p.definition.kind
+        definition.color = p.definition.color
+        definition.number = p.definition.number
+        definition.material = p.definition.material
+        definition.alias = -1
+        if p.definition.alias >= 0 { definition.alias = CssSheetName(sheet, p.names[p.definition.alias]) }
+        definition.file = file
+        definition.line = p.definition.line
+        if sheet.failed { return }
+        sheet.definitions[sheet.definition_count] = definition
+        sheet.definition_count += 1
+        return
+    }
+    if p.status != cast(s32)CssStatusRule { return }
+    if sheet.rule_count >= CssSheetRuleCapacity {
+        CssSheetFail(sheet, "more than 1024 rules in one sheet")
+        return
+    }
+    if sheet.ref_count + p.rule_ref_count > CssSheetRefCapacity {
+        CssSheetFail(sheet, "more than 4096 var() references in one sheet")
+        return
+    }
+    entry: CssSheetRule
+    entry.rule = p.rule
+    entry.rule.order = sheet.rule_count
+    if p.rule.layer != CssLayerUnlayered {
+        entry.rule.layer = CssSheetLayer(sheet, p.layer_names[p.rule.layer])
+    }
+    entry.condition = CssSheetCondition(sheet, p, p.rule_condition)
+    if sheet.failed { return }
+    for index: cast(s32)0..p.rule_ref_count - 1 {
+        ref: CssSheetRef
+        ref.rule = sheet.rule_count
+        ref.name = CssSheetName(sheet, p.names[p.rule_refs[index].token])
+        ref.field = p.rule_refs[index].field
+        ref.fallback = p.rule_refs[index].fallback
+        ref.file = file
+        ref.line = p.rule_refs[index].line
+        sheet.refs[sheet.ref_count] = ref
+        sheet.ref_count += 1
+    }
+    sheet.web_declarations += p.web_declarations
+    sheet.rules[sheet.rule_count] = entry
+    sheet.rule_count += 1
+}
+
+// Parse a whole source into the sheet. Imports go through `resolve`; hosts
+// without imports pass CssNoImports.
+CssImportResolver :: #type (name: string) -> CssImportAnswer;
+
+CssImportAnswer :: struct {
+    found: bool
+    source: string
+}
+
+#program_export
+CssNoImports :: (name: string) -> CssImportAnswer {
+    answer: CssImportAnswer
+    return answer
+}
+
+css_sheet_parser: CssParser;
+
+#program_export
+CssSheetParse :: (sheet: *CssSheet, source: string, path: string, resolve: CssImportResolver) -> bool {
+    if sheet.failed { return false }
+    p: *CssParser = *css_sheet_parser
+    CssBegin(p, source, path)
+    while true {
+        status: s32 = CssStep(p)
+        if status == cast(s32)CssStatusRule || status == cast(s32)CssStatusProperty {
+            CssSheetTake(sheet, p)
+            if sheet.failed { return false }
+        } else if status == cast(s32)CssStatusNeedImport {
+            target: [64]u8
+            name: string = CssPendingImport(p, target[:])
+            answer: CssImportAnswer = resolve(name)
+            if answer.found { CssProvideImport(p, answer.source, name) }
+            else { CssFailImport(p) }
+        } else if status == cast(s32)CssStatusDone {
+            return true
+        } else if status == cast(s32)CssStatusError {
+            sheet.failed = true
+            sheet.diagnostic_length = 0
+            for index: cast(s32)0..p.diagnostic_length - 1 {
+                sheet.diagnostic[index] = p.diagnostic[index]
+            }
+            sheet.diagnostic_length = p.diagnostic_length
+            return false
+        }
+    }
+    return false
+}
+
+// Overrides -------------------------------------------------------------
+
+#program_export
+CssOverrideColor :: (overrides: *CssOverrides, name: string, color: u32) {
+    token: CssToken
+    token.name = CssMakeName(CssBareText(name))
+    token.kind = cast(s32)CssTokenColor
+    token.color = color
+    CssOverride(overrides, token)
+}
+
+#program_export
+CssOverrideLength :: (overrides: *CssOverrides, name: string, pixels: float32) {
+    token: CssToken
+    token.name = CssMakeName(CssBareText(name))
+    token.kind = cast(s32)CssTokenLength
+    token.number = pixels
+    CssOverride(overrides, token)
+}
+
+// A later override of a name replaces the earlier one. Returns false when
+// the table is full.
+#program_export
+CssOverride :: (overrides: *CssOverrides, token: CssToken) -> bool {
+    for index: cast(s32)0..overrides.count - 1 {
+        if CssNameSame(overrides.tokens[index].name, token.name) {
+            overrides.tokens[index] = token
+            return true
+        }
+    }
+    if overrides.count >= 128 { return false }
+    overrides.tokens[overrides.count] = token
+    overrides.count += 1
+    return true
+}
+
+CssBareText :: (name: string) -> string {
+    if name.count >= 2 && name[0] == #char "-" && name[1] == #char "-" { return name[2:name.count] }
+    return name
+}
+
+// Resolution ------------------------------------------------------------
+
+CssSheetConditionHolds :: (sheet: *CssSheet, condition: s32, env: CssEnvironment) -> bool {
+    if condition < 0 { return true }
+    return CssConditionMatches(*sheet.conditions[condition], env, sheet.themes[:sheet.theme_count], false)
+}
+
+// Each custom property's value for `env`: the last definition whose
+// condition holds, then host overrides, then aliases followed.
+#program_export
+CssSheetResolve :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides) -> bool {
+    if sheet.failed { return false }
+    for index: cast(s32)0..sheet.name_count - 1 {
+        sheet.final[index] = CssToken.{}
+        sheet.final[index].name = sheet.names[index]
+        sheet.final[index].kind = cast(s32)CssTokenUndefined
+        sheet.final[index].alias = -1
+    }
+    for index: cast(s32)0..sheet.definition_count - 1 {
+        definition: CssSheetDefinition = sheet.definitions[index]
+        if !CssSheetConditionHolds(sheet, definition.condition, env) { continue }
+        token: *CssToken = *sheet.final[definition.name]
+        token.kind = definition.kind
+        token.color = definition.color
+        token.number = definition.number
+        token.material = definition.material
+        token.alias = definition.alias
+        token.file = definition.file
+        token.line = definition.line
+    }
+    if overrides != null {
+        for index: cast(s32)0..overrides.count - 1 {
+            name: s32 = -1
+            for candidate: cast(s32)0..sheet.name_count - 1 {
+                if CssNameSame(sheet.names[candidate], overrides.tokens[index].name) { name = candidate }
+            }
+            if name < 0 { continue }
+            token: *CssToken = *sheet.final[name]
+            token.kind = overrides.tokens[index].kind
+            token.color = overrides.tokens[index].color
+            token.number = overrides.tokens[index].number
+            token.material = overrides.tokens[index].material
+            token.alias = -1
+        }
+    }
+    for index: cast(s32)0..sheet.name_count - 1 {
+        hops: s32 = 0
+        while sheet.final[index].kind == cast(s32)CssTokenAlias {
+            target: s32 = sheet.final[index].alias
+            if hops >= 16 {
+                CssSheetFailAt(sheet, "var() alias cycle through", index, sheet.final[index].file,
+                    sheet.final[index].line)
+                return false
+            }
+            if target == index {
+                message: string = ifx hops == 0 then "custom property refers to itself:" else "var() alias cycle through"
+                CssSheetFailAt(sheet, message, index, sheet.final[index].file, sheet.final[index].line)
+                return false
+            }
+            next: CssToken = sheet.final[target]
+            sheet.final[index].kind = next.kind
+            sheet.final[index].color = next.color
+            sheet.final[index].number = next.number
+            sheet.final[index].material = next.material
+            sheet.final[index].alias = next.alias
+            hops += 1
+        }
+    }
+    return true
+}
+
+CssKindName :: (kind: s32) -> string {
+    if kind == cast(s32)CssTokenColor { return "a color" }
+    if kind == cast(s32)CssTokenLength { return "a length" }
+    if kind == cast(s32)CssTokenDuration { return "a duration" }
+    if kind == cast(s32)CssTokenMaterial { return "a material" }
+    if kind == cast(s32)CssTokenNumber { return "a number" }
+    return "undefined"
+}
+
+// Does a custom property of `kind` fit a field? Zero serves as a length.
+CssTokenFits :: (token: CssToken, field: s32) -> bool {
+    expected: s32 = CssFieldKind(field)
+    if expected == cast(s32)CssValueColor { return token.kind == cast(s32)CssTokenColor }
+    if expected == cast(s32)CssValueMaterial { return token.kind == cast(s32)CssTokenMaterial }
+    if expected == cast(s32)CssValueNumber { return token.kind == cast(s32)CssTokenNumber }
+    return token.kind == cast(s32)CssTokenLength ||
+        (token.kind == cast(s32)CssTokenNumber && token.number == 0.0)
+}
+
+css_install_rules: StyleRules;
+
+// The rules that apply for `env`, references filled, into `rules`.
+#program_export
+CssSheetBuild :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides,
+    rules: *StyleRules) -> bool {
+    rules.count = 0
+    if !CssSheetResolve(sheet, env, overrides) { return false }
+    ref: s32 = 0
+    for index: cast(s32)0..sheet.rule_count - 1 {
+        active: bool = CssSheetConditionHolds(sheet, sheet.rules[index].condition, env)
+        if active && rules.count >= StyleRuleCapacity {
+            CssSheetFail(sheet, "more than 512 rules apply at once")
+            return false
+        }
+        if active { rules.items[rules.count] = sheet.rules[index].rule }
+        while ref < sheet.ref_count && sheet.refs[ref].rule == index {
+            if active {
+                entry: CssSheetRef = sheet.refs[ref]
+                token: CssToken = sheet.final[entry.name]
+                if token.kind == cast(s32)CssTokenUndefined {
+                    if !entry.fallback {
+                        CssSheetFailAt(sheet, "undefined custom property", entry.name, entry.file, entry.line)
+                        return false
+                    }
+                } else if !CssTokenFits(token, entry.field) {
+                    if !entry.fallback {
+                        sheet.failed = true
+                        sheet.diagnostic_length = 0
+                        CssSheetAppend(sheet, "custom property '--")
+                        CssSheetAppend(sheet, TextView(sheet.names[entry.name].bytes[:sheet.names[entry.name].length]))
+                        CssSheetAppend(sheet, "' is ")
+                        CssSheetAppend(sheet, CssKindName(token.kind))
+                        CssSheetAppend(sheet, " where the property takes another kind")
+                        if entry.file >= 0 && entry.file < sheet.file_count {
+                            CssSheetAppend(sheet, " at ")
+                            CssSheetAppend(sheet, TextView(sheet.files[entry.file].name[:sheet.files[entry.file].length]))
+                            CssSheetAppend(sheet, ":")
+                            CssSheetAppendInt(sheet, entry.line)
+                        }
+                        return false
+                    }
+                } else {
+                    CssStyleSet(*rules.items[rules.count].style, entry.field, token.color, token.number,
+                        token.material)
+                }
+            }
+            ref += 1
+        }
+        if active { rules.count += 1 }
+    }
+    return true
+}
+
+// Install for `env`: rules and the color custom properties Kryon widgets
+// read by name, together. On failure the previous style stays.
+#program_export
+CssSheetInstall :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides) -> bool {
+    if !CssSheetBuild(sheet, env, overrides, *css_install_rules) { return false }
+    // Check the color table fits before anything changes.
+    colors: s32 = 0
+    for index: cast(s32)0..sheet.name_count - 1 {
+        if sheet.final[index].kind != cast(s32)CssTokenColor { continue }
+        colors += 1
+        if sheet.final[index].name.length > 64 {
+            CssSheetFailAt(sheet, "custom property name is longer than 64 bytes:", index, -1, 0)
+            return false
+        }
+    }
+    if colors > 128 {
+        CssSheetFail(sheet, "more than 128 color custom properties")
+        return false
+    }
+    if !InstallStyleRules(css_install_rules) {
+        CssSheetFail(sheet, "Kryon rejected the style table (typeface storage)")
+        return false
+    }
+    ClearStyleTokenColors()
+    for index: cast(s32)0..sheet.name_count - 1 {
+        token: CssToken = sheet.final[index]
+        if token.kind != cast(s32)CssTokenColor { continue }
+        if !SetStyleTokenColorBytes(token.name.bytes[:token.name.length], token.color) {
+            CssSheetFail(sheet, "Kryon's color token table is full")
+            return false
+        }
+    }
+    return true
+}
+
+CssTokenResult :: struct {
+    found: bool
+    kind: s32
+    color: u32
+    number: float32
+    material: s32
+}
+
+// A custom property's value from the last resolve or install.
+#program_export
+CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
+    result: CssTokenResult
+    bare: CssName = CssMakeName(CssBareText(name))
+    for index: cast(s32)0..sheet.name_count - 1 {
+        if CssNameSame(sheet.names[index], bare) {
+            token: CssToken = sheet.final[index]
+            if token.kind == cast(s32)CssTokenUndefined { return result }
+            result.found = true
+            result.kind = token.kind
+            result.color = token.color
+            result.number = token.number
+            result.material = token.material
+            return result
+        }
+    }
+    return result
+}
+
+// Compiled sheets ---------------------------------------------------------
+// The pack compiler writes these arrays; loading them skips parsing.
+
+CssCompiledRuleWords :: 34
+CssCompiledRefWords :: 4
+CssCompiledDefinitionWords :: 8
+CssCompiledConditionWords :: 10
+
+CssCompiledSheet :: struct {
+    rules: []u32
+    refs: []u32
+    definitions: []u32
+    conditions: []u32
+    names: []string
+    themes: []string
+    layers: []string
+    typefaces: []string
+    file: string
+}
+
+CssWordFloat :: (word: u32) -> float32 {
+    return cast(float32)Binary.Float32FromBits(word)
+}
+
+// Append a compiled sheet; its layers, names and themes merge by name.
+#program_export
+CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
+    if sheet.failed { return false }
+    rule_count: s32 = cast(s32)compiled.rules.count / CssCompiledRuleWords
+    ref_count: s32 = cast(s32)compiled.refs.count / CssCompiledRefWords
+    definition_count: s32 = cast(s32)compiled.definitions.count / CssCompiledDefinitionWords
+    condition_count: s32 = cast(s32)compiled.conditions.count / CssCompiledConditionWords
+    if sheet.rule_count + rule_count > CssSheetRuleCapacity ||
+        sheet.ref_count + ref_count > CssSheetRefCapacity ||
+        sheet.definition_count + definition_count > CssSheetDefinitionCapacity ||
+        sheet.condition_count + condition_count > CssSheetConditionCapacity {
+        CssSheetFail(sheet, "the compiled sheet does not fit")
+        return false
+    }
+    file_name: CssSourceFile = CssCopyFileName(compiled.file)
+    file: s32 = CssSheetFile(sheet, file_name)
+    names: [CssNameCapacity]s32
+    for index: cast(s32)0..cast(s32)compiled.names.count - 1 {
+        names[index] = CssSheetName(sheet, CssMakeName(compiled.names[index]))
+    }
+    themes: [CssThemeCapacity]s32
+    for index: cast(s32)0..cast(s32)compiled.themes.count - 1 {
+        themes[index] = CssSheetTheme(sheet, CssMakeName(compiled.themes[index]))
+    }
+    layers: [12]s32
+    for index: cast(s32)0..cast(s32)compiled.layers.count - 1 {
+        layers[index] = CssSheetLayer(sheet, CssMakeName(compiled.layers[index]))
+    }
+    if sheet.failed { return false }
+    conditions: [CssSheetConditionCapacity]s32
+    for index: cast(s32)0..condition_count - 1 {
+        at: s32 = index * CssCompiledConditionWords
+        condition: CssCondition
+        condition.count = cast(s32)compiled.conditions[at]
+        condition.never = compiled.conditions[at + 1] != cast(u32)0
+        for branch: cast(s32)0..3 {
+            condition.branches[branch].mask = compiled.conditions[at + 2 + branch * 2]
+            theme: s32 = cast(s32)compiled.conditions[at + 3 + branch * 2] - 1
+            condition.branches[branch].theme = ifx theme >= 0 then themes[theme] else -1
+        }
+        conditions[index] = sheet.condition_count
+        sheet.conditions[sheet.condition_count] = condition
+        sheet.condition_count += 1
+    }
+    rule_base: s32 = sheet.rule_count
+    for index: cast(s32)0..rule_count - 1 {
+        w: []u32 = compiled.rules[index * CssCompiledRuleWords:(index + 1) * CssCompiledRuleWords]
+        entry: CssSheetRule
+        entry.rule.selector.kind = cast(s32)w[0]
+        entry.rule.selector.name = cast(s32)w[1]
+        entry.rule.selector.class_name = cast(s32)w[2]
+        entry.rule.selector.role = cast(s32)w[3]
+        entry.rule.selector.tone = cast(s32)w[4]
+        entry.rule.selector.emphasis = cast(s32)w[5]
+        entry.rule.selector.size = cast(s32)w[6]
+        entry.rule.selector.state = cast(s32)w[7]
+        entry.rule.selector.validation = cast(s32)w[8]
+        entry.rule.selector.orientation = cast(s32)w[9]
+        entry.rule.selector.placement = cast(s32)w[10]
+        entry.rule.state = cast(s32)w[11]
+        layer: s32 = cast(s32)w[12]
+        entry.rule.layer = ifx layer == CssLayerUnlayered then layer else layers[layer]
+        entry.rule.order = sheet.rule_count
+        condition: s32 = cast(s32)w[13] - 1
+        entry.condition = ifx condition >= 0 then conditions[condition] else -1
+        style: *StyleData = *entry.rule.style
+        style.fields = w[14]
+        style.background = w[15]
+        style.foreground = w[16]
+        style.border = w[17]
+        style.focus = w[18]
+        style.background_end = w[19]
+        style.radius = CssWordFloat(w[20])
+        style.border_width = CssWordFloat(w[21])
+        style.opacity = CssWordFloat(w[22])
+        style.padding_x = CssWordFloat(w[23])
+        style.padding_y = CssWordFloat(w[24])
+        style.gap = CssWordFloat(w[25])
+        style.font_size = CssWordFloat(w[26])
+        style.icon_size = CssWordFloat(w[27])
+        style.offset_x = CssWordFloat(w[28])
+        style.offset_y = CssWordFloat(w[29])
+        style.letter_spacing = CssWordFloat(w[30])
+        style.material = cast(MaterialKind)cast(s32)w[31]
+        typeface: s32 = cast(s32)w[32] - 1
+        if typeface >= 0 { style.typeface = compiled.typefaces[typeface] }
+        sheet.rules[sheet.rule_count] = entry
+        sheet.rule_count += 1
+    }
+    for index: cast(s32)0..ref_count - 1 {
+        at: s32 = index * CssCompiledRefWords
+        ref: CssSheetRef
+        ref.rule = rule_base + cast(s32)compiled.refs[at]
+        ref.name = names[cast(s32)compiled.refs[at + 1]]
+        ref.field = cast(s32)(compiled.refs[at + 2] & cast(u32)255)
+        ref.fallback = (compiled.refs[at + 2] & cast(u32)256) != cast(u32)0
+        ref.file = file
+        ref.line = cast(s32)compiled.refs[at + 3]
+        sheet.refs[sheet.ref_count] = ref
+        sheet.ref_count += 1
+    }
+    for index: cast(s32)0..definition_count - 1 {
+        at: s32 = index * CssCompiledDefinitionWords
+        definition: CssSheetDefinition
+        definition.name = names[cast(s32)compiled.definitions[at]]
+        condition: s32 = cast(s32)compiled.definitions[at + 1] - 1
+        definition.condition = ifx condition >= 0 then conditions[condition] else -1
+        definition.kind = cast(s32)compiled.definitions[at + 2]
+        definition.color = compiled.definitions[at + 3]
+        definition.number = CssWordFloat(compiled.definitions[at + 4])
+        definition.material = cast(s32)compiled.definitions[at + 5]
+        alias: s32 = cast(s32)compiled.definitions[at + 6] - 1
+        definition.alias = ifx alias >= 0 then names[alias] else -1
+        definition.file = file
+        definition.line = cast(s32)compiled.definitions[at + 7]
+        sheet.definitions[sheet.definition_count] = definition
+        sheet.definition_count += 1
+    }
+    return true
+}

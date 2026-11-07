@@ -5,63 +5,62 @@ CC ?= cc
 BUILD := build
 FUZZ_SEED ?= 1
 FUZZ_COUNT ?= 2000
-STYLE_PACKS := classic
-STYLE_PACK_TOOL := $(BUILD)/tools/style_pack_module
+STYLE_PACKS := classic material lightfield
+CSS_TOOL := $(BUILD)/tools/css_tool
+INCLUDE = -I$$($(ZIRAN) pkg path ziran)/include
 
-.PHONY: check test style-packs style-pack-check fuzz clean
+.PHONY: check test conformance style-packs style-pack-check migrate fuzz clean
 
-check: test style-pack-check fuzz
+check: test conformance style-pack-check fuzz
+
+# A behavior test: build one Ziran entry to C and run it.
+define native_test
+	rm -rf $(BUILD)/$(1)-c
+	$(ZIRAN) build --project --target=c --entry $(1):main -o $(BUILD)/$(1)-c tests/$(1).zi
+	$(CC) -std=c11 -O1 $(INCLUDE) -I$(BUILD)/$(1)-c $(BUILD)/$(1)-c/*.c -o $(BUILD)/$(1) -lm
+	$(BUILD)/$(1)
+endef
 
 test:
-	ZIRAN=$(ZIRAN) sh tests/css_export_test.sh
 	$(ZIRAN) check --project
-	$(ZIRAN) check --project src/kss_lexer_laws.zi
-	$(ZIRAN) bundle --project --entry style_parse_behavior:Answer \
-		-o $(BUILD)/style-parse.zib tests/style_parse_behavior.zi
-	test "$$($(ZIRAN) run --project $(BUILD)/style-parse.zib)" = 42
-	# The fuzz check ignores whitespace the lexer skips; quoted text keeps it.
-	$(ZIRAN) bundle --project --entry format_quoted_whitespace:main \
-		-o $(BUILD)/format-quoted-whitespace.zib tests/format_quoted_whitespace.zi
-	test "$$($(ZIRAN) run --project $(BUILD)/format-quoted-whitespace.zib)" = 0
-	rm -rf $(BUILD)/style-parse-c
-	$(ZIRAN) build --project --target=c --entry style_parse_behavior:Answer \
-		-o $(BUILD)/style-parse-c tests/style_parse_behavior.zi
-	printf '#include "style_parse_behavior.h"\nint main(void) { return Answer() == 42 ? 0 : 1; }\n' \
-		> $(BUILD)/style-parse-c/main.c
-	$(CC) -std=c11 -I$$($(ZIRAN) pkg path ziran)/include -I$(BUILD)/style-parse-c \
-		$(BUILD)/style-parse-c/*.c -o $(BUILD)/style-parse
-	$(BUILD)/style-parse
-	# The whole classic pack is more than the portable runner's step
-	# budget, so the system style test runs as native code.
-	rm -rf $(BUILD)/system-style-c
-	$(ZIRAN) build --project --target=c --entry system_style_behavior:main \
-		-o $(BUILD)/system-style-c tests/system_style_behavior.zi
-	$(CC) -std=c11 -I$$($(ZIRAN) pkg path ziran)/include -I$(BUILD)/system-style-c \
-		$(BUILD)/system-style-c/*.c -o $(BUILD)/system-style
-	$(BUILD)/system-style
+	$(ZIRAN) check --project src/css_lexer_laws.zi
+	$(call native_test,css_parse_behavior)
+	$(call native_test,css_sheet_behavior)
+	$(call native_test,css_format_behavior)
+	$(call native_test,css_migrate_behavior)
+	$(call native_test,css_export_behavior)
+	$(call native_test,system_style_behavior)
 
-# Style packs apps can install without the .kss file. Their modules are
-# committed, because apps import KSS as a package without running this
-# Makefile; style-pack-check fails when a module no longer matches its pack.
-$(STYLE_PACK_TOOL): tools/style_pack_module.zi
+# The same sheets resolved on every code generation target, plus the
+# browser export; see tests/css_conformance.sh.
+conformance:
+	ZIRAN=$(ZIRAN) sh tests/css_conformance.sh
+
+$(CSS_TOOL): tools/css_tool.zi src/*.zi src/parser/*.zi
 	rm -rf $@-c
 	mkdir -p $(dir $@)
-	$(ZIRAN) build --project --target=c --entry style_pack_module:main \
-		-o $@-c tools/style_pack_module.zi
-	$(CC) -std=c11 -O2 -I$$($(ZIRAN) pkg path ziran)/include -I$@-c $@-c/*.c -o $@
+	$(ZIRAN) build --project --target=c --entry css_tool:main -o $@-c tools/css_tool.zi
+	$(CC) -std=c11 -O2 $(INCLUDE) -I$@-c $@-c/*.c -o $@ -lm
 
-style-packs: $(STYLE_PACK_TOOL)
-	@for pack in $(STYLE_PACKS); do $(STYLE_PACK_TOOL) write $$pack || exit 1; done
+# Packs are compiled into rule tables apps load without parsing. The
+# modules are committed, because apps import this package without running
+# its Makefile; style-pack-check fails when one no longer matches its CSS.
+style-packs: $(CSS_TOOL)
+	@for pack in $(STYLE_PACKS); do $(CSS_TOOL) pack $$pack || exit 1; done
 
-style-pack-check: $(STYLE_PACK_TOOL)
-	@for pack in $(STYLE_PACKS); do $(STYLE_PACK_TOOL) check $$pack || exit 1; done
+style-pack-check: $(CSS_TOOL)
+	@for pack in $(STYLE_PACKS); do $(CSS_TOOL) pack-check $$pack || exit 1; done
 	@echo "Style pack modules match: $(STYLE_PACKS)"
 
-# Generated and damaged style sheets through the parser, the rule table,
-# and the formatter, built with AddressSanitizer and UndefinedBehaviorSanitizer.
-# The same seed makes the same sheets; see tests/kss_fuzz.zi.
+# Convert a KSS sheet: make migrate IN=old.kss OUT=new.css
+migrate: $(CSS_TOOL)
+	$(CSS_TOOL) migrate $(IN) $(OUT)
+
+# Generated and damaged sheets through the parser, the sheet, the formatter
+# and the exporter, built with AddressSanitizer and UndefinedBehaviorSanitizer.
+# The same seed makes the same sheets; see tests/css_fuzz.zi.
 fuzz:
-	@ZIRAN=$(ZIRAN) sh tests/kss_fuzz.sh $(FUZZ_SEED) $(FUZZ_COUNT)
+	@ZIRAN=$(ZIRAN) sh tests/css_fuzz.sh $(FUZZ_SEED) $(FUZZ_COUNT)
 
 clean:
 	rm -rf $(BUILD)

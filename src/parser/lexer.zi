@@ -1,577 +1,410 @@
-// Part of the kss_parser module, loaded by src/kss/kss_parser.zi.
-// Source bytes, names, white space and comments, literals, and diagnostics.
+// Part of the css_parser module: source bytes, names, white space, comments,
+// numbers and diagnostics. Every advance keeps line and column current so
+// each diagnostic and rule origin points at its exact source position.
 
-// Byte helpers over the borrowed source view. Every advance keeps the
-// line/column provenance current so diagnostics and rule origins stay exact.
-
-KssAtEnd :: (c: KssCursor) -> bool {
-    return c.pos >= (cast(s32)c.source.count)
+CssAtEnd :: (p: *CssParser) -> bool {
+    return p.cursor.pos >= cast(s32)p.cursor.source.count
 }
 
-KssPeek :: (c: KssCursor, ahead: s32) -> u8 {
-    index: s32 = c.pos + ahead
-    if index < 0 || index >= (cast(s32)c.source.count) {
-        return 0
-    }
-    return c.source[index]
+CssPeek :: (p: *CssParser, ahead: s32) -> u8 {
+    index: s32 = p.cursor.pos + ahead
+    if index < 0 || index >= cast(s32)p.cursor.source.count { return 0 }
+    return p.cursor.source[index]
 }
 
-KssAdvance :: (c: KssCursor, count: s32) -> KssCursor {
-    step: s32 = 0
-    while step < count {
-        if c.pos < (cast(s32)c.source.count) {
-            if c.source[c.pos] == 10 {
-                c.line = c.line + 1
-                c.column = 1
-            } else {
-                c.column = c.column + 1
-            }
-            c.pos = c.pos + 1
+CssAdvance :: (p: *CssParser, count: s32) {
+    for step: cast(s32)0..count - 1 {
+        if p.cursor.pos >= cast(s32)p.cursor.source.count { return }
+        if p.cursor.source[p.cursor.pos] == 10 {
+            p.cursor.line += 1
+            p.cursor.column = 1
+        } else {
+            p.cursor.column += 1
         }
-        step = step + 1
+        p.cursor.pos += 1
     }
-    return c
 }
 
-KssIsSpace :: (byte: u8) -> bool {
-    return byte == #char " " || byte == 9 || byte == 13 || byte == 10 || byte == 11 || byte == 12
+CssIsSpace :: (byte: u8) -> bool {
+    return byte == #char " " || byte == 9 || byte == 10 || byte == 12 || byte == 13
 }
 
-// Quoted text ends on its line, as CSS strings do, and an escape does not
-// carry it over; re-indenting a later line must not change what it says.
-KssIsLineBreak :: (byte: u8) -> bool {
-    return byte == 10 || byte == 13
-}
-
-// An import target names a pack or a path: no spaces, control bytes, quotes,
-// angle brackets, or the braces and semicolons that give a sheet structure.
-KssImportTargetByte :: (byte: u8) -> bool {
-    return byte > #char " " && byte != 127 && byte != #char "\"" && byte != #char "'" &&
-        byte != #char ";" && byte != #char "<" && byte != #char ">" && byte != #char "{" && byte != #char "}"
-}
-
-KssIsDigit :: (byte: u8) -> bool {
+CssIsDigit :: (byte: u8) -> bool {
     return byte >= #char "0" && byte <= #char "9"
 }
 
-KssIsHexDigit :: (byte: u8) -> bool {
-    return (byte >= #char "0" && byte <= #char "9") || (byte >= #char "a" && byte <= #char "f") ||
+CssIsHexDigit :: (byte: u8) -> bool {
+    return CssIsDigit(byte) || (byte >= #char "a" && byte <= #char "f") ||
         (byte >= #char "A" && byte <= #char "F")
 }
 
-KssIsAlpha :: (byte: u8) -> bool {
+CssIsAlpha :: (byte: u8) -> bool {
     return (byte >= #char "a" && byte <= #char "z") || (byte >= #char "A" && byte <= #char "Z")
 }
 
-KssIdentStart :: (byte: u8) -> bool {
-    return KssIsAlpha(byte) || byte == #char "_" || byte == #char "-"
+// CSS identifiers: letters, digits, '-', '_' and any non-ASCII byte. Escapes
+// are outside the subset and reported where they appear.
+CssNameStart :: (byte: u8) -> bool {
+    return CssIsAlpha(byte) || byte == #char "_" || byte >= 128
 }
 
-KssIdentChar :: (byte: u8) -> bool {
-    return KssIsAlpha(byte) || KssIsDigit(byte) || byte == #char "_" || byte == #char "-" ||
-        byte == #char "."
+CssNameChar :: (byte: u8) -> bool {
+    return CssNameStart(byte) || CssIsDigit(byte) || byte == #char "-"
 }
 
-KssSelectorIdentChar :: (byte: u8) -> bool {
-    return KssIsAlpha(byte) || KssIsDigit(byte) || byte == #char "_" || byte == #char "-"
-}
-
-KssLower :: (byte: u8) -> u8 {
-    if byte >= #char "A" && byte <= #char "Z" {
-        return byte + 32
-    }
+CssLower :: (byte: u8) -> u8 {
+    if byte >= #char "A" && byte <= #char "Z" { return byte + 32 }
     return byte
 }
 
-KssNameEquals :: (name: KssName, text: string) -> bool {
-    if name.length != (cast(s32)text.count) {
-        return false
-    }
-    index: s32 = 0
-    while index < name.length {
-        if KssLower(name.bytes[index]) != KssLower(text[index]) {
-            return false
-        }
-        index = index + 1
+CssNameEquals :: (name: CssName, text: string) -> bool {
+    if name.length != cast(s32)text.count { return false }
+    for index: cast(s32)0..name.length - 1 {
+        if CssLower(name.bytes[index]) != CssLower(text[index]) { return false }
     }
     return true
 }
 
-KssNameEqualsName :: (a: KssName, b: KssName) -> bool {
-    if a.length != b.length {
-        return false
-    }
-    index: s32 = 0
-    while index < a.length {
-        if KssLower(a.bytes[index]) != KssLower(b.bytes[index]) {
-            return false
-        }
-        index = index + 1
+CssNameEqualsName :: (a: CssName, b: CssName) -> bool {
+    if a.length != b.length { return false }
+    for index: cast(s32)0..a.length - 1 {
+        if CssLower(a.bytes[index]) != CssLower(b.bytes[index]) { return false }
     }
     return true
 }
 
-KssMakeName :: (text: string) -> KssName {
-    name: KssName
-    index: s32 = 0
-    while index < (cast(s32)text.count) && index < 64 {
-        name.bytes[index] = text[index]
-        index = index + 1
+// Custom property names are case-sensitive, as in CSS.
+CssNameSame :: (a: CssName, b: CssName) -> bool {
+    if a.length != b.length { return false }
+    for index: cast(s32)0..a.length - 1 {
+        if a.bytes[index] != b.bytes[index] { return false }
     }
-    name.length = index
+    return true
+}
+
+CssMakeName :: (text: string) -> CssName {
+    name: CssName
+    count: s32 = cast(s32)text.count
+    if count > 64 { count = 64 }
+    for index: cast(s32)0..count - 1 { name.bytes[index] = text[index] }
+    name.length = count
     return name
 }
 
-KssCopyFileName :: (text: string) -> KssSourceFile {
-    file: KssSourceFile
-    index: s32 = 0
-    while index < (cast(s32)text.count) && index < 96 {
-        file.name[index] = text[index]
-        index = index + 1
-    }
-    file.length = index
+CssCopyFileName :: (text: string) -> CssSourceFile {
+    file: CssSourceFile
+    count: s32 = cast(s32)text.count
+    if count > 96 { count = 96 }
+    for index: cast(s32)0..count - 1 { file.name[index] = text[index] }
+    file.length = count
     return file
 }
 
-KssNameAppend :: (destination: KssName, byte: u8) -> KssName {
-    if destination.length < 64 {
-        destination.bytes[destination.length] = byte
-        destination.length = destination.length + 1
-    }
-    return destination
-}
-
-// Skip whitespace and // plus /* */ comments, keeping provenance current.
-
-KssSkipSpace :: (c: KssCursor) -> KssCursor {
-    while !KssAtEnd(c) {
-        byte: u8 = c.source[c.pos]
-        if KssIsSpace(byte) {
-            c = KssAdvance(c, 1)
+// Skip white space and /* */ comments. An unterminated comment is an error:
+// it would otherwise hide the rest of the sheet.
+CssSkipSpace :: (p: *CssParser) {
+    while !CssAtEnd(p) {
+        byte: u8 = p.cursor.source[p.cursor.pos]
+        if CssIsSpace(byte) {
+            CssAdvance(p, 1)
             continue
         }
-        if byte == #char "/" && KssPeek(c, 1) == #char "/" {
-            while !KssAtEnd(c) && c.source[c.pos] != 10 {
-                c = KssAdvance(c, 1)
-            }
-            continue
-        }
-        if byte == #char "/" && KssPeek(c, 1) == #char "*" {
-            c = KssAdvance(c, 2)
-            while !KssAtEnd(c) {
-                if c.source[c.pos] == #char "*" && KssPeek(c, 1) == #char "/" {
-                    c = KssAdvance(c, 2)
+        if byte == #char "/" && CssPeek(p, 1) == #char "*" {
+            CssAdvance(p, 2)
+            closed: bool = false
+            while !CssAtEnd(p) {
+                if p.cursor.source[p.cursor.pos] == #char "*" && CssPeek(p, 1) == #char "/" {
+                    CssAdvance(p, 2)
+                    closed = true
                     break
                 }
-                c = KssAdvance(c, 1)
+                CssAdvance(p, 1)
+            }
+            if !closed {
+                CssFail(p, "unterminated comment")
+                return
             }
             continue
         }
-        break
+        if byte == #char "/" && CssPeek(p, 1) == #char "/" {
+            CssFail(p, "'//' comments are not CSS; use /* */")
+            return
+        }
+        return
     }
-    return c
 }
 
-KssNameResult :: struct {
-    parser: KssCursor
-    name: KssName
+CssFailed :: (p: *CssParser) -> bool {
+    return p.status == cast(s32)CssStatusError
+}
+
+// Read an identifier at the cursor without skipping space first. A custom
+// property name keeps its leading '--'; a leading single '-' must start a
+// name, as in '-kryon-material'.
+CssReadName :: (p: *CssParser) -> CssName {
+    name: CssName
+    start: s32 = p.cursor.pos
+    if CssPeek(p, 0) == #char "-" && CssPeek(p, 1) == #char "-" {
+        CssAdvance(p, 2)
+        if !CssNameChar(CssPeek(p, 0)) {
+            CssFail(p, "expected a custom property name after '--'")
+            return name
+        }
+    } else if CssPeek(p, 0) == #char "-" {
+        if !CssNameStart(CssPeek(p, 1)) { return name }
+        CssAdvance(p, 1)
+    } else if !CssNameStart(CssPeek(p, 0)) {
+        return name
+    }
+    while !CssAtEnd(p) && CssNameChar(p.cursor.source[p.cursor.pos]) {
+        CssAdvance(p, 1)
+    }
+    if CssPeek(p, 0) == #char "\\" {
+        CssFail(p, "escapes in names are outside Kryon CSS")
+        return name
+    }
+    length: s32 = p.cursor.pos - start
+    if length > 64 {
+        CssFail(p, "name longer than 64 bytes")
+        return name
+    }
+    return CssMakeName(p.cursor.source[start:p.cursor.pos])
+}
+
+CssExpect :: (p: *CssParser, byte: u8, message: string) -> bool {
+    CssSkipSpace(p)
+    if CssFailed(p) { return false }
+    if CssAtEnd(p) || p.cursor.source[p.cursor.pos] != byte {
+        CssFail(p, message)
+        return false
+    }
+    CssAdvance(p, 1)
+    return true
+}
+
+// A quoted string's contents, as a view into the source. Strings end on
+// their line, as in CSS; escapes are outside the subset.
+CssStringSpan :: struct {
+    start: s32
+    length: s32
     ok: bool
 }
 
-KssExpectResult :: struct {
-    parser: KssCursor
-    ok: bool
-}
-
-KssNumberResult :: struct {
-    parser: KssCursor
-    value: float32
-    ok: bool
-}
-
-KssScalarResult :: struct {
-    parser: KssCursor
-    value: float64
-    ok: bool
-}
-
-KssColorResult :: struct {
-    parser: KssCursor
-    value: u32
-    ok: bool
-}
-
-KssReadName :: (c: KssCursor) -> KssNameResult {
-    result: KssNameResult
-    c = KssSkipSpace(c)
-    if KssAtEnd(c) || !KssIdentStart(c.source[c.pos]) {
-        result.parser = c
-        result.ok = false
-        return result
+CssReadString :: (p: *CssParser) -> CssStringSpan {
+    span: CssStringSpan
+    quote: u8 = CssPeek(p, 0)
+    if quote != #char "\"" && quote != #char "'" { return span }
+    CssAdvance(p, 1)
+    span.start = p.cursor.pos
+    while !CssAtEnd(p) {
+        byte: u8 = p.cursor.source[p.cursor.pos]
+        if byte == quote {
+            span.length = p.cursor.pos - span.start
+            CssAdvance(p, 1)
+            span.ok = true
+            return span
+        }
+        if byte == 10 || byte == 13 { break }
+        if byte == #char "\\" {
+            CssFail(p, "escapes in strings are outside Kryon CSS")
+            return span
+        }
+        CssAdvance(p, 1)
     }
-    while !KssAtEnd(c) && KssIdentChar(c.source[c.pos]) {
-        result.name = KssNameAppend(result.name, c.source[c.pos])
-        c = KssAdvance(c, 1)
-    }
-    result.parser = c
-    result.ok = result.name.length > 0
-    return result
+    CssFail(p, "unterminated string")
+    return span
 }
 
-KssReadSelectorName :: (c: KssCursor) -> KssNameResult {
-    result: KssNameResult
-    c = KssSkipSpace(c)
-    if !KssAtEnd(c) && c.source[c.pos] == #char "*" {
-        result.name = KssNameAppend(result.name, 42)
-        c = KssAdvance(c, 1)
-        result.parser = c
-        result.ok = true
-        return result
-    }
-    if KssAtEnd(c) || !KssIdentStart(c.source[c.pos]) {
-        result.parser = c
-        result.ok = false
-        return result
-    }
-    while !KssAtEnd(c) && KssSelectorIdentChar(c.source[c.pos]) {
-        result.name = KssNameAppend(result.name, c.source[c.pos])
-        c = KssAdvance(c, 1)
-    }
-    result.parser = c
-    result.ok = result.name.length > 0
-    return result
-}
+// Diagnostics: the message, then the exact file, line and column.
 
-KssExpect :: (c: KssCursor, byte: u8) -> KssExpectResult {
-    result: KssExpectResult
-    c = KssSkipSpace(c)
-    if KssAtEnd(c) || c.source[c.pos] != byte {
-        result.parser = c
-        result.ok = false
-        return result
-    }
-    c = KssAdvance(c, 1)
-    result.parser = c
-    result.ok = true
-    return result
-}
-
-// Diagnostics carry the message plus the exact file, line, and column.
-
-KssDiagnosticAppend :: (p: KssParser, text: string) -> KssParser {
-    index: s32 = 0
-    while index < (cast(s32)text.count) && p.diagnostic_length < 255 {
+CssDiagnosticAppend :: (p: *CssParser, text: string) {
+    for index: cast(s32)0..cast(s32)text.count - 1 {
+        if p.diagnostic_length >= 255 { return }
         p.diagnostic[p.diagnostic_length] = text[index]
-        p.diagnostic_length = p.diagnostic_length + 1
-        index = index + 1
+        p.diagnostic_length += 1
     }
-    return p
 }
 
-KssDiagnosticAppendName :: (p: KssParser, name: KssName) -> KssParser {
-    index: s32 = 0
-    while index < name.length && p.diagnostic_length < 255 {
-        p.diagnostic[p.diagnostic_length] = name.bytes[index]
-        p.diagnostic_length = p.diagnostic_length + 1
-        index = index + 1
-    }
-    return p
-}
-
-KssDiagnosticAppendInt :: (p: KssParser, value: s32) -> KssParser {
+CssDiagnosticAppendInt :: (p: *CssParser, value: s32) {
+    digits: [12]u8
+    count: s32 = 0
     remaining: s32 = value
-    digits: s32 = 1
     if remaining < 0 {
-        p = KssDiagnosticAppend(p, "-")
+        CssDiagnosticAppend(p, "-")
         remaining = -remaining
     }
-    probe: s32 = 10
-    while probe <= remaining && digits < 10 {
-        probe = probe * 10
-        digits = digits + 1
+    if remaining == 0 {
+        CssDiagnosticAppend(p, "0")
+        return
     }
-    while digits > 0 {
-        power: s32 = 1
-        step: s32 = 1
-        while step < digits {
-            power = power * 10
-            step = step + 1
-        }
-        digit: s32 = 0
-        while remaining >= power {
-            remaining = remaining - power
-            digit = digit + 1
-        }
+    while remaining > 0 && count < 12 {
+        digits[count] = cast(u8)(48 + remaining % 10)
+        remaining = remaining / 10
+        count += 1
+    }
+    while count > 0 {
+        count -= 1
         if p.diagnostic_length < 255 {
-            p.diagnostic[p.diagnostic_length] = cast(u8)(48 + digit)
-            p.diagnostic_length = p.diagnostic_length + 1
+            p.diagnostic[p.diagnostic_length] = digits[count]
+            p.diagnostic_length += 1
         }
-        digits = digits - 1
     }
-    return p
 }
 
-KssDiagnosticAt :: (p: KssParser) -> KssParser {
-    p = KssDiagnosticAppend(p, " at ")
-    if p.cursor.file >= 0 && p.cursor.file < p.file_count && p.files[p.cursor.file].length > 0 {
-        index: s32 = 0
-        while index < p.files[p.cursor.file].length && p.diagnostic_length < 255 {
-            p.diagnostic[p.diagnostic_length] = p.files[p.cursor.file].name[index]
-            p.diagnostic_length = p.diagnostic_length + 1
-            index = index + 1
-        }
-        p = KssDiagnosticAppend(p, ":")
+CssDiagnosticAt :: (p: *CssParser) {
+    CssDiagnosticAppend(p, " at ")
+    file: s32 = p.cursor.file
+    if file >= 0 && file < p.file_count && p.files[file].length > 0 {
+        CssDiagnosticAppend(p, TextView(p.files[file].name[:p.files[file].length]))
+        CssDiagnosticAppend(p, ":")
     }
-    p = KssDiagnosticAppendInt(p, p.cursor.line)
-    p = KssDiagnosticAppend(p, ":")
-    p = KssDiagnosticAppendInt(p, p.cursor.column)
-    return p
+    CssDiagnosticAppendInt(p, p.cursor.line)
+    CssDiagnosticAppend(p, ":")
+    CssDiagnosticAppendInt(p, p.cursor.column)
 }
 
-KssFail :: (p: KssParser, message: string) -> KssParser {
+CssFail :: (p: *CssParser, message: string) {
+    if CssFailed(p) { return }
     p.diagnostic_length = 0
-    p = KssDiagnosticAppend(p, message)
-    p = KssDiagnosticAt(p)
-    p.status = cast(s32)KssStatusError
-    return p
+    CssDiagnosticAppend(p, message)
+    CssDiagnosticAt(p)
+    p.status = cast(s32)CssStatusError
 }
 
-KssFailName :: (p: KssParser, message: string, name: KssName) -> KssParser {
+// "message 'name'suffix at file:line:column".
+CssFailName :: (p: *CssParser, message: string, name: CssName, suffix: string) {
+    if CssFailed(p) { return }
     p.diagnostic_length = 0
-    p = KssDiagnosticAppend(p, message)
-    p = KssDiagnosticAppendName(p, name)
-    p = KssDiagnosticAt(p)
-    p.status = cast(s32)KssStatusError
-    return p
+    CssDiagnosticAppend(p, message)
+    CssDiagnosticAppend(p, " '")
+    CssDiagnosticAppend(p, TextView(name.bytes[:name.length]))
+    CssDiagnosticAppend(p, "'")
+    CssDiagnosticAppend(p, suffix)
+    CssDiagnosticAt(p)
+    p.status = cast(s32)CssStatusError
 }
 
-KssReadHexColor :: (c: KssCursor) -> KssColorResult {
-    result: KssColorResult
-    value: u32 = 0
-    digits: s32 = 0
-    c = KssSkipSpace(c)
-    if KssAtEnd(c) || c.source[c.pos] != #char "#" {
-        result.parser = c
-        return result
-    }
-    c = KssAdvance(c, 1)
-    while !KssAtEnd(c) && KssIsHexDigit(c.source[c.pos]) {
-        byte: u8 = c.source[c.pos]
-        digit: u32 = 0
-        if byte >= #char "0" && byte <= #char "9" {
-            digit = byte - 48
-        } else if byte >= #char "a" && byte <= #char "f" {
-            digit = byte - 87
-        } else {
-            digit = byte - 55
-        }
-        value = (value << cast(u32)4) | digit
-        digits = digits + 1
-        c = KssAdvance(c, 1)
-    }
-    if digits == 6 {
-        value = (value << cast(u32)8) | cast(u32)255
-    } else if digits != 8 {
-        result.parser = c
-        return result
-    }
-    result.parser = c
-    result.value = value
-    result.ok = true
-    return result
+// The diagnostic, copied into `output`.
+#program_export
+CssDiagnostic :: (p: *CssParser, output: []u8) -> string {
+    count: s32 = p.diagnostic_length
+    if count > cast(s32)output.count { count = cast(s32)output.count }
+    for index: cast(s32)0..count - 1 { output[index] = p.diagnostic[index] }
+    return TextView(output[:count])
 }
 
-KssReadNumber :: (c: KssCursor) -> KssNumberResult {
-    scalar: KssScalarResult = KssReadScalar(c)
-    result: KssNumberResult
-    result.parser = scalar.parser
-    result.value = cast(float32)scalar.value
-    result.ok = scalar.ok
-    return result
+// A number with an optional unit: '12px', '0.5', '50%', '140ms'. The unit
+// is an identifier directly after the digits, or '%'.
+CssNumber :: struct {
+    value: float64
+    unit: CssName
+    percent: bool
+    ok: bool
 }
 
-KssReadScalar :: (c: KssCursor) -> KssScalarResult {
-    result: KssScalarResult
+CssReadNumber :: (p: *CssParser) -> CssNumber {
+    result: CssNumber
+    start: s32 = p.cursor.pos
     negative: bool = false
+    if CssPeek(p, 0) == #char "-" || CssPeek(p, 0) == #char "+" {
+        negative = CssPeek(p, 0) == #char "-"
+        CssAdvance(p, 1)
+    }
     whole: float64 = 0.0
+    digits: s32 = 0
+    while CssIsDigit(CssPeek(p, 0)) {
+        whole = whole * 10.0 + cast(float64)(CssPeek(p, 0) - 48)
+        digits += 1
+        CssAdvance(p, 1)
+    }
     fraction: float64 = 0.0
-    fraction_digits: s32 = 0
-    exponent: s32 = 0
-    exponent_negative: bool = false
-    seen_digits: bool = false
-    power: float64 = 1.0
-    value64: float64 = 0.0
-    c = KssSkipSpace(c)
-    if KssAtEnd(c) {
-        result.parser = c
-        return result
-    }
-    if c.source[c.pos] == #char "-" {
-        negative = true
-        c = KssAdvance(c, 1)
-    } else if c.source[c.pos] == #char "+" {
-        c = KssAdvance(c, 1)
-    }
-    while !KssAtEnd(c) && KssIsDigit(c.source[c.pos]) {
-        whole = whole * 10.0 + cast(float64)(c.source[c.pos] - 48)
-        seen_digits = true
-        c = KssAdvance(c, 1)
-    }
-    if !KssAtEnd(c) && c.source[c.pos] == #char "." && !seen_digits {
-        result.parser = c
-        return result
-    }
-    if !KssAtEnd(c) && c.source[c.pos] == #char "." {
-        c = KssAdvance(c, 1)
-        while !KssAtEnd(c) && KssIsDigit(c.source[c.pos]) {
-            if fraction_digits < 17 {
-                fraction = fraction * 10.0 + cast(float64)(c.source[c.pos] - 48)
-                fraction_digits = fraction_digits + 1
+    scale: float64 = 1.0
+    if CssPeek(p, 0) == #char "." && CssIsDigit(CssPeek(p, 1)) {
+        CssAdvance(p, 1)
+        while CssIsDigit(CssPeek(p, 0)) {
+            if scale < 1.0e15 {
+                fraction = fraction * 10.0 + cast(float64)(CssPeek(p, 0) - 48)
+                scale = scale * 10.0
             }
-            seen_digits = true
-            c = KssAdvance(c, 1)
+            digits += 1
+            CssAdvance(p, 1)
         }
     }
-    if !seen_digits {
-        result.parser = c
+    if digits == 0 {
+        // Not a number: leave the cursor where it was.
+        p.cursor.column -= p.cursor.pos - start
+        p.cursor.pos = start
         return result
     }
-    if !KssAtEnd(c) && (c.source[c.pos] == #char "e" || c.source[c.pos] == #char "E") {
-        c = KssAdvance(c, 1)
-        if !KssAtEnd(c) && c.source[c.pos] == #char "-" {
-            exponent_negative = true
-            c = KssAdvance(c, 1)
-        } else if !KssAtEnd(c) && c.source[c.pos] == #char "+" {
-            c = KssAdvance(c, 1)
-        }
-        exponent_start: s32 = c.pos
-        while !KssAtEnd(c) && KssIsDigit(c.source[c.pos]) {
-            if exponent <= 400 {
-                exponent = exponent * 10 + cast(s32)(c.source[c.pos] - 48)
-            }
-            c = KssAdvance(c, 1)
-        }
-        if c.pos == exponent_start || exponent > 400 {
-            result.parser = c
-            return result
-        }
-    }
-    step: s32 = 0
-    while step < fraction_digits {
-        power = power * 10.0
-        step = step + 1
-    }
-    value64 = whole + fraction / power
-    step = 0
-    while step < exponent {
-        if exponent_negative {
-            value64 = value64 / 10.0
-        } else {
-            value64 = value64 * 10.0
-        }
-        step = step + 1
-    }
-    if negative {
-        value64 = -value64
-    }
-    result.parser = c
-    if value64 > 1.7976931348623157e308 || value64 < -1.7976931348623157e308 {
-        result.ok = false
+    if digits > 18 {
+        CssFail(p, "number has too many digits")
         return result
     }
-    result.value = value64
+    if (CssPeek(p, 0) == #char "e" || CssPeek(p, 0) == #char "E") &&
+        (CssIsDigit(CssPeek(p, 1)) || ((CssPeek(p, 1) == #char "-" || CssPeek(p, 1) == #char "+") &&
+        CssIsDigit(CssPeek(p, 2)))) {
+        CssFail(p, "exponents are outside Kryon CSS")
+        return result
+    }
+    result.value = whole + fraction / scale
+    if negative { result.value = -result.value }
+    if CssPeek(p, 0) == #char "%" {
+        CssAdvance(p, 1)
+        result.percent = true
+    } else if CssNameStart(CssPeek(p, 0)) {
+        result.unit = CssReadName(p)
+        if CssFailed(p) { return result }
+    }
     result.ok = true
     return result
 }
 
-// Durations convert to milliseconds with exact decimal shifting so '0.14s'
-// yields exactly 140 instead of a float rounding artifact.
-
-KssReadDuration :: (c: KssCursor) -> KssNumberResult {
-    result: KssNumberResult
-    negative: bool = false
-    whole: u32 = 0
-    fraction: u32 = 0
-    fraction_digits: s32 = 0
-    seen_digits: bool = false
-    seconds: bool = false
-    c = KssSkipSpace(c)
-    if KssAtEnd(c) {
-        result.parser = c
-        return result
-    }
-    if c.source[c.pos] == #char "-" {
-        negative = true
-        c = KssAdvance(c, 1)
-    } else if c.source[c.pos] == #char "+" {
-        c = KssAdvance(c, 1)
-    }
-    while !KssAtEnd(c) && KssIsDigit(c.source[c.pos]) {
-        whole = whole * 10 + cast(u32)(c.source[c.pos] - 48)
-        seen_digits = true
-        c = KssAdvance(c, 1)
-    }
-    if !KssAtEnd(c) && c.source[c.pos] == #char "." {
-        c = KssAdvance(c, 1)
-        while !KssAtEnd(c) && KssIsDigit(c.source[c.pos]) {
-            if fraction_digits < 9 {
-                fraction = fraction * 10 + cast(u32)(c.source[c.pos] - 48)
-                fraction_digits = fraction_digits + 1
+// Value text ends at ';' or '}' outside parentheses and strings. Returns the
+// trimmed span; the cursor stops on the terminator.
+CssValueSpan :: (p: *CssParser) -> CssStringSpan {
+    span: CssStringSpan
+    CssSkipSpace(p)
+    if CssFailed(p) { return span }
+    span.start = p.cursor.pos
+    depth: s32 = 0
+    while true {
+        if CssAtEnd(p) {
+            CssFail(p, "expected ';' or '}' after the value")
+            return span
+        }
+        byte: u8 = p.cursor.source[p.cursor.pos]
+        if byte == #char "\"" || byte == #char "'" {
+            unused CssReadString(p)
+            if CssFailed(p) { return span }
+            continue
+        }
+        if byte == #char "/" && CssPeek(p, 1) == #char "*" {
+            CssSkipSpace(p)
+            if CssFailed(p) { return span }
+            continue
+        }
+        if byte == #char "(" || byte == #char "[" {
+            depth += 1
+        } else if byte == #char ")" || byte == #char "]" {
+            if depth == 0 {
+                CssFail(p, "unbalanced ')' in the value")
+                return span
             }
-            seen_digits = true
-            c = KssAdvance(c, 1)
+            depth -= 1
+        } else if byte == #char "{" {
+            CssFail(p, "'{' inside a value; expected ';'")
+            return span
+        } else if depth == 0 && (byte == #char ";" || byte == #char "}") {
+            break
+        } else if depth > 0 && (byte == #char ";" || byte == #char "}") {
+            CssFail(p, "unclosed '(' in the value")
+            return span
         }
+        CssAdvance(p, 1)
     }
-    if !seen_digits {
-        result.parser = c
-        return result
-    }
-    unit: KssNameResult = KssReadName(c)
-    if unit.ok && KssNameEquals(unit.name, "ms") {
-        seconds = false
-    } else if unit.ok && KssNameEquals(unit.name, "s") {
-        seconds = true
-    } else if unit.ok {
-        result.parser = unit.parser
-        return result
-    } else {
-        result.parser = c
-        return result
-    }
-
-    value: float64 = 0.0
-    scaled: u32 = whole
-    shift: s32 = fraction_digits
-    while shift > 0 {
-        scaled = scaled * 10
-        shift = shift - 1
-    }
-    scaled = scaled + fraction
-    if seconds {
-        value = cast(float64)scaled
-        step: s32 = 0
-        while step < 3 - fraction_digits {
-            value = value * 10.0
-            step = step + 1
-        }
-        step = 0
-        while step < fraction_digits - 3 {
-            value = value / 10.0
-            step = step + 1
-        }
-    } else {
-        value = cast(float64)scaled
-        step: s32 = 0
-        while step < fraction_digits {
-            value = value / 10.0
-            step = step + 1
-        }
-    }
-    if negative {
-        value = -value
-    }
-    result.parser = unit.parser
-    result.value = cast(float32)value
-    result.ok = true
-    return result
+    end: s32 = p.cursor.pos
+    while end > span.start && CssIsSpace(p.cursor.source[end - 1]) { end -= 1 }
+    span.length = end - span.start
+    span.ok = span.length > 0
+    return span
 }

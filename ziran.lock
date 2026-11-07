@@ -41,7 +41,7 @@
   "root": {
     "dependencies": {"kryon": "pe42819128210d99c"},
     "dependency_refs": {"kryon": "1cd873fda5d12cd4dd562956da94cee33c3e364c"},
-    "name": "Kss"
+    "name": "Css"
   },
   "toolchain": {
     "commit": "1e2c3994fee8d58b3b56a77a7c339be4644a6447",

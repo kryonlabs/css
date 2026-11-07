@@ -1,0 +1,427 @@
+// Kryon CSS command line tool. Run it from the repository root:
+//
+//   css_tool migrate IN.kss OUT.css   convert a KSS sheet to Kryon CSS and
+//                                     check the result parses
+//   css_tool check FILE.css           parse a sheet; imports count as empty
+//   css_tool pack NAME                compile styles/NAME.css into
+//                                     src/style_pack_NAME.zi
+//   css_tool pack-check NAME          fail when src/style_pack_NAME.zi is
+//                                     not what `pack` would write
+//
+// Apps import this package without running its Makefile, so compiled packs
+// are committed and `make style-pack-check` keeps them equal to their CSS.
+#import "byte_text_linux"
+#import "c_string"
+#import "file_linux"
+#import "css_parser"
+#import "css_sheet"
+#import "css_migrate"
+#import "kryon/style"
+#import "kryon/style_sheet"
+
+libc :: #system_library "libc";
+RawWrite :: (descriptor: s32, input: *u8, count: u64) -> s64 #foreign libc "write";
+
+source_bytes: [262144]u8;
+output_bytes: [1048576]u8;
+output_length: s32 = 0;
+disk_bytes: [1048576]u8;
+sheet: CssSheet;
+
+WriteText :: (descriptor: s32, text: string) {
+    chunk: [4096]u8
+    at: s32 = 0
+    while at < cast(s32)text.count {
+        count: s32 = cast(s32)text.count - at
+        if count > 4096 { count = 4096 }
+        for index: cast(s32)0..count - 1 { chunk[index] = text[at + index] }
+        if RawWrite(descriptor, *chunk[0], cast(u64)count) <= 0 { return }
+        at += count
+    }
+}
+
+Fail :: (name: string, message: string) -> s32 {
+    WriteText(2, "css_tool: ")
+    WriteText(2, name)
+    WriteText(2, ": ")
+    WriteText(2, message)
+    WriteText(2, "\n")
+    return 1
+}
+
+ReadFile :: (path: string) -> s32 {
+    file: FileHandle = OpenRead(path)
+    if !file.valid { return -1 }
+    read: s64 = ReadAt(file, source_bytes[:], 0)
+    CloseFile(file)
+    if read < 0 || read >= cast(s64)source_bytes.count { return -1 }
+    return cast(s32)read
+}
+
+WriteFile :: (path: string, bytes: []u8) -> bool {
+    output: FileHandle = OpenReplace(path)
+    if !output.valid { return false }
+    written: s64 = WriteAt(output, bytes, 0)
+    CloseFile(output)
+    return written == cast(s64)bytes.count
+}
+
+// Imports resolve to empty sheets when only checking syntax.
+EmptyImport :: (name: string) -> CssImportAnswer {
+    answer: CssImportAnswer
+    answer.found = true
+    answer.source = ""
+    return answer
+}
+
+CheckSheet :: (path: string, source: string) -> s32 {
+    CssSheetReset(*sheet)
+    if !CssSheetParse(*sheet, source, path, EmptyImport) {
+        text: [256]u8
+        return Fail(path, CssSheetDiagnostic(*sheet, text[:]))
+    }
+    return 0
+}
+
+// Generated module text ------------------------------------------------
+
+Emit :: (text: string) -> bool {
+    if output_length + cast(s32)text.count > cast(s32)output_bytes.count { return false }
+    for index: cast(s32)0..cast(s32)text.count - 1 { output_bytes[output_length + index] = text[index] }
+    output_length += cast(s32)text.count
+    return true
+}
+
+EmitNumber :: (value: s32) -> bool {
+    digits: [16]u8
+    at: s32 = 16
+    magnitude: s32 = value
+    if magnitude < 0 {
+        if !Emit("-") { return false }
+        magnitude = -magnitude
+    }
+    while true {
+        at -= 1
+        digits[at] = cast(u8)(48 + magnitude % 10)
+        magnitude = magnitude / 10
+        if magnitude == 0 { break }
+    }
+    return Emit(TextView(digits[at:16]))
+}
+
+EmitHex :: (value: u32) -> bool {
+    digits: [10]u8
+    digits[0] = 48
+    digits[1] = 120
+    hex: string = "0123456789abcdef"
+    for index: cast(s32)0..7 {
+        digits[2 + index] = hex[cast(s32)((value >> cast(u32)((7 - index) * 4)) & cast(u32)15)]
+    }
+    return Emit(TextView(digits[:]))
+}
+
+// IEEE 754 single bits, computed exactly so every target decodes the same.
+FloatBits :: (value: float32) -> u32 {
+    v: float64 = cast(float64)value
+    if v == 0.0 { return 0 }
+    sign: u32 = 0
+    if v < 0.0 {
+        sign = 0x80000000
+        v = -v
+    }
+    exponent: s32 = 0
+    while v >= 2.0 {
+        v = v / 2.0
+        exponent += 1
+    }
+    while v < 1.0 {
+        v = v * 2.0
+        exponent -= 1
+    }
+    biased: s32 = exponent + 127
+    if biased <= 0 { return sign }
+    mantissa: u32 = cast(u32)((v - 1.0) * 8388608.0)
+    return sign | (cast(u32)biased << cast(u32)23) | mantissa
+}
+
+words: [65536]u32;
+word_count: s32 = 0;
+
+Word :: (value: u32) {
+    if word_count < cast(s32)words.count {
+        words[word_count] = value
+        word_count += 1
+    }
+}
+
+SignedWord :: (value: s32) { Word(cast(u32)value) }
+
+// One u32 array from words[0:word_count], at least one element; its _count
+// constant is the number of words.
+EmitWords :: (name: string, pack: string, per_line: s32) -> bool {
+    count: s32 = word_count
+    if count == 0 { Word(0) }
+    ok: bool = Emit("style_pack_") && Emit(pack) && Emit("_") && Emit(name) && Emit(": [") &&
+        EmitNumber(word_count) && Emit("]u32 = .[")
+    for index: cast(s32)0..word_count - 1 {
+        if index % per_line == 0 { ok = ok && Emit("\n    ") }
+        else { ok = ok && Emit(" ") }
+        ok = ok && EmitHex(words[index])
+        if index + 1 < word_count { ok = ok && Emit(",") }
+    }
+    ok = ok && Emit("];\nstyle_pack_") && Emit(pack) && Emit("_") && Emit(name) && Emit("_count :: ") &&
+        EmitNumber(count) && Emit(";\n\n")
+    word_count = 0
+    return ok
+}
+
+EmitStrings :: (name: string, pack: string, names: []CssName, count: s32) -> bool {
+    total: s32 = count
+    if total == 0 { total = 1 }
+    ok: bool = Emit("style_pack_") && Emit(pack) && Emit("_") && Emit(name) && Emit(": [") &&
+        EmitNumber(total) && Emit("]string = .[")
+    if count == 0 { ok = ok && Emit("\"\"") }
+    for index: cast(s32)0..count - 1 {
+        ok = ok && Emit(ifx index == 0 then "\n    \"" else ",\n    \"") &&
+            Emit(TextView(names[index].bytes[:names[index].length])) && Emit("\"")
+    }
+    return ok && Emit("];\nstyle_pack_") && Emit(pack) && Emit("_") && Emit(name) && Emit("_count :: ") &&
+        EmitNumber(count) && Emit(";\n\n")
+}
+
+typefaces: [CssSheetTypefaceCapacity]CssName;
+typeface_count: s32 = 0;
+
+TypefaceIndex :: (name: string) -> s32 {
+    if name.count == 0 { return -1 }
+    for index: cast(s32)0..typeface_count - 1 {
+        if CssNameSame(typefaces[index], CssMakeName(name)) { return index }
+    }
+    if typeface_count >= CssSheetTypefaceCapacity || name.count > 64 { return -2 }
+    typefaces[typeface_count] = CssMakeName(name)
+    typeface_count += 1
+    return typeface_count - 1
+}
+
+title_bytes: [64]u8;
+// "material" -> "Material", for StylePackMaterial.
+Title :: (name: string) -> string {
+    for index: cast(s32)0..cast(s32)name.count - 1 {
+        byte: u8 = name[index]
+        if index == 0 && byte >= 97 && byte <= 122 { byte = byte - 32 }
+        title_bytes[index] = byte
+    }
+    return TextView(title_bytes[0:name.count])
+}
+
+GeneratePack :: (pack: string, source: string) -> s32 {
+    file: [128]u8
+    path: string = Join(file[:], pack, ".css")
+    CssSheetReset(*sheet)
+    if !CssSheetParse(*sheet, source, path, CssNoImports) {
+        text: [256]u8
+        return Fail(path, CssSheetDiagnostic(*sheet, text[:]))
+    }
+    for index: cast(s32)0..sheet.condition_count - 1 {
+        for branch: cast(s32)0..sheet.conditions[index].count - 1 {
+            if sheet.conditions[index].branches[branch].viewport_count > 0 {
+                return Fail(path, "packs are native tables; viewport media queries are for web sheets")
+            }
+        }
+    }
+    if sheet.web_declarations > 0 {
+        return Fail(path, "packs are native tables; web document properties belong in web sheets")
+    }
+    output_length = 0
+    typeface_count = 0
+    title: string = Title(pack)
+    ok: bool = Emit("// Generated from styles/") && Emit(pack) && Emit(".css by tools/css_tool.zi.\n") &&
+        Emit("// Edit the CSS and run `make style-packs`; do not edit this file.\n") &&
+        Emit("#import \"css_sheet\"\n\n")
+    for index: cast(s32)0..sheet.rule_count - 1 {
+        entry: CssSheetRule = sheet.rules[index]
+        selector: StyleSelector = entry.rule.selector
+        SignedWord(selector.kind)
+        SignedWord(selector.name)
+        SignedWord(selector.class_name)
+        SignedWord(selector.role)
+        SignedWord(selector.tone)
+        SignedWord(selector.emphasis)
+        SignedWord(selector.size)
+        SignedWord(selector.state)
+        SignedWord(selector.validation)
+        SignedWord(selector.orientation)
+        SignedWord(selector.placement)
+        SignedWord(entry.rule.state)
+        SignedWord(entry.rule.layer)
+        SignedWord(entry.condition + 1)
+        style: StyleData = entry.rule.style
+        Word(style.fields)
+        Word(style.background)
+        Word(style.foreground)
+        Word(style.border)
+        Word(style.focus)
+        Word(style.background_end)
+        Word(FloatBits(style.radius))
+        Word(FloatBits(style.border_width))
+        Word(FloatBits(style.opacity))
+        Word(FloatBits(style.padding_x))
+        Word(FloatBits(style.padding_y))
+        Word(FloatBits(style.gap))
+        Word(FloatBits(style.font_size))
+        Word(FloatBits(style.icon_size))
+        Word(FloatBits(style.offset_x))
+        Word(FloatBits(style.offset_y))
+        Word(FloatBits(style.letter_spacing))
+        SignedWord(cast(s32)style.material)
+        typeface: s32 = TypefaceIndex(style.typeface)
+        if typeface < -1 { return Fail(path, "more than 16 typefaces") }
+        SignedWord(typeface + 1)
+        Word(0)
+    }
+    ok = ok && EmitWords("rules", pack, CssCompiledRuleWords)
+    for index: cast(s32)0..sheet.ref_count - 1 {
+        ref: CssSheetRef = sheet.refs[index]
+        SignedWord(ref.rule)
+        SignedWord(ref.name)
+        Word(cast(u32)ref.field | (ifx ref.fallback then cast(u32)256 else cast(u32)0))
+        SignedWord(ref.line)
+    }
+    ok = ok && EmitWords("refs", pack, CssCompiledRefWords * 2)
+    for index: cast(s32)0..sheet.definition_count - 1 {
+        definition: CssSheetDefinition = sheet.definitions[index]
+        SignedWord(definition.name)
+        SignedWord(definition.condition + 1)
+        SignedWord(definition.kind)
+        Word(definition.color)
+        Word(FloatBits(definition.number))
+        SignedWord(definition.material)
+        SignedWord(definition.alias + 1)
+        SignedWord(definition.line)
+    }
+    ok = ok && EmitWords("definitions", pack, CssCompiledDefinitionWords)
+    for index: cast(s32)0..sheet.condition_count - 1 {
+        condition: CssCondition = sheet.conditions[index]
+        SignedWord(condition.count)
+        Word(ifx condition.never then cast(u32)1 else cast(u32)0)
+        for branch: cast(s32)0..3 {
+            Word(condition.branches[branch].mask)
+            SignedWord(condition.branches[branch].theme + 1)
+        }
+    }
+    ok = ok && EmitWords("conditions", pack, CssCompiledConditionWords)
+    ok = ok && EmitStrings("names", pack, sheet.names[:], sheet.name_count) &&
+        EmitStrings("themes", pack, sheet.themes[:], sheet.theme_count) &&
+        EmitStrings("layers", pack, sheet.layers[:], sheet.layer_count) &&
+        EmitStrings("typefaces", pack, typefaces[:], typeface_count)
+    ok = ok && Emit("// The ") && Emit(pack) && Emit(" pack, compiled: load it with CssSheetLoad.\n") &&
+        Emit("#program_export\nStylePack") && Emit(title) && Emit(" :: () -> CssCompiledSheet {\n") &&
+        Emit("    compiled: CssCompiledSheet\n")
+    for part: css_tool_parts {
+        ok = ok && Emit("    compiled.") && Emit(part) && Emit(" = style_pack_") && Emit(pack) && Emit("_") &&
+            Emit(part) && Emit("[0:style_pack_") && Emit(pack) && Emit("_") && Emit(part) && Emit("_count")
+        ok = ok && Emit("]\n")
+    }
+    ok = ok && Emit("    compiled.file = \"") && Emit(path) && Emit("\"\n    return compiled\n}\n")
+    if !ok { return Fail(path, "the generated module is too large") }
+    return 0
+}
+
+css_tool_parts: [8]string = .["rules", "refs", "definitions", "conditions", "names", "themes", "layers", "typefaces"];
+
+join_bytes: [512]u8;
+Join :: (output: []u8, first: string, second: string) -> string {
+    count: s32 = 0
+    for index: cast(s32)0..cast(s32)first.count - 1 {
+        if count < cast(s32)output.count { output[count] = first[index]; count += 1 }
+    }
+    for index: cast(s32)0..cast(s32)second.count - 1 {
+        if count < cast(s32)output.count { output[count] = second[index]; count += 1 }
+    }
+    return TextView(output[:count])
+}
+
+ValidName :: (name: string) -> bool {
+    if name.count == 0 || name.count > 32 { return false }
+    for byte: name {
+        if !((byte >= 97 && byte <= 122) || (byte >= 48 && byte <= 57) || byte == 95) { return false }
+    }
+    return true
+}
+
+Argument :: (argv: **s8, index: s32) -> string {
+    return TextFromCString(cast(*u8)argv[index])
+}
+
+#program_export
+main :: (argc: s32, argv: **s8) -> s32 {
+    if argc < 3 {
+        WriteText(2, "usage: css_tool migrate IN.kss OUT.css | check FILE.css | pack NAME | pack-check NAME\n")
+        return 2
+    }
+    mode: string = Argument(argv, 1)
+    if mode == "check" {
+        path: string = Argument(argv, 2)
+        count: s32 = ReadFile(path)
+        if count < 0 { return Fail(path, "cannot read") }
+        return CheckSheet(path, TextView(source_bytes[:count]))
+    }
+    if mode == "migrate" {
+        if argc != 4 { return Fail("migrate", "usage: css_tool migrate IN.kss OUT.css") }
+        input: string = Argument(argv, 2)
+        target: string = Argument(argv, 3)
+        count: s32 = ReadFile(input)
+        if count < 0 { return Fail(input, "cannot read") }
+        result: CssMigration = CssMigrateKss(TextView(source_bytes[:count]), output_bytes[:])
+        if !result.ok {
+            line: [16]u8
+            WriteText(2, "css_tool: ")
+            WriteText(2, input)
+            WriteText(2, ":")
+            output_length = 0
+            unused EmitNumber(result.line)
+            WriteText(2, TextView(output_bytes[:output_length]))
+            WriteText(2, ": ")
+            WriteText(2, TextView(result.error[:result.error_length]))
+            WriteText(2, "\n")
+            return 1
+        }
+        converted: string = TextView(output_bytes[:result.count])
+        if CheckSheet(target, converted) != 0 { return 1 }
+        if !WriteFile(target, output_bytes[:result.count]) { return Fail(target, "cannot write") }
+        WriteText(1, target)
+        WriteText(1, "\n")
+        return 0
+    }
+    if mode == "pack" || mode == "pack-check" {
+        pack: string = Argument(argv, 2)
+        if !ValidName(pack) { return Fail(pack, "pack names are lower case letters, digits and '_'") }
+        path_bytes: [128]u8
+        tail: [64]u8
+        css_path: string = Join(path_bytes[:], "styles/", Join(tail[:], pack, ".css"))
+        count: s32 = ReadFile(css_path)
+        if count <= 0 { return Fail(css_path, "cannot read the pack") }
+        source: string = TextView(source_bytes[:count])
+        status: s32 = GeneratePack(pack, source)
+        if status != 0 { return status }
+        module: string = TextView(output_bytes[:output_length])
+        module_path_bytes: [128]u8
+        module_tail: [64]u8
+        module_path: string = Join(module_path_bytes[:], "src/style_pack_", Join(module_tail[:], pack, ".zi"))
+        if mode == "pack-check" {
+            disk: FileHandle = OpenRead(module_path)
+            if !disk.valid { return Fail(module_path, "missing; run `make style-packs`") }
+            read: s64 = ReadAt(disk, disk_bytes[:], 0)
+            CloseFile(disk)
+            if read != cast(s64)output_length || TextView(disk_bytes[0:cast(s32)read]) != module {
+                return Fail(module_path, "differs from its CSS; run `make style-packs`")
+            }
+            return 0
+        }
+        if !WriteFile(module_path, output_bytes[:output_length]) { return Fail(module_path, "cannot write") }
+        WriteText(1, module_path)
+        WriteText(1, "\n")
+        return 0
+    }
+    return Fail(mode, "unknown command")
+}

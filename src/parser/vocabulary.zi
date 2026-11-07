@@ -1,9 +1,9 @@
-// Part of the kss_parser module, loaded by src/kss/kss_parser.zi.
+// Part of the css_parser module.
 // Widget kinds, classes, states, tones, emphases, sizes, and roles by name.
 
-// Stable class ids match StyleClassId in the C and Go pack registries.
+// Stable class ids: FNV-1a over the class name, as Kryon hosts hash classes.
 
-KssClassId :: (name: KssName) -> s32 {
+CssClassId :: (name: CssName) -> s32 {
     hash: u32 = 2166136261
     if name.length == 0 {
         return 0
@@ -21,384 +21,384 @@ KssClassId :: (name: KssName) -> s32 {
     return cast(s32)hash
 }
 
-KssKindValue :: (name: KssName) -> s32 {
-    if KssNameEquals(name, "*") || KssNameEquals(name, "Any") {
+CssKindValue :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "*") || CssNameEquals(name, "Any") {
         return StyleKindAny()
     }
-    if KssNameEquals(name, "App") {
+    if CssNameEquals(name, "App") {
         return StyleKindApp()
     }
-    if KssNameEquals(name, "Button") {
+    if CssNameEquals(name, "Button") {
         return StyleKindButton()
     }
-    if KssNameEquals(name, "Text") {
+    if CssNameEquals(name, "Text") {
         return StyleKindText()
     }
-    if KssNameEquals(name, "TextField") {
+    if CssNameEquals(name, "TextField") {
         return StyleKindTextField()
     }
-    if KssNameEquals(name, "TextArea") {
+    if CssNameEquals(name, "TextArea") {
         return StyleKindTextArea()
     }
-    if KssNameEquals(name, "Surface") {
+    if CssNameEquals(name, "Surface") {
         return StyleKindSurface()
     }
-    if KssNameEquals(name, "Dropdown") {
+    if CssNameEquals(name, "Dropdown") {
         return StyleKindDropdown()
     }
-    if KssNameEquals(name, "Card") {
+    if CssNameEquals(name, "Card") {
         return StyleKindCard()
     }
-    if KssNameEquals(name, "Slider") {
+    if CssNameEquals(name, "Slider") {
         return StyleKindSlider()
     }
-    if KssNameEquals(name, "SliderThumb") {
+    if CssNameEquals(name, "SliderThumb") {
         return StyleKindSliderThumb()
     }
-    if KssNameEquals(name, "Toggle") {
+    if CssNameEquals(name, "Toggle") {
         return StyleKindToggle()
     }
-    if KssNameEquals(name, "ToggleThumb") {
+    if CssNameEquals(name, "ToggleThumb") {
         return StyleKindToggleThumb()
     }
-    if KssNameEquals(name, "Scroll") {
+    if CssNameEquals(name, "Scroll") {
         return StyleKindScroll()
     }
-    if KssNameEquals(name, "ScrollThumb") {
+    if CssNameEquals(name, "ScrollThumb") {
         return StyleKindScrollThumb()
     }
-    if KssNameEquals(name, "Checkbox") {
+    if CssNameEquals(name, "Checkbox") {
         return StyleKindCheckbox()
     }
-    if KssNameEquals(name, "Radio") {
+    if CssNameEquals(name, "Radio") {
         return StyleKindRadio()
     }
-    if KssNameEquals(name, "Progress") {
+    if CssNameEquals(name, "Progress") {
         return StyleKindProgress()
     }
-    if KssNameEquals(name, "Separator") {
+    if CssNameEquals(name, "Separator") {
         return StyleKindSeparator()
     }
-    if KssNameEquals(name, "NavigationBar") {
+    if CssNameEquals(name, "NavigationBar") {
         return StyleKindNavigationBar()
     }
-    if KssNameEquals(name, "NavigationBarItem") {
+    if CssNameEquals(name, "NavigationBarItem") {
         return StyleKindNavigationBarItem()
     }
-    if KssNameEquals(name, "Selectable") {
+    if CssNameEquals(name, "Selectable") {
         return StyleKindSelectable()
     }
-    if KssNameEquals(name, "Fieldset") {
+    if CssNameEquals(name, "Fieldset") {
         return StyleKindFieldset()
     }
-    if KssNameEquals(name, "Plot") {
+    if CssNameEquals(name, "Plot") {
         return StyleKindPlot()
     }
-    if KssNameEquals(name, "PlotMark") {
+    if CssNameEquals(name, "PlotMark") {
         return StyleKindPlotMark()
     }
-    if KssNameEquals(name, "Link") {
+    if CssNameEquals(name, "Link") {
         return StyleKindLink()
     }
-    if KssNameEquals(name, "TabBar") {
+    if CssNameEquals(name, "TabBar") {
         return StyleKindTabBar()
     }
-    if KssNameEquals(name, "Tab") {
+    if CssNameEquals(name, "Tab") {
         return StyleKindTab()
     }
-    if KssNameEquals(name, "TabClose") {
+    if CssNameEquals(name, "TabClose") {
         return StyleKindTabClose()
     }
-    if KssNameEquals(name, "SegmentedControl") {
+    if CssNameEquals(name, "SegmentedControl") {
         return StyleKindSegmentedControl()
     }
-    if KssNameEquals(name, "Segment") {
+    if CssNameEquals(name, "Segment") {
         return StyleKindSegment()
     }
-    if KssNameEquals(name, "Menu") {
+    if CssNameEquals(name, "Menu") {
         return StyleKindMenu()
     }
-    if KssNameEquals(name, "MenuItem") {
+    if CssNameEquals(name, "MenuItem") {
         return StyleKindMenuItem()
     }
-    if KssNameEquals(name, "MenuSeparator") {
+    if CssNameEquals(name, "MenuSeparator") {
         return StyleKindMenuSeparator()
     }
-    if KssNameEquals(name, "ListBox") {
+    if CssNameEquals(name, "ListBox") {
         return StyleKindListBox()
     }
-    if KssNameEquals(name, "ListBoxItem") {
+    if CssNameEquals(name, "ListBoxItem") {
         return StyleKindListBoxItem()
     }
-    if KssNameEquals(name, "TreeView") {
+    if CssNameEquals(name, "TreeView") {
         return StyleKindTreeView()
     }
-    if KssNameEquals(name, "TreeViewItem") {
+    if CssNameEquals(name, "TreeViewItem") {
         return StyleKindTreeViewItem()
     }
-    return KssKindValueMore(name)
+    return CssKindValueMore(name)
 }
 
-KssKindValueMore :: (name: KssName) -> s32 {
-    if KssNameEquals(name, "ListBoxMulti") {
+CssKindValueMore :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "ListBoxMulti") {
         return StyleKindListBoxMulti()
     }
-    if KssNameEquals(name, "ListBoxMultiItem") {
+    if CssNameEquals(name, "ListBoxMultiItem") {
         return StyleKindListBoxMultiItem()
     }
-    if KssNameEquals(name, "DragDropTarget") {
+    if CssNameEquals(name, "DragDropTarget") {
         return StyleKindDragDropTarget()
     }
-    if KssNameEquals(name, "Spinbox") {
+    if CssNameEquals(name, "Spinbox") {
         return StyleKindSpinbox()
     }
-    if KssNameEquals(name, "SpinboxValue") {
+    if CssNameEquals(name, "SpinboxValue") {
         return StyleKindSpinboxValue()
     }
-    if KssNameEquals(name, "ColorPicker") {
+    if CssNameEquals(name, "ColorPicker") {
         return StyleKindColorPicker()
     }
-    if KssNameEquals(name, "ColorPickerSwatch") {
+    if CssNameEquals(name, "ColorPickerSwatch") {
         return StyleKindColorPickerSwatch()
     }
-    if KssNameEquals(name, "PanedView") {
+    if CssNameEquals(name, "PanedView") {
         return StyleKindPanedView()
     }
-    if KssNameEquals(name, "Toast") {
+    if CssNameEquals(name, "Toast") {
         return StyleKindToast()
     }
-    if KssNameEquals(name, "Collapsible") {
+    if CssNameEquals(name, "Collapsible") {
         return StyleKindCollapsible()
     }
-    if KssNameEquals(name, "TitleBar") {
+    if CssNameEquals(name, "TitleBar") {
         return StyleKindTitleBar()
     }
-    if KssNameEquals(name, "Toolbar") {
+    if CssNameEquals(name, "Toolbar") {
         return StyleKindToolbar()
     }
-    if KssNameEquals(name, "Modal") {
+    if CssNameEquals(name, "Modal") {
         return StyleKindModal()
     }
-    if KssNameEquals(name, "TableView") {
+    if CssNameEquals(name, "TableView") {
         return StyleKindTableView()
     }
-    if KssNameEquals(name, "Guide") {
+    if CssNameEquals(name, "Guide") {
         return StyleKindGuide()
     }
-    if KssNameEquals(name, "Image") {
+    if CssNameEquals(name, "Image") {
         return StyleKindImage()
     }
-    if KssNameEquals(name, "Focus") {
+    if CssNameEquals(name, "Focus") {
         return StyleKindFocus()
     }
-    if KssNameEquals(name, "Popup") {
+    if CssNameEquals(name, "Popup") {
         return StyleKindPopup()
     }
-    if KssNameEquals(name, "Canvas") {
+    if CssNameEquals(name, "Canvas") {
         return StyleKindCanvas()
     }
-    if KssNameEquals(name, "Drag") {
+    if CssNameEquals(name, "Drag") {
         return StyleKindDrag()
     }
-    if KssNameEquals(name, "DragValue") {
+    if CssNameEquals(name, "DragValue") {
         return StyleKindDragValue()
     }
-    if KssNameEquals(name, "Heading") {
+    if CssNameEquals(name, "Heading") {
         return StyleKindHeading()
     }
-    if KssNameEquals(name, "ParagraphText") {
+    if CssNameEquals(name, "ParagraphText") {
         return StyleKindParagraphText()
     }
-    if KssNameEquals(name, "Page") {
+    if CssNameEquals(name, "Page") {
         return StyleKindPage()
     }
-    if KssNameEquals(name, "Section") {
+    if CssNameEquals(name, "Section") {
         return StyleKindSection()
     }
-    if KssNameEquals(name, "Reorder") {
+    if CssNameEquals(name, "Reorder") {
         return StyleKindReorder()
     }
     return -999999
 }
 
-KssStateValue :: (name: KssName) -> s32 {
-    if KssNameEquals(name, "any") {
+CssStateValue :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "any") {
         return StyleStateAny()
     }
-    if KssNameEquals(name, "normal") {
+    if CssNameEquals(name, "normal") {
         return cast(s32)ButtonStateNormal
     }
-    if KssNameEquals(name, "hover") {
+    if CssNameEquals(name, "hover") {
         return cast(s32)ButtonStateHover
     }
-    if KssNameEquals(name, "pressed") || KssNameEquals(name, "press") {
+    if CssNameEquals(name, "pressed") || CssNameEquals(name, "press") {
         return cast(s32)ButtonStatePressed
     }
-    if KssNameEquals(name, "focus") || KssNameEquals(name, "focused") {
+    if CssNameEquals(name, "focus") || CssNameEquals(name, "focused") {
         return cast(s32)ButtonStateFocus
     }
-    if KssNameEquals(name, "disabled") {
+    if CssNameEquals(name, "disabled") {
         return cast(s32)ButtonStateDisabled
     }
-    if KssNameEquals(name, "loading") {
+    if CssNameEquals(name, "loading") {
         return cast(s32)ButtonStateLoading
     }
-    if KssNameEquals(name, "selected") {
+    if CssNameEquals(name, "selected") {
         return cast(s32)ButtonStateSelected
     }
     return -999999
 }
 
-KssToneValue :: (name: KssName) -> s32 {
-    if KssNameEquals(name, "any") {
+CssToneValue :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "any") {
         return StyleAny()
     }
-    if KssNameEquals(name, "Neutral") {
+    if CssNameEquals(name, "Neutral") {
         return cast(s32)ButtonToneNeutral
     }
-    if KssNameEquals(name, "Accent") {
+    if CssNameEquals(name, "Accent") {
         return cast(s32)ButtonToneAccent
     }
-    if KssNameEquals(name, "Danger") {
+    if CssNameEquals(name, "Danger") {
         return cast(s32)ButtonToneDanger
     }
-    if KssNameEquals(name, "Success") {
+    if CssNameEquals(name, "Success") {
         return cast(s32)ButtonToneSuccess
     }
-    if KssNameEquals(name, "Warning") {
+    if CssNameEquals(name, "Warning") {
         return cast(s32)ButtonToneWarning
     }
     return -999999
 }
 
-KssEmphasisValue :: (name: KssName) -> s32 {
-    if KssNameEquals(name, "any") {
+CssEmphasisValue :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "any") {
         return StyleAny()
     }
-    if KssNameEquals(name, "Filled") {
+    if CssNameEquals(name, "Filled") {
         return cast(s32)ButtonEmphasisFilled
     }
-    if KssNameEquals(name, "Soft") {
+    if CssNameEquals(name, "Soft") {
         return cast(s32)ButtonEmphasisSoft
     }
-    if KssNameEquals(name, "Outline") {
+    if CssNameEquals(name, "Outline") {
         return cast(s32)ButtonEmphasisOutline
     }
-    if KssNameEquals(name, "Ghost") {
+    if CssNameEquals(name, "Ghost") {
         return cast(s32)ButtonEmphasisGhost
     }
-    if KssNameEquals(name, "Link") {
+    if CssNameEquals(name, "Link") {
         return cast(s32)ButtonEmphasisLink
     }
     return -999999
 }
 
-KssSizeValue :: (name: KssName) -> s32 {
-    if KssNameEquals(name, "any") {
+CssSizeValue :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "any") {
         return StyleAny()
     }
-    if KssNameEquals(name, "Medium") {
+    if CssNameEquals(name, "Medium") {
         return cast(s32)ControlSizeMedium
     }
-    if KssNameEquals(name, "Small") {
+    if CssNameEquals(name, "Small") {
         return cast(s32)ControlSizeSmall
     }
-    if KssNameEquals(name, "Large") {
+    if CssNameEquals(name, "Large") {
         return cast(s32)ControlSizeLarge
     }
     return -999999
 }
 
-KssRoleValue :: (name: KssName) -> s32 {
-    if KssNameEquals(name, "Any") {
+CssRoleValue :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "Any") {
         return StyleAny()
     }
-    if KssNameEquals(name, "Bar") || KssNameEquals(name, "MenuBar") {
+    if CssNameEquals(name, "Bar") || CssNameEquals(name, "MenuBar") {
         return 1
     }
-    if KssNameEquals(name, "Popup") || KssNameEquals(name, "Panel") ||
-        KssNameEquals(name, "MenuPopup") {
+    if CssNameEquals(name, "Popup") || CssNameEquals(name, "Panel") ||
+        CssNameEquals(name, "MenuPopup") {
         return 2
     }
-    if KssNameEquals(name, "Context") || KssNameEquals(name, "MenuContext") {
+    if CssNameEquals(name, "Context") || CssNameEquals(name, "MenuContext") {
         return 3
     }
-    if KssNameEquals(name, "Track") {
+    if CssNameEquals(name, "Track") {
         return 4
     }
-    if KssNameEquals(name, "Fill") {
+    if CssNameEquals(name, "Fill") {
         return 5
     }
-    if KssNameEquals(name, "Label") || KssNameEquals(name, "Text") {
+    if CssNameEquals(name, "Label") || CssNameEquals(name, "Text") {
         return 6
     }
-    if KssNameEquals(name, "Line") {
+    if CssNameEquals(name, "Line") {
         return 7
     }
-    if KssNameEquals(name, "Bullet") {
+    if CssNameEquals(name, "Bullet") {
         return 8
     }
-    if KssNameEquals(name, "Box") {
+    if CssNameEquals(name, "Box") {
         return 9
     }
-    if KssNameEquals(name, "Mark") || KssNameEquals(name, "Check") {
+    if CssNameEquals(name, "Mark") || CssNameEquals(name, "Check") {
         return 10
     }
-    if KssNameEquals(name, "Ring") {
+    if CssNameEquals(name, "Ring") {
         return 11
     }
-    if KssNameEquals(name, "Handle") {
+    if CssNameEquals(name, "Handle") {
         return 12
     }
-    if KssNameEquals(name, "Header") {
+    if CssNameEquals(name, "Header") {
         return 13
     }
-    if KssNameEquals(name, "TreeHeader") {
+    if CssNameEquals(name, "TreeHeader") {
         return 14
     }
-    if KssNameEquals(name, "Close") {
+    if CssNameEquals(name, "Close") {
         return 15
     }
-    if KssNameEquals(name, "Title") {
+    if CssNameEquals(name, "Title") {
         return 16
     }
-    if KssNameEquals(name, "Action") {
+    if CssNameEquals(name, "Action") {
         return 17
     }
-    if KssNameEquals(name, "Divider") {
+    if CssNameEquals(name, "Divider") {
         return 18
     }
-    if KssNameEquals(name, "Scrim") {
+    if CssNameEquals(name, "Scrim") {
         return 19
     }
-    if KssNameEquals(name, "Message") {
+    if CssNameEquals(name, "Message") {
         return 20
     }
-    if KssNameEquals(name, "Row") {
+    if CssNameEquals(name, "Row") {
         return 21
     }
-    if KssNameEquals(name, "Cell") {
+    if CssNameEquals(name, "Cell") {
         return 22
     }
-    if KssNameEquals(name, "Selection") || KssNameEquals(name, "Selected") {
+    if CssNameEquals(name, "Selection") || CssNameEquals(name, "Selected") {
         return 23
     }
-    if KssNameEquals(name, "Anchor") {
+    if CssNameEquals(name, "Anchor") {
         return 24
     }
-    if KssNameEquals(name, "Placeholder") {
+    if CssNameEquals(name, "Placeholder") {
         return 25
     }
-    if KssNameEquals(name, "Option") {
+    if CssNameEquals(name, "Option") {
         return 26
     }
-    if KssNameEquals(name, "Scrollbar") {
+    if CssNameEquals(name, "Scrollbar") {
         return 27
     }
-    if KssNameEquals(name, "BottomBar") {
+    if CssNameEquals(name, "BottomBar") {
         return 28
     }
-    if KssNameEquals(name, "BottomAction") {
+    if CssNameEquals(name, "BottomAction") {
         return 29
     }
     return -999999

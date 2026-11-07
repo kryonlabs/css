@@ -1,0 +1,571 @@
+// Part of the css_parser module: declarations. Each native property lowers
+// to fields of Kryon's StyleData; web document properties (width, margin and
+// the other layout properties listed below) style the web document host and
+// are skipped by native hosts. Anything else is an error.
+
+CssScopeNative :: 0
+CssScopeWeb :: 1
+CssScopeKryon :: 2
+
+// The value kind each field takes.
+CssFieldKind :: (field: s32) -> s32 {
+    if field == cast(s32)CssFieldBackground || field == cast(s32)CssFieldBackgroundEnd ||
+        field == cast(s32)CssFieldForeground || field == cast(s32)CssFieldBorder ||
+        field == cast(s32)CssFieldFocus {
+        return cast(s32)CssValueColor
+    }
+    if field == cast(s32)CssFieldOpacity { return cast(s32)CssValueNumber }
+    if field == cast(s32)CssFieldMaterial { return cast(s32)CssValueMaterial }
+    return cast(s32)CssValueLength
+}
+
+CssFieldBit :: (field: s32) -> u32 {
+    if field == cast(s32)CssFieldBackground { return cast(u32)StyleBackground }
+    if field == cast(s32)CssFieldBackgroundEnd { return cast(u32)StyleBackgroundEnd }
+    if field == cast(s32)CssFieldForeground { return cast(u32)StyleForeground }
+    if field == cast(s32)CssFieldBorder { return cast(u32)StyleBorder }
+    if field == cast(s32)CssFieldFocus { return cast(u32)StyleFocus }
+    if field == cast(s32)CssFieldRadius { return cast(u32)StyleRadius }
+    if field == cast(s32)CssFieldBorderWidth { return cast(u32)StyleBorderWidth }
+    if field == cast(s32)CssFieldOpacity { return cast(u32)StyleOpacity }
+    if field == cast(s32)CssFieldPaddingX { return cast(u32)StylePaddingX }
+    if field == cast(s32)CssFieldPaddingY { return cast(u32)StylePaddingY }
+    if field == cast(s32)CssFieldGap { return cast(u32)StyleGap }
+    if field == cast(s32)CssFieldFontSize { return cast(u32)StyleFontSize }
+    if field == cast(s32)CssFieldIconSize { return cast(u32)StyleIconSize }
+    if field == cast(s32)CssFieldOffsetX || field == cast(s32)CssFieldOffsetY {
+        return cast(u32)StyleContentOffset
+    }
+    if field == cast(s32)CssFieldMaterial { return cast(u32)StyleMaterial }
+    if field == cast(s32)CssFieldLetterSpacing { return cast(u32)StyleLetterSpacing }
+    return 0
+}
+
+// Store one value in a style. Installation uses this to fill var() results.
+CssStyleSet :: (style: *StyleData, field: s32, color: u32, number: float32, material: s32) {
+    style.fields |= CssFieldBit(field)
+    if field == cast(s32)CssFieldBackground { style.background = color }
+    else if field == cast(s32)CssFieldBackgroundEnd { style.background_end = color }
+    else if field == cast(s32)CssFieldForeground { style.foreground = color }
+    else if field == cast(s32)CssFieldBorder { style.border = color }
+    else if field == cast(s32)CssFieldFocus { style.focus = color }
+    else if field == cast(s32)CssFieldRadius { style.radius = number }
+    else if field == cast(s32)CssFieldBorderWidth { style.border_width = number }
+    else if field == cast(s32)CssFieldOpacity { style.opacity = number }
+    else if field == cast(s32)CssFieldPaddingX { style.padding_x = number }
+    else if field == cast(s32)CssFieldPaddingY { style.padding_y = number }
+    else if field == cast(s32)CssFieldGap { style.gap = number }
+    else if field == cast(s32)CssFieldFontSize { style.font_size = number }
+    else if field == cast(s32)CssFieldIconSize { style.icon_size = number }
+    else if field == cast(s32)CssFieldOffsetX { style.offset_x = number }
+    else if field == cast(s32)CssFieldOffsetY { style.offset_y = number }
+    else if field == cast(s32)CssFieldMaterial { style.material = cast(MaterialKind)material }
+    else if field == cast(s32)CssFieldLetterSpacing { style.letter_spacing = number }
+}
+
+CssSetValue :: (p: *CssParser, field: s32, value: CssValue) {
+    if value.ref >= 0 {
+        // Drop an earlier reference to the same field: the later one wins.
+        kept: s32 = 0
+        for index: cast(s32)0..p.rule_ref_count - 1 {
+            if p.rule_refs[index].field != field {
+                p.rule_refs[kept] = p.rule_refs[index]
+                kept += 1
+            }
+        }
+        p.rule_ref_count = kept
+        if p.rule_ref_count >= 24 {
+            CssFail(p, "more than 24 var() references in one rule")
+            return
+        }
+        ref: CssLocalRef
+        ref.token = value.ref
+        ref.field = field
+        ref.line = p.cursor.line
+        ref.fallback = value.fallback
+        p.rule_refs[p.rule_ref_count] = ref
+        p.rule_ref_count += 1
+    } else {
+        kept: s32 = 0
+        for index: cast(s32)0..p.rule_ref_count - 1 {
+            if p.rule_refs[index].field != field {
+                p.rule_refs[kept] = p.rule_refs[index]
+                kept += 1
+            }
+        }
+        p.rule_ref_count = kept
+    }
+    CssStyleSet(*p.template, field, value.color, value.number, value.material)
+}
+
+CssReadField :: (p: *CssParser, field: s32) -> CssValue {
+    return CssReadTyped(p, CssFieldKind(field), true)
+}
+
+CssSameValue :: (a: CssValue, b: CssValue) -> bool {
+    return a.ref == b.ref && a.color == b.color && a.number == b.number && a.fallback == b.fallback
+}
+
+CssEndValue :: (p: *CssParser, end: s32, property: CssName) -> bool {
+    if CssMoreValue(p, end) {
+        CssFailName(p, "too many values for", property, "")
+        return false
+    }
+    return !CssFailed(p)
+}
+
+// Up to four lengths, read for padding-like shorthands.
+CssLengths :: struct {
+    values: [4]CssValue
+    count: s32
+}
+
+CssReadLengths :: (p: *CssParser, end: s32, field: s32, most: s32, property: CssName) -> CssLengths {
+    result: CssLengths
+    while CssMoreValue(p, end) {
+        if result.count >= most {
+            CssFailName(p, "too many values for", property, "")
+            return result
+        }
+        value: CssValue = CssReadField(p, field)
+        if !value.ok { return result }
+        result.values[result.count] = value
+        result.count += 1
+    }
+    return result
+}
+
+// padding: one to four values; Kryon pads opposite sides equally.
+CssReadPadding :: (p: *CssParser, end: s32, property: CssName) {
+    values: CssLengths = CssReadLengths(p, end, cast(s32)CssFieldPaddingX, 4, property)
+    if CssFailed(p) { return }
+    if values.count == 0 {
+        CssFail(p, "expected a length")
+        return
+    }
+    block: CssValue = values.values[0]
+    inline: CssValue = values.values[0]
+    if values.count >= 2 { inline = values.values[1] }
+    if values.count >= 3 && !CssSameValue(values.values[2], block) {
+        CssFail(p, "Kryon pads top and bottom equally; use padding-block")
+        return
+    }
+    if values.count == 4 && !CssSameValue(values.values[3], inline) {
+        CssFail(p, "Kryon pads left and right equally; use padding-inline")
+        return
+    }
+    CssSetValue(p, cast(s32)CssFieldPaddingY, block)
+    CssSetValue(p, cast(s32)CssFieldPaddingX, inline)
+}
+
+// One value, or two equal ones (padding-inline, padding-block, gap, radius).
+CssReadSymmetric :: (p: *CssParser, end: s32, field: s32, property: CssName, most: s32) {
+    values: CssLengths = CssReadLengths(p, end, field, most, property)
+    if CssFailed(p) { return }
+    if values.count == 0 {
+        CssFail(p, "expected a length")
+        return
+    }
+    for index: cast(s32)1..values.count - 1 {
+        if !CssSameValue(values.values[index], values.values[0]) {
+            CssFailName(p, "Kryon takes one value for", property, "")
+            return
+        }
+    }
+    CssSetValue(p, field, values.values[0])
+}
+
+// border: width, 'solid' or 'none', and color, in any order.
+CssReadBorder :: (p: *CssParser, end: s32, property: CssName) {
+    have_width: bool = false
+    have_color: bool = false
+    none: bool = false
+    while CssMoreValue(p, end) {
+        byte: u8 = CssPeek(p, 0)
+        if CssNameStart(byte) && !CssAtColorFunction(p) {
+            saved: CssCursor = p.cursor
+            word: CssName = CssReadName(p)
+            if CssFailed(p) { return }
+            if CssNameEquals(word, "solid") { continue }
+            if CssNameEquals(word, "none") {
+                none = true
+                continue
+            }
+            if CssNameEquals(word, "dashed") || CssNameEquals(word, "dotted") ||
+                CssNameEquals(word, "double") || CssNameEquals(word, "groove") ||
+                CssNameEquals(word, "ridge") || CssNameEquals(word, "inset") ||
+                CssNameEquals(word, "outset") || CssNameEquals(word, "hidden") {
+                CssFailName(p, "border style", word, " is outside Kryon CSS; borders are solid")
+                return
+            }
+            if CssNameEquals(word, "var") && CssAtByte(p, #char "(") {
+                CssFail(p, "write var() in border-color or border-width; border cannot tell its kind")
+                return
+            }
+            p.cursor = saved
+        }
+        if CssIsDigit(byte) || byte == #char "." || byte == #char "-" || byte == #char "+" {
+            if have_width {
+                CssFail(p, "border takes one width")
+                return
+            }
+            value: CssValue = CssReadField(p, cast(s32)CssFieldBorderWidth)
+            if !value.ok { return }
+            CssSetValue(p, cast(s32)CssFieldBorderWidth, value)
+            have_width = true
+            continue
+        }
+        if have_color {
+            CssFail(p, "border takes one color")
+            return
+        }
+        color: CssValue = CssReadColor(p, true)
+        if !color.ok { return }
+        CssSetValue(p, cast(s32)CssFieldBorder, color)
+        have_color = true
+    }
+    if CssFailed(p) { return }
+    if none {
+        if have_width || have_color {
+            CssFail(p, "border: none takes no width or color")
+            return
+        }
+        zero: CssValue
+        zero.ref = -1
+        CssSetValue(p, cast(s32)CssFieldBorderWidth, zero)
+        return
+    }
+    if !have_width && !have_color { CssFailName(p, "expected a width or color for", property, "") }
+}
+
+// background: a color, or linear-gradient(top, bottom) running top to bottom.
+CssReadBackground :: (p: *CssParser, end: s32, property: CssName) {
+    CssSkipSpace(p)
+    if CssFailed(p) { return }
+    if CssAtFunction(p, "linear-gradient") {
+        CssSkipSpace(p)
+        if CssFailed(p) { return }
+        if CssNameStart(CssPeek(p, 0)) && !CssAtColorFunction(p) {
+            saved: CssCursor = p.cursor
+            word: CssName = CssReadName(p)
+            if CssFailed(p) { return }
+            if CssNameEquals(word, "to") {
+                CssSkipSpace(p)
+                side: CssName = CssReadName(p)
+                if CssFailed(p) { return }
+                if !CssNameEquals(side, "bottom") {
+                    CssFail(p, "Kryon gradients run top to bottom; write 'to bottom' or omit it")
+                    return
+                }
+                if !CssExpect(p, #char ",", "expected ',' after the gradient direction") { return }
+            } else {
+                p.cursor = saved
+            }
+        } else if CssIsDigit(CssPeek(p, 0)) {
+            angle: CssNumber = CssReadNumber(p)
+            if CssFailed(p) { return }
+            if !angle.ok || !CssNameEquals(angle.unit, "deg") || angle.value != 180.0 {
+                CssFail(p, "Kryon gradients run top to bottom (180deg)")
+                return
+            }
+            if !CssExpect(p, #char ",", "expected ',' after the gradient angle") { return }
+        }
+        top: CssValue = CssReadColor(p, true)
+        if !top.ok { return }
+        if !CssExpect(p, #char ",", "Kryon gradients have two colors") { return }
+        bottom: CssValue = CssReadColor(p, true)
+        if !bottom.ok { return }
+        CssSkipSpace(p)
+        if CssFailed(p) { return }
+        if !CssAtByte(p, #char ")") {
+            if CssAtByte(p, #char ",") { CssFail(p, "Kryon gradients have two colors") }
+            else { CssFail(p, "color stop positions are outside Kryon CSS") }
+            return
+        }
+        CssAdvance(p, 1)
+        CssSetValue(p, cast(s32)CssFieldBackground, top)
+        CssSetValue(p, cast(s32)CssFieldBackgroundEnd, bottom)
+        unused CssEndValue(p, end, property)
+        return
+    }
+    if CssAtFunction(p, "url") {
+        CssFail(p, "background images are outside Kryon CSS")
+        return
+    }
+    color: CssValue = CssReadColor(p, true)
+    if !color.ok { return }
+    CssSetValue(p, cast(s32)CssFieldBackground, color)
+    // A plain color clears a gradient set earlier in the cascade.
+    p.template.fields &= ~cast(u32)StyleBackgroundEnd
+    unused CssEndValue(p, end, property)
+}
+
+// translate: x [y].
+CssReadTranslate :: (p: *CssParser, end: s32, property: CssName) {
+    values: CssLengths = CssReadLengths(p, end, cast(s32)CssFieldOffsetX, 2, property)
+    if CssFailed(p) { return }
+    if values.count == 0 {
+        CssFail(p, "expected a length")
+        return
+    }
+    zero: CssValue
+    zero.ref = -1
+    CssSetValue(p, cast(s32)CssFieldOffsetX, values.values[0])
+    if values.count == 2 { CssSetValue(p, cast(s32)CssFieldOffsetY, values.values[1]) }
+    else { CssSetValue(p, cast(s32)CssFieldOffsetY, zero) }
+}
+
+// font-family: the first family names the Kryon typeface.
+CssReadTypeface :: (p: *CssParser, end: s32) {
+    CssSkipSpace(p)
+    if CssFailed(p) { return }
+    start: s32 = p.cursor.pos
+    length: s32 = 0
+    if CssAtByte(p, #char "\"") || CssAtByte(p, #char "'") {
+        span: CssStringSpan = CssReadString(p)
+        if !span.ok { return }
+        start = span.start
+        length = span.length
+    } else {
+        while p.cursor.pos < end && CssPeek(p, 0) != #char "," {
+            CssAdvance(p, 1)
+        }
+        length = p.cursor.pos - start
+        while length > 0 && CssIsSpace(p.cursor.source[start + length - 1]) { length -= 1 }
+    }
+    if length <= 0 {
+        CssFail(p, "expected a font family")
+        return
+    }
+    p.template.typeface = p.cursor.source[start:start + length]
+    p.template.fields |= cast(u32)StyleTypeface
+    p.cursor.column += end - p.cursor.pos
+    p.cursor.pos = end
+}
+
+css_web_properties: [38]string = .[
+    "width", "height", "min-width", "min-height", "max-width", "max-height",
+    "margin", "margin-top", "margin-right", "margin-bottom", "margin-left", "margin-inline",
+    "margin-block", "line-height", "font-weight", "font-style", "text-align", "text-decoration",
+    "text-transform", "white-space", "cursor", "box-shadow", "transition", "animation",
+    "display", "flex", "flex-direction", "flex-wrap", "justify-content", "align-items",
+    "align-self", "grid-template-columns", "grid-template-rows", "grid-column", "grid-row", "overflow",
+    "z-index", "visibility"];
+
+// Properties the web document host applies and native hosts skip: browser
+// layout and text features Kryon lays out in code.
+CssWebProperty :: (name: CssName) -> bool {
+    for text: css_web_properties {
+        if CssNameEquals(name, text) { return true }
+    }
+    return false
+}
+
+CssRecordDeclaration :: (p: *CssParser, name_start: s32, name_length: s32,
+    value_start: s32, value_length: s32, scope: s32) {
+    if p.declaration_count >= 48 {
+        CssFail(p, "more than 48 declarations in one rule")
+        return
+    }
+    entry: CssDeclaration
+    entry.name_start = name_start
+    entry.name_length = name_length
+    entry.value_start = value_start
+    entry.value_length = value_length
+    entry.scope = scope
+    p.declarations[p.declaration_count] = entry
+    p.declaration_count += 1
+}
+
+// One declaration's value, with the cursor at its first byte and `end` past
+// its last. Returns the scope or -1 after a diagnostic.
+CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
+    if CssNameEquals(name, "color") {
+        value: CssValue = CssReadColor(p, true)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldForeground, value)
+    } else if CssNameEquals(name, "background-color") {
+        value: CssValue = CssReadColor(p, true)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldBackground, value)
+        p.template.fields &= ~cast(u32)StyleBackgroundEnd
+    } else if CssNameEquals(name, "background") {
+        CssReadBackground(p, end, name)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "border-color") {
+        value: CssValue = CssReadColor(p, true)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldBorder, value)
+    } else if CssNameEquals(name, "outline-color") {
+        value: CssValue = CssReadColor(p, true)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldFocus, value)
+    } else if CssNameEquals(name, "border") {
+        CssReadBorder(p, end, name)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "border-style") {
+        word: CssName = CssReadName(p)
+        if CssFailed(p) { return -1 }
+        if CssNameEquals(word, "none") {
+            zero: CssValue
+            zero.ref = -1
+            CssSetValue(p, cast(s32)CssFieldBorderWidth, zero)
+        } else if !CssNameEquals(word, "solid") {
+            CssFail(p, "Kryon borders are solid or none")
+            return -1
+        }
+    } else if CssNameEquals(name, "border-width") {
+        CssReadSymmetric(p, end, cast(s32)CssFieldBorderWidth, name, 4)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "border-radius") {
+        CssReadSymmetric(p, end, cast(s32)CssFieldRadius, name, 4)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "opacity") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldOpacity)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldOpacity, value)
+    } else if CssNameEquals(name, "padding") {
+        CssReadPadding(p, end, name)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "padding-inline") {
+        CssReadSymmetric(p, end, cast(s32)CssFieldPaddingX, name, 2)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "padding-block") {
+        CssReadSymmetric(p, end, cast(s32)CssFieldPaddingY, name, 2)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "padding-left") || CssNameEquals(name, "padding-right") {
+        CssFail(p, "Kryon pads left and right equally; use padding-inline")
+        return -1
+    } else if CssNameEquals(name, "padding-top") || CssNameEquals(name, "padding-bottom") {
+        CssFail(p, "Kryon pads top and bottom equally; use padding-block")
+        return -1
+    } else if CssNameEquals(name, "gap") {
+        CssReadSymmetric(p, end, cast(s32)CssFieldGap, name, 2)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "font-size") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldFontSize)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldFontSize, value)
+    } else if CssNameEquals(name, "letter-spacing") {
+        saved: CssCursor = p.cursor
+        word: CssName = CssReadName(p)
+        if CssFailed(p) { return -1 }
+        value: CssValue
+        value.ref = -1
+        if !CssNameEquals(word, "normal") {
+            p.cursor = saved
+            value = CssReadField(p, cast(s32)CssFieldLetterSpacing)
+            if !value.ok { return -1 }
+        }
+        CssSetValue(p, cast(s32)CssFieldLetterSpacing, value)
+    } else if CssNameEquals(name, "font-family") {
+        CssReadTypeface(p, end)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "translate") {
+        CssReadTranslate(p, end, name)
+        return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "-kryon-icon-size") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldIconSize)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldIconSize, value)
+        if !CssEndValue(p, end, name) { return -1 }
+        return CssScopeKryon
+    } else if CssNameEquals(name, "-kryon-material") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldMaterial)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldMaterial, value)
+        if !CssEndValue(p, end, name) { return -1 }
+        return CssScopeKryon
+    } else if CssWebProperty(name) {
+        p.cursor.column += end - p.cursor.pos
+        p.cursor.pos = end
+        p.web_declarations += 1
+        return CssScopeWeb
+    } else if name.length >= 2 && name.bytes[0] == #char "-" && name.bytes[1] == #char "-" {
+        p.cursor = p.pending_name_cursor
+        CssFail(p, "custom properties belong in :root")
+        return -1
+    } else {
+        p.cursor = p.pending_name_cursor
+        CssFailName(p, "unknown property", name, "")
+        return -1
+    }
+    if !CssEndValue(p, end, name) { return -1 }
+    return CssScopeNative
+}
+
+// '!important' anywhere outside strings.
+CssHasImportant :: (source: string, start: s32, length: s32) -> bool {
+    quote: u8 = 0
+    for index: start..start + length - 1 {
+        byte: u8 = source[index]
+        if quote != 0 {
+            if byte == quote { quote = 0 }
+        } else if byte == #char "\"" || byte == #char "'" {
+            quote = byte
+        } else if byte == #char "!" {
+            return true
+        }
+    }
+    return false
+}
+
+// One 'name: value' with the cursor on the name. Custom properties are
+// returned to the caller (in :root) through `definition`.
+CssDeclarationResult :: struct {
+    custom: bool
+    name: CssName
+    end: s32
+    ok: bool
+}
+
+CssReadDeclarationHead :: (p: *CssParser) -> CssDeclarationResult {
+    result: CssDeclarationResult
+    name_start: s32 = p.cursor.pos
+    p.pending_name_cursor = p.cursor
+    result.name = CssReadName(p)
+    if CssFailed(p) { return result }
+    if result.name.length == 0 {
+        CssFail(p, "expected a property name")
+        return result
+    }
+    name_length: s32 = p.cursor.pos - name_start
+    CssSkipSpace(p)
+    if CssFailed(p) { return result }
+    if CssAtByte(p, #char "{") {
+        CssFail(p, "nested rules are outside Kryon CSS")
+        return result
+    }
+    if !CssExpect(p, #char ":", "expected ':' after the property name") { return result }
+    CssSkipSpace(p)
+    if CssFailed(p) { return result }
+    value_cursor: CssCursor = p.cursor
+    span: CssStringSpan = CssValueSpan(p)
+    if CssFailed(p) { return result }
+    if !span.ok {
+        CssFailName(p, "expected a value for", result.name, "")
+        return result
+    }
+    if CssHasImportant(p.cursor.source, span.start, span.length) {
+        CssFail(p, "!important is outside Kryon CSS")
+        return result
+    }
+    end_cursor: CssCursor = p.cursor
+    p.cursor = value_cursor
+    result.end = span.start + span.length
+    result.custom = result.name.length >= 2 && result.name.bytes[0] == #char "-" &&
+        result.name.bytes[1] == #char "-"
+    p.pending_name_start = name_start
+    p.pending_name_length = name_length
+    p.pending_value_start = span.start
+    p.pending_value_length = span.length
+    p.pending_end = end_cursor
+    result.ok = true
+    return result
+}
+
+// After a value: step past ';' (a '}' stays for the block reader).
+CssFinishDeclaration :: (p: *CssParser) {
+    p.cursor = p.pending_end
+    if CssAtByte(p, #char ";") { CssAdvance(p, 1) }
+}

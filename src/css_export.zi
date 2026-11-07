@@ -1,171 +1,277 @@
-#import "kss_parser"
+// Kryon CSS to browser CSS for the DOM host. Kryon CSS is already CSS, so
+// export is mostly scoping: selectors go under #kryon-dom-root and match the
+// data-kryon-* attributes the host writes, custom properties live on the
+// root element, -kryon-* declarations are dropped, environment media
+// queries are decided for `env`, and viewport queries stay for the browser.
+// The sheet is parsed first; the output is usable only when ok is true.
+#import "css_parser"
 Number :: #import "std/number_text";
 
-CSSExport :: struct { count: s32; ok: bool; error: string; }
+using CssStatus;
+
+CSSExport :: struct {
+    ok: bool
+    count: s32
+    error: [256]u8
+    error_length: s32
+}
+
+css_export_parser: CssParser;
 
 #program_export
-StyleClass :: (name: string) -> s32 { return KssClassId(KssMakeName(name)) }
+StyleClass :: (name: string) -> s32 { return CssClass(name) }
 
-CSSWrite :: (output: []u8, at: s32, value: string) -> s32 {
-    if at < 0 || value.count > output.count - at { return -1 }
-    for byte: 0..cast(s32)value.count - 1 { output[at + byte] = value[byte] }
-    return at + cast(s32)value.count
+CssExporter :: struct {
+    output: []u8
+    count: s32
+    overflow: bool
+    error: [256]u8
+    error_length: s32
 }
 
-CSSCompound :: (source: string, output: []u8, at: s32) -> s32 {
-    parser: KssSelectorCursor = KssBeginSelector(source)
-    while true {
-        atom: KssSelectorAtom = KssSelectorNext(parser)
-        if !atom.ok { return -1 }
-        if atom.done { return at }
-        first: s32 = parser.cursor.pos
-        parser = atom.parser
-        if atom.kind == 0 && atom.name.count > 0 && atom.name[0] >= cast(u8)65 && atom.name[0] <= cast(u8)90 {
-            if atom.name == "App" || atom.name == "Any" {
-                if atom.name == "Any" { at = CSSWrite(output, at, "*") }
-                else { at = CSSWrite(output, at, "[data-kryon-widget=\"Screen\"]") }
-            } else {
-                if KssKindValue(KssMakeName(atom.name)) < 0 { return -1 }
-                at = CSSWrite(output, at, "[data-kryon-widget=\"")
-                at = CSSWrite(output, at, atom.name); at = CSSWrite(output, at, "\"]")
-            }
-        } else if atom.kind == 2 {
-            digits: [32]u8
-            class_name: string = Number.FormatInteger(KssClassId(KssMakeName(atom.name)), digits[:])
-            at = CSSWrite(output, at, "[data-kryon-class=\"")
-            at = CSSWrite(output, at, class_name); at = CSSWrite(output, at, "\"]")
-        } else if atom.kind == 5 {
-            state: string = TextView(atom.canonical.bytes[:atom.canonical.length])
-            if state == "selected" { at = CSSWrite(output, at, "[aria-selected=\"true\"]") }
-            else if state == "loading" { at = CSSWrite(output, at, "[aria-busy=\"true\"]") }
-            else if state == "pressed" { at = CSSWrite(output, at, ":active") }
-            else if state == "readonly" { at = CSSWrite(output, at, ":read-only") }
-            else if state == "disabled" { at = CSSWrite(output, at, "[aria-disabled=\"true\"]") }
-            else if state == "focus" { at = CSSWrite(output, at, ":focus") }
-            else { at = CSSWrite(output, at, source[first:parser.cursor.pos]) }
-        } else if atom.kind == 6 || atom.kind == 7 || atom.has_argument {
-            // Nested selector functions need the same widget/class mapping.
-            // Reject them explicitly until that recursive mapping is provided.
-            return -1
-        } else { at = CSSWrite(output, at, source[first:parser.cursor.pos]) }
-        if at < 0 { return -1 }
+css_exporter: CssExporter;
+
+CssExportWrite :: (e: *CssExporter, text: string) {
+    if e.overflow { return }
+    if e.count + cast(s32)text.count > cast(s32)e.output.count {
+        e.overflow = true
+        return
     }
-    return -1
+    for index: cast(s32)0..cast(s32)text.count - 1 { e.output[e.count + index] = text[index] }
+    e.count += cast(s32)text.count
 }
 
-CSSSelector :: (source: string, output: []u8, at: s32) -> s32 {
-    cursor: KssCursor; cursor.source = source
-    first: bool = true
-    while true {
-        part: KssSelectorSpan = KssSelectorPart(cursor, false)
-        if !part.ok { return -1 }
-        if part.done { return at }
-        if !first { at = CSSWrite(output, at, ", ") }
-        first = false
-        at = CSSWrite(output, at, "#kryon-dom-root ")
-        sequence: KssCursor
-        sequence.source = source[part.start:part.start + part.length]
-        while true {
-            compound: KssSelectorSpan = KssSelectorPart(sequence, true)
-            if !compound.ok { return -1 }
-            if compound.done { break }
-            if compound.combinator != 0 {
-                if compound.combinator == 32 { at = CSSWrite(output, at, " ") }
-                else {
-                    byte: [1]u8; byte[0] = cast(u8)compound.combinator
-                    at = CSSWrite(output, at, TextView(byte[:]))
-                }
-            }
-            at = CSSCompound(sequence.source[compound.start:compound.start + compound.length], output, at)
-            if at < 0 { return -1 }
-            sequence = compound.parser
-        }
-        cursor = part.parser
+CssExportFail :: (e: *CssExporter, message: string) -> bool {
+    if e.error_length > 0 { return false }
+    for index: cast(s32)0..cast(s32)message.count - 1 {
+        if index < 256 { e.error[index] = message[index] }
     }
-    return -1
+    e.error_length = ifx message.count > 256 then 256 else cast(s32)message.count
+    return false
 }
 
-CSSValue :: (parser: KssParser, property: string, source: string, output: []u8, at: s32) -> s32 {
-    value: KssCSSValue = KssResolveCSSValue(parser, property, source)
-    if !value.valid || value.kind == 3 { return -1 }
-    if value.kind == 2 {
-        digits: [9]u8; digits[0] = 35
-        hex: string = "0123456789abcdef"
-        for index: cast(s32)0..7 {
-            digits[index + 1] = hex[(value.color >> cast(u32)((7 - index) * 4)) & cast(u32)15]
-        }
-        return CSSWrite(output, at, TextView(digits[:]))
-    }
-    if value.kind == 1 {
-        if !value.has_token {
-            at = CSSWrite(output, at, value.text)
-            pixels: bool = value.text.count >= 2 && value.text[value.text.count - 2:] == "px"
-            if KssCSSNeedsPixels(property) && !pixels { at = CSSWrite(output, at, "px") }
-            return at
-        }
-        bytes: [64]u8
-        number: string = Number.FormatDecimal(cast(float64)value.number, 4, bytes[:])
-        at = CSSWrite(output, at, number)
-        if KssCSSNeedsPixels(property) { at = CSSWrite(output, at, "px") }
-        return at
-    }
-    return CSSWrite(output, at, value.text)
-}
-
-// Export a fully supplied source unit using the existing KSS parser, tokens
-// and environment rules. Output is usable only when ok is true. Hosts that
-// need imports resolve them before export; imports and unsupported constructs
-// fail explicitly, never attach a partly emitted sheet.
-#program_export
-ExportCSS :: (source: string, path: string, env: KssEnvironment, output: []u8) -> CSSExport {
-    result: CSSExport
-    parser: KssParser = KssBeginDeclarative(source, path, env)
+// One compound selector of the validated source, mapped to DOM attributes.
+CssExportCompound :: (e: *CssExporter, text: string) -> bool {
     at: s32 = 0
-    groups: [16]bool
-    while true {
-        parser = KssStep(parser)
-        if parser.status == 3 {
-            for group: 0..parser.foreign_count - 1 {
-                if !groups[group] { result.error = "Unsupported CSS block"; return result }
-            }
-            result.count = at; result.ok = true; return result
+    count: s32 = cast(s32)text.count
+    if at < count && text[at] == #char "*" {
+        at += 1
+    } else if at < count && CssIsAlpha(text[at]) {
+        start: s32 = at
+        while at < count && (CssIsAlpha(text[at]) || CssIsDigit(text[at])) { at += 1 }
+        name: string = text[start:at]
+        if name == "App" { CssExportWrite(e, "[data-kryon-widget=\"Screen\"]") }
+        else if name != "Any" {
+            CssExportWrite(e, "[data-kryon-widget=\"")
+            CssExportWrite(e, name)
+            CssExportWrite(e, "\"]")
         }
-        if parser.status == 2 { result.error = "Resolve KSS imports before CSS export"; return result }
-        if parser.status == 4 { result.error = "Invalid KSS"; return result }
-        if parser.status != 1 { continue }
-        if parser.layer_declared { result.error = "CSS export does not support KSS layers"; return result }
-        group: s32 = parser.rule_span.group
-        if group >= 0 {
-            groups[group] = true
-            block: KssForeignBlock = parser.foreign[group]
-            name: string = TextView(block.name.bytes[:block.name.length])
-            at = CSSWrite(output, at, "@"); at = CSSWrite(output, at, name)
-            at = CSSWrite(output, at, " ")
-            at = CSSWrite(output, at, source[block.query_start:block.query_start + block.query_length])
-            at = CSSWrite(output, at, " {\n")
-        }
-        span: KssRuleSpan = parser.rule_span
-        at = CSSSelector(source[span.selector_start:span.selector_start + span.selector_length], output, at)
-        at = CSSWrite(output, at, " {\n")
-        for index: 0..parser.declaration_count - 1 {
-            declaration: KssDeclaration = parser.declarations[index]
-            if declaration.rule != parser.rule_total - 1 { continue }
-            property: string = source[declaration.name_start:declaration.name_start + declaration.name_length]
-            value: string = source[declaration.value_start:declaration.value_start + declaration.value_length]
-            expansion: KssCSSExpansion = KssCSSExpandDeclaration(property, value, false)
-            if expansion.first == "" || property == "background-end" || property == "material" { result.error = "Unsupported CSS declaration"; return result }
-            for side: 0..1 {
-                name: string = expansion.first
-                if side == 1 { name = expansion.second }
-                if name.count == 0 { continue }
-                at = CSSWrite(output, at, name); at = CSSWrite(output, at, ": ")
-                at = CSSValue(parser, property, value, output, at)
-                at = CSSWrite(output, at, ";\n")
-            }
-        }
-        at = CSSWrite(output, at, "}\n")
-        if group >= 0 { at = CSSWrite(output, at, "}\n") }
-        if at < 0 { result.error = "Unsupported selector/value or CSS output capacity exceeded"; return result }
     }
+    while at < count {
+        byte: u8 = text[at]
+        if byte == #char "." {
+            at += 1
+            start: s32 = at
+            while at < count && CssNameChar(text[at]) { at += 1 }
+            digits: [32]u8
+            CssExportWrite(e, "[data-kryon-class=\"")
+            CssExportWrite(e, Number.FormatInteger(CssClass(text[start:at]), digits[:]))
+            CssExportWrite(e, "\"]")
+        } else if byte == #char ":" {
+            at += 1
+            start: s32 = at
+            while at < count && CssNameChar(text[at]) { at += 1 }
+            state: string = text[start:at]
+            if state == "hover" { CssExportWrite(e, ":hover") }
+            else if state == "active" { CssExportWrite(e, ":active") }
+            else if state == "focus" { CssExportWrite(e, ":focus") }
+            else if state == "focus-visible" { CssExportWrite(e, ":focus-visible") }
+            else if state == "disabled" { CssExportWrite(e, "[aria-disabled=\"true\"]") }
+            else if state == "selected" || state == "checked" { CssExportWrite(e, "[aria-selected=\"true\"]") }
+            else if state == "loading" { CssExportWrite(e, "[aria-busy=\"true\"]") }
+            else { return CssExportFail(e, "a state the DOM host does not mark") }
+        } else if byte == #char "[" {
+            return CssExportFail(e, "attribute selectors are native only; give the widget a class for the web")
+        } else {
+            return CssExportFail(e, "a selector the DOM export cannot map")
+        }
+    }
+    return true
+}
+
+CssExportSelectors :: (e: *CssExporter, text: string) -> bool {
+    at: s32 = 0
+    first: bool = true
+    while at < cast(s32)text.count {
+        while at < cast(s32)text.count && CssIsSpace(text[at]) { at += 1 }
+        start: s32 = at
+        while at < cast(s32)text.count && text[at] != #char "," { at += 1 }
+        end: s32 = at
+        while end > start && CssIsSpace(text[end - 1]) { end -= 1 }
+        if !first { CssExportWrite(e, ", ") }
+        first = false
+        CssExportWrite(e, "#kryon-dom-root ")
+        if !CssExportCompound(e, text[start:end]) { return false }
+        at += 1
+    }
+    return true
+}
+
+// The viewport part of the item's condition for `env`: `never` when no
+// branch holds, an empty query when one holds outright.
+CssExportQuery :: struct {
+    holds: bool
+    always: bool
+    branches: [4]s32
+    count: s32
+}
+
+CssExportCondition :: (p: *CssParser, condition: *CssCondition, env: CssEnvironment) -> CssExportQuery {
+    query: CssExportQuery
+    if condition.never { return query }
+    if condition.count == 0 {
+        query.holds = true
+        query.always = true
+        return query
+    }
+    bits: u32 = CssEnvironmentBits(env)
+    for index: cast(s32)0..condition.count - 1 {
+        branch: CssBranch = condition.branches[index]
+        // Decide the environment part here; the browser decides the rest.
+        branch.viewport_count = 0
+        if !CssBranchMatches(*branch, env, bits, p.themes[:p.theme_count], false) { continue }
+        query.holds = true
+        if condition.branches[index].viewport_count == 0 { query.always = true }
+        query.branches[query.count] = index
+        query.count += 1
+    }
+    return query
+}
+
+CssExportOpen :: (e: *CssExporter, source: string, condition: *CssCondition, query: CssExportQuery) {
+    if query.always { return }
+    CssExportWrite(e, "@media ")
+    for index: cast(s32)0..query.count - 1 {
+        if index > 0 { CssExportWrite(e, ", ") }
+        branch: CssBranch = condition.branches[query.branches[index]]
+        for feature: cast(s32)0..branch.viewport_count - 1 {
+            if feature > 0 { CssExportWrite(e, " and ") }
+            span: CssFeatureSpan = branch.viewport[feature]
+            CssExportWrite(e, source[span.start:span.start + span.length])
+        }
+    }
+    CssExportWrite(e, " {\n")
+}
+
+CssExportClose :: (e: *CssExporter, query: CssExportQuery) {
+    if !query.always { CssExportWrite(e, "}\n") }
+}
+
+CssExportLayer :: (e: *CssExporter, p: *CssParser, layer: s32) {
+    if layer == CssLayerUnlayered { return }
+    CssExportWrite(e, "@layer ")
+    CssExportWrite(e, TextView(p.layer_names[layer].bytes[:p.layer_names[layer].length]))
+    CssExportWrite(e, " {\n")
+}
+
+// Export a whole sheet. Hosts resolve @import before export; imports and
+// selectors the DOM cannot express fail explicitly, never a partial sheet.
+#program_export
+ExportCSS :: (source: string, path: string, env: CssEnvironment, output: []u8) -> CSSExport {
+    result: CSSExport
+    e: *CssExporter = *css_exporter
+    e.output = output
+    e.count = 0
+    e.overflow = false
+    e.error_length = 0
+    p: *CssParser = *css_export_parser
+    // Layer order comes first, as in the source; a first pass learns it.
+    CssBegin(p, source, path)
+    while true {
+        status: s32 = CssStep(p)
+        if status == cast(s32)CssStatusDone { break }
+        if status == cast(s32)CssStatusNeedImport {
+            unused CssExportFail(e, "resolve @import before CSS export")
+            break
+        }
+        if status == cast(s32)CssStatusError {
+            text: [256]u8
+            unused CssExportFail(e, CssDiagnostic(p, text[:]))
+            break
+        }
+    }
+    if e.error_length == 0 && p.layer_count > 0 {
+        CssExportWrite(e, "@layer ")
+        for index: cast(s32)0..p.layer_count - 1 {
+            if index > 0 { CssExportWrite(e, ", ") }
+            CssExportWrite(e, TextView(p.layer_names[index].bytes[:p.layer_names[index].length]))
+        }
+        CssExportWrite(e, ";\n")
+    }
+    if e.error_length == 0 { CssBegin(p, source, path) }
+    while e.error_length == 0 {
+        status: s32 = CssStep(p)
+        if status == cast(s32)CssStatusDone { break }
+        if status == cast(s32)CssStatusError { break }
+        condition: CssCondition = p.rule_condition
+        if status == cast(s32)CssStatusProperty {
+            query: CssExportQuery = CssExportCondition(p, *condition, env)
+            if !query.holds { continue }
+            CssExportOpen(e, source, *condition, query)
+            CssExportWrite(e, "#kryon-dom-root { ")
+            CssExportWrite(e, source[p.pending_name_start:p.pending_name_start + p.pending_name_length])
+            CssExportWrite(e, ": ")
+            CssExportWrite(e, source[p.pending_value_start:p.pending_value_start + p.pending_value_length])
+            CssExportWrite(e, "; }\n")
+            CssExportClose(e, query)
+        } else if status == cast(s32)CssStatusKeyframes {
+            query: CssExportQuery = CssExportCondition(p, *condition, env)
+            if !query.holds { continue }
+            CssExportOpen(e, source, *condition, query)
+            CssExportWrite(e, source[p.raw_start:p.raw_start + p.raw_length])
+            CssExportWrite(e, "\n")
+            CssExportClose(e, query)
+        } else if status == cast(s32)CssStatusRule {
+            // A selector list yields one rule per selector; export the list once.
+            if p.selector_next > 1 { continue }
+            query: CssExportQuery = CssExportCondition(p, *condition, env)
+            if !query.holds { continue }
+            CssExportOpen(e, source, *condition, query)
+            CssExportLayer(e, p, p.layer_of_rule)
+            span: CssRuleSpan = p.rule_span
+            if !CssExportSelectors(e, source[span.selector_start:span.selector_start + span.selector_length]) {
+                break
+            }
+            CssExportWrite(e, " {\n")
+            for index: cast(s32)0..p.declaration_count - 1 {
+                declaration: CssDeclaration = p.declarations[index]
+                if declaration.scope == CssScopeKryon { continue }
+                CssExportWrite(e, "  ")
+                CssExportWrite(e, source[declaration.name_start:declaration.name_start + declaration.name_length])
+                CssExportWrite(e, ": ")
+                CssExportWrite(e, source[declaration.value_start:declaration.value_start + declaration.value_length])
+                CssExportWrite(e, ";\n")
+            }
+            CssExportWrite(e, "}\n")
+            if p.layer_of_rule != CssLayerUnlayered { CssExportWrite(e, "}\n") }
+            CssExportClose(e, query)
+        }
+    }
+    if e.error_length == 0 && e.overflow { unused CssExportFail(e, "the exported CSS does not fit the output") }
+    if e.error_length > 0 {
+        for index: cast(s32)0..e.error_length - 1 { result.error[index] = e.error[index] }
+        result.error_length = e.error_length
+        return result
+    }
+    result.ok = true
+    result.count = e.count
     return result
+}
+
+#program_export
+CSSExportError :: (result: *CSSExport, output: []u8) -> string {
+    count: s32 = result.error_length
+    if count > cast(s32)output.count { count = cast(s32)output.count }
+    for index: cast(s32)0..count - 1 { output[index] = result.error[index] }
+    return TextView(output[:count])
 }

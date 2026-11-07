@@ -1,0 +1,482 @@
+// Part of the css_parser module: statements and the step that drives a parse.
+// CssStep returns one item at a time: a style rule, a custom property, an
+// @keyframes block, an @import request, the end, or an error.
+
+CssCurrentCondition :: (p: *CssParser) -> CssCondition {
+    if p.depth == 0 { return CssCondition.{} }
+    return p.blocks[p.depth - 1].condition
+}
+
+CssOpenBlock :: (p: *CssParser, kind: s32, condition: CssCondition, query_start: s32,
+    query_length: s32) -> bool {
+    if p.depth >= 6 {
+        CssFail(p, "blocks nested more than 6 deep")
+        return false
+    }
+    block: CssBlock
+    block.kind = kind
+    block.outer_layer = p.layer
+    block.condition = condition
+    block.query_start = query_start
+    block.query_length = query_length
+    block.file = p.cursor.file
+    p.blocks[p.depth] = block
+    p.depth += 1
+    return true
+}
+
+CssCloseBlock :: (p: *CssParser) {
+    p.depth -= 1
+    p.layer = p.blocks[p.depth].outer_layer
+}
+
+CssInRoot :: (p: *CssParser) -> bool {
+    return p.depth > 0 && p.blocks[p.depth - 1].kind == CssBlockRoot
+}
+
+CssLayerIndex :: (p: *CssParser, name: CssName) -> s32 {
+    for index: cast(s32)0..p.layer_count - 1 {
+        if CssNameEqualsName(p.layer_names[index], name) { return index }
+    }
+    if p.layer_count >= 12 {
+        CssFail(p, "more than 12 layers")
+        return -1
+    }
+    p.layer_names[p.layer_count] = name
+    p.layer_count += 1
+    return p.layer_count - 1
+}
+
+CssReadLayerName :: (p: *CssParser) -> CssName {
+    CssSkipSpace(p)
+    name: CssName
+    if CssFailed(p) { return name }
+    name = CssReadName(p)
+    if CssFailed(p) { return name }
+    if name.length == 0 {
+        CssFail(p, "expected a layer name")
+        return name
+    }
+    if CssAtByte(p, #char ".") {
+        CssFail(p, "nested layer names are outside Kryon CSS")
+    }
+    return name
+}
+
+// '@layer a, b;' orders layers; '@layer a { ... }' puts rules in one.
+CssReadLayer :: (p: *CssParser) {
+    name: CssName = CssReadLayerName(p)
+    if CssFailed(p) { return }
+    index: s32 = CssLayerIndex(p, name)
+    if index < 0 { return }
+    CssSkipSpace(p)
+    if CssFailed(p) { return }
+    if CssAtByte(p, #char "{") {
+        p.imports_open = false
+        CssAdvance(p, 1)
+        if !CssOpenBlock(p, CssBlockLayer, CssCurrentCondition(p), 0, 0) { return }
+        p.layer = index
+        return
+    }
+    while CssAtByte(p, #char ",") {
+        CssAdvance(p, 1)
+        next: CssName = CssReadLayerName(p)
+        if CssFailed(p) { return }
+        if CssLayerIndex(p, next) < 0 { return }
+        CssSkipSpace(p)
+        if CssFailed(p) { return }
+    }
+    unused CssExpect(p, #char ";", "expected ';' or '{' after the layer name")
+}
+
+CssReadMedia :: (p: *CssParser) {
+    CssSkipSpace(p)
+    if CssFailed(p) { return }
+    start: s32 = p.cursor.pos
+    condition: CssCondition = CssReadMediaQuery(p)
+    if CssFailed(p) { return }
+    length: s32 = p.cursor.pos - start
+    while length > 0 && CssIsSpace(p.cursor.source[start + length - 1]) { length -= 1 }
+    combined: CssCondition = CssConditionAnd(p, CssCurrentCondition(p), condition)
+    if CssFailed(p) { return }
+    CssAdvance(p, 1)
+    p.imports_open = false
+    unused CssOpenBlock(p, CssBlockMedia, combined, start, length)
+}
+
+// Skip a balanced block body after '{', strings and comments included.
+CssSkipBody :: (p: *CssParser) {
+    depth: s32 = 1
+    while depth > 0 {
+        CssSkipSpace(p)
+        if CssFailed(p) { return }
+        if CssAtEnd(p) {
+            CssFail(p, "expected '}'")
+            return
+        }
+        byte: u8 = CssPeek(p, 0)
+        if byte == #char "\"" || byte == #char "'" {
+            unused CssReadString(p)
+            if CssFailed(p) { return }
+            continue
+        }
+        if byte == #char "{" { depth += 1 }
+        if byte == #char "}" { depth -= 1 }
+        CssAdvance(p, 1)
+    }
+}
+
+CssReadImport :: (p: *CssParser) -> bool {
+    if !p.imports_open || p.depth > 0 {
+        CssFail(p, "@import must come before every other rule")
+        return false
+    }
+    CssSkipSpace(p)
+    if CssFailed(p) { return false }
+    target: CssName
+    if CssAtFunction(p, "url") {
+        CssSkipSpace(p)
+        if CssFailed(p) { return false }
+        if CssAtByte(p, #char "\"") || CssAtByte(p, #char "'") {
+            span: CssStringSpan = CssReadString(p)
+            if !span.ok { return false }
+            if span.length > 64 {
+                CssFail(p, "import target longer than 64 bytes")
+                return false
+            }
+            target = CssMakeName(p.cursor.source[span.start:span.start + span.length])
+        } else {
+            start: s32 = p.cursor.pos
+            while !CssAtEnd(p) && CssPeek(p, 0) != #char ")" && !CssIsSpace(CssPeek(p, 0)) &&
+                CssPeek(p, 0) != #char ";" {
+                CssAdvance(p, 1)
+            }
+            if p.cursor.pos - start > 64 {
+                CssFail(p, "import target longer than 64 bytes")
+                return false
+            }
+            target = CssMakeName(p.cursor.source[start:p.cursor.pos])
+        }
+        if !CssCloseFunction(p, "url") { return false }
+    } else if CssAtByte(p, #char "\"") || CssAtByte(p, #char "'") {
+        span: CssStringSpan = CssReadString(p)
+        if !span.ok { return false }
+        if span.length > 64 {
+            CssFail(p, "import target longer than 64 bytes")
+            return false
+        }
+        target = CssMakeName(p.cursor.source[span.start:span.start + span.length])
+    } else {
+        CssFail(p, "expected a quoted import target")
+        return false
+    }
+    if target.length == 0 {
+        CssFail(p, "empty import target")
+        return false
+    }
+    if !CssExpect(p, #char ";", "expected ';' after @import; layer() and media lists are outside Kryon CSS") {
+        return false
+    }
+    p.pending_import = target
+    p.status = cast(s32)CssStatusNeedImport
+    return true
+}
+
+// An at-rule with the cursor on '@'. Returns true when it yields an item.
+CssReadAtRule :: (p: *CssParser) -> bool {
+    start: s32 = p.cursor.pos
+    CssAdvance(p, 1)
+    keyword: CssName = CssReadName(p)
+    if CssFailed(p) { return false }
+    if keyword.length == 0 {
+        CssFail(p, "expected an at-rule name")
+        return false
+    }
+    if CssNameEquals(keyword, "import") { return CssReadImport(p) }
+    if CssNameEquals(keyword, "layer") {
+        CssReadLayer(p)
+        return false
+    }
+    if CssNameEquals(keyword, "media") {
+        CssReadMedia(p)
+        return false
+    }
+    if CssNameEquals(keyword, "charset") {
+        CssSkipSpace(p)
+        span: CssStringSpan = CssReadString(p)
+        if CssFailed(p) { return false }
+        if !span.ok || !CssNameEquals(CssMakeName(p.cursor.source[span.start:span.start + span.length]), "utf-8") {
+            CssFail(p, "Kryon CSS sheets are UTF-8")
+            return false
+        }
+        unused CssExpect(p, #char ";", "expected ';' after @charset")
+        return false
+    }
+    if CssNameEquals(keyword, "keyframes") {
+        p.imports_open = false
+        CssSkipSpace(p)
+        if CssFailed(p) { return false }
+        name: CssName = CssReadName(p)
+        if CssFailed(p) { return false }
+        if name.length == 0 {
+            CssFail(p, "expected a keyframes name")
+            return false
+        }
+        if !CssExpect(p, #char "{", "expected '{' after the keyframes name") { return false }
+        CssSkipBody(p)
+        if CssFailed(p) { return false }
+        p.raw_start = start
+        p.raw_length = p.cursor.pos - start
+        p.rule_condition = CssCurrentCondition(p)
+        p.rule_block = p.depth - 1
+        if p.rule_condition.never { return false }
+        p.status = cast(s32)CssStatusKeyframes
+        return true
+    }
+    if CssNameEquals(keyword, "pack") || CssNameEquals(keyword, "theme") ||
+        CssNameEquals(keyword, "env") || CssNameEquals(keyword, "variant") ||
+        CssNameEquals(keyword, "version") {
+        CssFailName(p, "KSS directive", keyword, "; convert the sheet with css-migrate")
+        return false
+    }
+    CssFailName(p, "at-rule", keyword, " is outside Kryon CSS")
+    return false
+}
+
+// A rule body after '{': declarations up to '}'.
+CssReadRuleBody :: (p: *CssParser) -> bool {
+    p.template = StyleData.{}
+    p.rule_ref_count = 0
+    p.declaration_count = 0
+    p.web_declarations = 0
+    p.rule_span.body_start = p.cursor.pos
+    while true {
+        CssSkipSpace(p)
+        if CssFailed(p) { return false }
+        if CssAtEnd(p) {
+            CssFail(p, "expected '}' to close the rule")
+            return false
+        }
+        if CssAtByte(p, #char "}") {
+            p.rule_span.body_length = p.cursor.pos - p.rule_span.body_start
+            CssAdvance(p, 1)
+            return true
+        }
+        if CssAtByte(p, #char ";") {
+            CssAdvance(p, 1)
+            continue
+        }
+        if CssAtByte(p, #char "{") || CssAtByte(p, #char "@") || CssAtByte(p, #char "&") ||
+            CssAtByte(p, #char ".") || CssAtByte(p, #char "#") || CssAtByte(p, #char "[") ||
+            CssAtByte(p, #char "*") || CssAtByte(p, #char ">") || CssAtByte(p, #char ":") {
+            CssFail(p, "nested rules are outside Kryon CSS")
+            return false
+        }
+        head: CssDeclarationResult = CssReadDeclarationHead(p)
+        if !head.ok { return false }
+        scope: s32 = CssApplyProperty(p, head.name, head.end)
+        if scope < 0 { return false }
+        CssRecordDeclaration(p, p.pending_name_start, p.pending_name_length,
+            p.pending_value_start, p.pending_value_length, scope)
+        if CssFailed(p) { return false }
+        CssFinishDeclaration(p)
+    }
+    return false
+}
+
+CssYieldSelector :: (p: *CssParser) {
+    pending: CssPendingSelector = p.selectors[p.selector_next]
+    p.rule.selector = pending.selector
+    p.rule.state = pending.state
+    p.rule.layer = p.layer_of_rule
+    p.rule.order = p.rule_total
+    p.rule.style = p.template
+    p.rule_total += 1
+    p.selector_next += 1
+    p.status = cast(s32)CssStatusRule
+}
+
+// One custom property in :root, with the cursor on its name.
+CssReadDefinitionItem :: (p: *CssParser) -> bool {
+    line: s32 = p.cursor.line
+    column: s32 = p.cursor.column
+    head: CssDeclarationResult = CssReadDeclarationHead(p)
+    if !head.ok { return false }
+    if !head.custom {
+        CssFailName(p, ":root holds only custom properties, not", head.name, "")
+        return false
+    }
+    token: CssToken = CssReadDefinition(p, head.end)
+    if CssFailed(p) { return false }
+    CssFinishDeclaration(p)
+    bare: CssName = CssPropertyName(head.name)
+    index: s32 = CssNameIndex(p, bare)
+    if index < 0 { return false }
+    token.name = bare
+    token.file = p.cursor.file
+    token.line = line
+    token.column = column
+    p.definition = token
+    p.definition_index = index
+    p.rule_condition = CssCurrentCondition(p)
+    p.rule_block = p.depth - 1
+    if p.rule_condition.never { return false }
+    p.status = cast(s32)CssStatusProperty
+    return true
+}
+
+CssPopImport :: (p: *CssParser) {
+    p.import_depth -= 1
+    p.cursor = p.imports[p.import_depth].outer
+    p.imports_open = p.imports[p.import_depth].outer_imports_open
+}
+
+// One step. Read p.status after each call.
+#program_export
+CssStep :: (p: *CssParser) -> s32 {
+    if p.status == cast(s32)CssStatusError || p.status == cast(s32)CssStatusDone { return p.status }
+    if p.status == cast(s32)CssStatusNeedImport {
+        CssFail(p, "the host did not answer @import")
+        return p.status
+    }
+    p.status = cast(s32)CssStatusContinue
+    if p.selector_next < p.selector_count {
+        CssYieldSelector(p)
+        return p.status
+    }
+    p.selector_count = 0
+    p.selector_next = 0
+    while true {
+        CssSkipSpace(p)
+        if CssFailed(p) { return p.status }
+        if CssAtEnd(p) {
+            if p.depth > 0 {
+                CssFail(p, "expected '}' before the end of the sheet")
+                return p.status
+            }
+            if p.import_depth > 0 {
+                CssPopImport(p)
+                continue
+            }
+            p.status = cast(s32)CssStatusDone
+            return p.status
+        }
+        byte: u8 = p.cursor.source[p.cursor.pos]
+        if CssInRoot(p) {
+            if byte == #char "}" {
+                CssAdvance(p, 1)
+                CssCloseBlock(p)
+                continue
+            }
+            if byte == #char ";" {
+                CssAdvance(p, 1)
+                continue
+            }
+            if CssReadDefinitionItem(p) { return p.status }
+            if CssFailed(p) { return p.status }
+            continue
+        }
+        if byte == #char "}" {
+            if p.depth == 0 {
+                CssFail(p, "unexpected '}'")
+                return p.status
+            }
+            CssAdvance(p, 1)
+            CssCloseBlock(p)
+            continue
+        }
+        if byte == #char ";" {
+            CssFail(p, "unexpected ';'")
+            return p.status
+        }
+        if byte == #char "@" {
+            if CssReadAtRule(p) { return p.status }
+            if CssFailed(p) { return p.status }
+            continue
+        }
+        p.imports_open = false
+        if CssAtRoot(p) {
+            CssAdvance(p, 1)
+            unused CssOpenBlock(p, CssBlockRoot, CssCurrentCondition(p), 0, 0)
+            if CssFailed(p) { return p.status }
+            continue
+        }
+        if CssFailed(p) { return p.status }
+        p.origin.file = p.cursor.file
+        p.origin.line = p.cursor.line
+        p.origin.column = p.cursor.column
+        p.rule_span.file = p.cursor.file
+        if !CssReadSelectorList(p) { return p.status }
+        p.rule_span.selector_start = p.selector_start
+        p.rule_span.selector_length = p.selector_length
+        CssAdvance(p, 1)
+        if !CssReadRuleBody(p) { return p.status }
+        p.rule_condition = CssCurrentCondition(p)
+        p.rule_block = p.depth - 1
+        p.layer_of_rule = p.layer
+        if p.rule_condition.never {
+            p.selector_count = 0
+            continue
+        }
+        CssYieldSelector(p)
+        return p.status
+    }
+    return p.status
+}
+
+// Answer a NeedImport with the imported sheet's text.
+#program_export
+CssProvideImport :: (p: *CssParser, source: string, name: string) {
+    if p.status != cast(s32)CssStatusNeedImport {
+        CssFail(p, "no @import is waiting")
+        return
+    }
+    p.status = cast(s32)CssStatusContinue
+    for index: cast(s32)0..p.import_depth - 1 {
+        if CssNameEqualsName(p.imports[index].name, p.pending_import) {
+            CssFailName(p, "import cycle through", p.pending_import, "")
+            return
+        }
+    }
+    if p.import_depth >= 8 {
+        CssFail(p, "imports nested more than 8 deep")
+        return
+    }
+    if p.file_count >= 8 {
+        CssFail(p, "more than 8 imported sheets")
+        return
+    }
+    frame: CssImportFrame
+    frame.name = p.pending_import
+    frame.outer = p.cursor
+    frame.outer_imports_open = p.imports_open
+    p.imports[p.import_depth] = frame
+    p.import_depth += 1
+    p.files[p.file_count] = CssCopyFileName(name)
+    p.cursor.source = source
+    p.cursor.pos = 0
+    p.cursor.line = 1
+    p.cursor.column = 1
+    p.cursor.file = p.file_count
+    p.file_count += 1
+    p.imports_open = true
+}
+
+#program_export
+CssFailImport :: (p: *CssParser) {
+    if p.status != cast(s32)CssStatusNeedImport {
+        CssFail(p, "no @import is waiting")
+        return
+    }
+    p.status = cast(s32)CssStatusContinue
+    CssFailName(p, "cannot import", p.pending_import, "")
+}
+
+// The waiting import target, copied into `output`.
+#program_export
+CssPendingImport :: (p: *CssParser, output: []u8) -> string {
+    count: s32 = p.pending_import.length
+    if count > cast(s32)output.count { count = cast(s32)output.count }
+    for index: cast(s32)0..count - 1 { output[index] = p.pending_import.bytes[index] }
+    return TextView(output[:count])
+}

@@ -1,0 +1,547 @@
+// Part of the css_parser module: typed values. Colors are 0xRRGGBBAA, lengths
+// are px (1px is one density-independent pixel, 1rem is 16px), durations are
+// milliseconds. A value can be var(--name) or var(--name, fallback); the
+// reference resolves when the sheet installs.
+
+CssValueKind :: enum {
+    CssValueColor :: 0
+    CssValueLength :: 1
+    CssValueNumber :: 2
+    CssValueMaterial :: 3
+    CssValueDuration :: 4
+}
+
+CssValue :: struct {
+    kind: s32
+    color: u32
+    number: float32
+    material: s32
+    // Custom property name index, or -1 for a literal.
+    ref: s32
+    fallback: bool
+    ok: bool
+}
+
+CssRemPixels :: 16.0
+
+// The end of the current value; components are read until the cursor gets there.
+CssMoreValue :: (p: *CssParser, end: s32) -> bool {
+    CssSkipSpace(p)
+    if CssFailed(p) { return false }
+    return p.cursor.pos < end
+}
+
+CssAtByte :: (p: *CssParser, byte: u8) -> bool {
+    return !CssAtEnd(p) && p.cursor.source[p.cursor.pos] == byte
+}
+
+// Name index for a custom property, adding it when first seen.
+CssNameIndex :: (p: *CssParser, name: CssName) -> s32 {
+    for index: cast(s32)0..p.name_count - 1 {
+        if CssNameSame(p.names[index], name) { return index }
+    }
+    if p.name_count >= CssNameCapacity {
+        CssFail(p, "custom property capacity exceeded")
+        return -1
+    }
+    p.names[p.name_count] = name
+    p.name_count += 1
+    return p.name_count - 1
+}
+
+// 'var(' was matched; read '--name' and an optional ', fallback' marker. The
+// caller reads the fallback with its own type, then the closing ')'.
+CssVarStart :: struct {
+    name: s32
+    fallback: bool
+    ok: bool
+}
+
+CssReadVarStart :: (p: *CssParser) -> CssVarStart {
+    result: CssVarStart
+    CssSkipSpace(p)
+    if CssFailed(p) { return result }
+    if CssPeek(p, 0) != #char "-" || CssPeek(p, 1) != #char "-" {
+        CssFail(p, "expected a custom property name in var()")
+        return result
+    }
+    name: CssName = CssReadName(p)
+    if CssFailed(p) { return result }
+    result.name = CssNameIndex(p, CssPropertyName(name))
+    if CssFailed(p) { return result }
+    CssSkipSpace(p)
+    if CssAtByte(p, #char ",") {
+        CssAdvance(p, 1)
+        result.fallback = true
+    } else if !CssAtByte(p, #char ")") {
+        CssFail(p, "expected ')' or ',' in var()")
+        return result
+    }
+    result.ok = true
+    return result
+}
+
+// A '--name' without its dashes: the name hosts and Kryon's color table use.
+CssPropertyName :: (name: CssName) -> CssName {
+    if name.length < 2 || name.bytes[0] != #char "-" || name.bytes[1] != #char "-" { return name }
+    bare: CssName
+    for index: cast(s32)2..name.length - 1 { bare.bytes[index - 2] = name.bytes[index] }
+    bare.length = name.length - 2
+    return bare
+}
+
+// Is the cursor at 'name(' (case-insensitive)? Consumes it when it is.
+CssAtFunction :: (p: *CssParser, name: string) -> bool {
+    count: s32 = cast(s32)name.count
+    if p.cursor.pos + count >= cast(s32)p.cursor.source.count { return false }
+    for index: cast(s32)0..count - 1 {
+        if CssLower(p.cursor.source[p.cursor.pos + index]) != name[index] { return false }
+    }
+    if p.cursor.source[p.cursor.pos + count] != #char "(" { return false }
+    if p.cursor.pos > 0 && CssNameChar(p.cursor.source[p.cursor.pos - 1]) { return false }
+    CssAdvance(p, count + 1)
+    return true
+}
+
+CssCloseFunction :: (p: *CssParser, name: string) -> bool {
+    CssSkipSpace(p)
+    if CssFailed(p) { return false }
+    if !CssAtByte(p, #char ")") {
+        CssDiagnosticFunction(p, "expected ')' to close ", name)
+        return false
+    }
+    CssAdvance(p, 1)
+    return true
+}
+
+CssDiagnosticFunction :: (p: *CssParser, message: string, name: string) {
+    if CssFailed(p) { return }
+    p.diagnostic_length = 0
+    CssDiagnosticAppend(p, message)
+    CssDiagnosticAppend(p, name)
+    CssDiagnosticAppend(p, "()")
+    CssDiagnosticAt(p)
+    p.status = cast(s32)CssStatusError
+}
+
+// Colors -------------------------------------------------------------------
+
+CssHexValue :: (byte: u8) -> u32 {
+    if byte >= #char "0" && byte <= #char "9" { return cast(u32)(byte - 48) }
+    if byte >= #char "a" && byte <= #char "f" { return cast(u32)(byte - 87) }
+    return cast(u32)(byte - 55)
+}
+
+CssReadHex :: (p: *CssParser) -> CssValue {
+    result: CssValue
+    result.kind = cast(s32)CssValueColor
+    result.ref = -1
+    CssAdvance(p, 1)
+    start: s32 = p.cursor.pos
+    while CssIsHexDigit(CssPeek(p, 0)) { CssAdvance(p, 1) }
+    digits: s32 = p.cursor.pos - start
+    if CssNameChar(CssPeek(p, 0)) {
+        CssFail(p, "invalid hex color")
+        return result
+    }
+    value: u32 = 0
+    if digits == 3 || digits == 4 {
+        for index: cast(s32)0..digits - 1 {
+            nibble: u32 = CssHexValue(p.cursor.source[start + index])
+            value = (value << cast(u32)8) | (nibble << cast(u32)4) | nibble
+        }
+        if digits == 3 { value = (value << cast(u32)8) | cast(u32)255 }
+    } else if digits == 6 || digits == 8 {
+        for index: cast(s32)0..digits - 1 {
+            value = (value << cast(u32)4) | CssHexValue(p.cursor.source[start + index])
+        }
+        if digits == 6 { value = (value << cast(u32)8) | cast(u32)255 }
+    } else {
+        CssFail(p, "hex colors have 3, 4, 6 or 8 digits")
+        return result
+    }
+    result.color = value
+    result.ok = true
+    return result
+}
+
+// CSS named colors, 'name:rrggbb' joined by ','.
+CssNamedColors :: "aliceblue:f0f8ff,antiquewhite:faebd7,aqua:00ffff,aquamarine:7fffd4,azure:f0ffff,beige:f5f5dc,bisque:ffe4c4,black:000000,blanchedalmond:ffebcd,blue:0000ff,blueviolet:8a2be2,brown:a52a2a,burlywood:deb887,cadetblue:5f9ea0,chartreuse:7fff00,chocolate:d2691e,coral:ff7f50,cornflowerblue:6495ed,cornsilk:fff8dc,crimson:dc143c,cyan:00ffff,darkblue:00008b,darkcyan:008b8b,darkgoldenrod:b8860b,darkgray:a9a9a9,darkgreen:006400,darkgrey:a9a9a9,darkkhaki:bdb76b,darkmagenta:8b008b,darkolivegreen:556b2f,darkorange:ff8c00,darkorchid:9932cc,darkred:8b0000,darksalmon:e9967a,darkseagreen:8fbc8f,darkslateblue:483d8b,darkslategray:2f4f4f,darkslategrey:2f4f4f,darkturquoise:00ced1,darkviolet:9400d3,deeppink:ff1493,deepskyblue:00bfff,dimgray:696969,dimgrey:696969,dodgerblue:1e90ff,firebrick:b22222,floralwhite:fffaf0,forestgreen:228b22,fuchsia:ff00ff,gainsboro:dcdcdc,ghostwhite:f8f8ff,gold:ffd700,goldenrod:daa520,gray:808080,green:008000,greenyellow:adff2f,grey:808080,honeydew:f0fff0,hotpink:ff69b4,indianred:cd5c5c,indigo:4b0082,ivory:fffff0,khaki:f0e68c,lavender:e6e6fa,lavenderblush:fff0f5,lawngreen:7cfc00,lemonchiffon:fffacd,lightblue:add8e6,lightcoral:f08080,lightcyan:e0ffff,lightgoldenrodyellow:fafad2,lightgray:d3d3d3,lightgreen:90ee90,lightgrey:d3d3d3,lightpink:ffb6c1,lightsalmon:ffa07a,lightseagreen:20b2aa,lightskyblue:87cefa,lightslategray:778899,lightslategrey:778899,lightsteelblue:b0c4de,lightyellow:ffffe0,lime:00ff00,limegreen:32cd32,linen:faf0e6,magenta:ff00ff,maroon:800000,mediumaquamarine:66cdaa,mediumblue:0000cd,mediumorchid:ba55d3,mediumpurple:9370db,mediumseagreen:3cb371,mediumslateblue:7b68ee,mediumspringgreen:00fa9a,mediumturquoise:48d1cc,mediumvioletred:c71585,midnightblue:191970,mintcream:f5fffa,mistyrose:ffe4e1,moccasin:ffe4b5,navajowhite:ffdead,navy:000080,oldlace:fdf5e6,olive:808000,olivedrab:6b8e23,orange:ffa500,orangered:ff4500,orchid:da70d6,palegoldenrod:eee8aa,palegreen:98fb98,paleturquoise:afeeee,palevioletred:db7093,papayawhip:ffefd5,peachpuff:ffdab9,peru:cd853f,pink:ffc0cb,plum:dda0dd,powderblue:b0e0e6,purple:800080,rebeccapurple:663399,red:ff0000,rosybrown:bc8f8f,royalblue:4169e1,saddlebrown:8b4513,salmon:fa8072,sandybrown:f4a460,seagreen:2e8b57,seashell:fff5ee,sienna:a0522d,silver:c0c0c0,skyblue:87ceeb,slateblue:6a5acd,slategray:708090,slategrey:708090,snow:fffafa,springgreen:00ff7f,steelblue:4682b4,tan:d2b48c,teal:008080,thistle:d8bfd8,tomato:ff6347,turquoise:40e0d0,violet:ee82ee,wheat:f5deb3,white:ffffff,whitesmoke:f5f5f5,yellow:ffff00,yellowgreen:9acd32"
+
+CssNamedColor :: (name: CssName) -> CssValue {
+    result: CssValue
+    result.kind = cast(s32)CssValueColor
+    result.ref = -1
+    if CssNameEquals(name, "transparent") {
+        result.ok = true
+        return result
+    }
+    table: string = CssNamedColors
+    at: s32 = 0
+    while at < cast(s32)table.count {
+        colon: s32 = at
+        while table[colon] != #char ":" { colon += 1 }
+        if CssNameEquals(name, table[at:colon]) {
+            value: u32 = 0
+            for index: cast(s32)1..6 {
+                value = (value << cast(u32)4) | CssHexValue(table[colon + index])
+            }
+            result.color = (value << cast(u32)8) | cast(u32)255
+            result.ok = true
+            return result
+        }
+        at = colon + 8
+    }
+    return result
+}
+
+CssClampByte :: (value: float64) -> u32 {
+    if value <= 0.0 { return 0 }
+    if value >= 255.0 { return 255 }
+    return cast(u32)(value + 0.5)
+}
+
+// One rgb()/hsl() channel. Percentages scale to `full`; `bare` limits plain
+// numbers (0..255 for rgb channels, any for hue).
+CssChannel :: struct {
+    value: float64
+    ok: bool
+}
+
+CssReadChannel :: (p: *CssParser, full: float64, hue: bool) -> CssChannel {
+    result: CssChannel
+    CssSkipSpace(p)
+    if CssFailed(p) { return result }
+    number: CssNumber = CssReadNumber(p)
+    if CssFailed(p) { return result }
+    if !number.ok {
+        CssFail(p, "expected a number in the color function")
+        return result
+    }
+    if number.percent {
+        result.value = number.value * full / 100.0
+    } else if number.unit.length > 0 {
+        if !hue || !CssNameEquals(number.unit, "deg") {
+            CssFailName(p, "unit", number.unit, " is not valid in a color channel")
+            return result
+        }
+        result.value = number.value
+    } else {
+        result.value = number.value
+    }
+    result.ok = true
+    return result
+}
+
+CssHueChannel :: (m1: float64, m2: float64, hue: float64) -> float64 {
+    h: float64 = hue
+    if h < 0.0 { h += 1.0 }
+    if h > 1.0 { h -= 1.0 }
+    if h * 6.0 < 1.0 { return m1 + (m2 - m1) * h * 6.0 }
+    if h * 2.0 < 1.0 { return m2 }
+    if h * 3.0 < 2.0 { return m1 + (m2 - m1) * (2.0 / 3.0 - h) * 6.0 }
+    return m1
+}
+
+// rgb(r g b / a), rgb(r, g, b, a), hsl(h s l / a) and their -a aliases.
+CssReadColorFunction :: (p: *CssParser, hsl: bool, name: string) -> CssValue {
+    result: CssValue
+    result.kind = cast(s32)CssValueColor
+    result.ref = -1
+    channels: [4]float64
+    channels[3] = 1.0
+    count: s32 = 0
+    commas: bool = false
+    for index: cast(s32)0..3 {
+        CssSkipSpace(p)
+        if CssFailed(p) { return result }
+        if index > 0 && CssAtByte(p, #char ")") { break }
+        if index == 1 && CssAtByte(p, #char ",") { commas = true }
+        if index > 0 && commas {
+            if !CssExpect(p, #char ",", "expected ',' between color channels") { return result }
+        } else if index == 3 {
+            if !CssExpect(p, #char "/", "expected '/' before the alpha channel") { return result }
+        }
+        full: float64 = 255.0
+        if hsl { full = 1.0 }
+        if index == 3 { full = 1.0 }
+        channel: CssChannel = CssReadChannel(p, full, hsl && index == 0)
+        if !channel.ok { return result }
+        if index == 3 || (hsl && index > 0) {
+            // Plain alpha is 0..1; hsl saturation and lightness need '%'.
+            if hsl && index > 0 && index < 3 { channel.value = channel.value }
+        }
+        channels[index] = channel.value
+        count = index + 1
+    }
+    if count < 3 {
+        CssDiagnosticFunction(p, "expected three channels in ", name)
+        return result
+    }
+    if !CssCloseFunction(p, name) { return result }
+    red: float64 = channels[0]
+    green: float64 = channels[1]
+    blue: float64 = channels[2]
+    if hsl {
+        hue: float64 = channels[0] / 360.0
+        hue = hue - cast(float64)cast(s64)hue
+        if hue < 0.0 { hue += 1.0 }
+        saturation: float64 = channels[1]
+        lightness: float64 = channels[2]
+        if saturation < 0.0 { saturation = 0.0 }
+        if saturation > 1.0 { saturation = 1.0 }
+        if lightness < 0.0 { lightness = 0.0 }
+        if lightness > 1.0 { lightness = 1.0 }
+        m2: float64 = lightness * (1.0 + saturation)
+        if lightness > 0.5 { m2 = lightness + saturation - lightness * saturation }
+        m1: float64 = 2.0 * lightness - m2
+        red = CssHueChannel(m1, m2, hue + 1.0 / 3.0) * 255.0
+        green = CssHueChannel(m1, m2, hue) * 255.0
+        blue = CssHueChannel(m1, m2, hue - 1.0 / 3.0) * 255.0
+    }
+    alpha: float64 = channels[3] * 255.0
+    result.color = (CssClampByte(red) << cast(u32)24) | (CssClampByte(green) << cast(u32)16) |
+        (CssClampByte(blue) << cast(u32)8) | CssClampByte(alpha)
+    result.ok = true
+    return result
+}
+
+// A color: hex, a named color, rgb()/hsl(), or var().
+CssReadColor :: (p: *CssParser, allow_var: bool) -> CssValue {
+    result: CssValue
+    result.kind = cast(s32)CssValueColor
+    result.ref = -1
+    CssSkipSpace(p)
+    if CssFailed(p) { return result }
+    if CssAtByte(p, #char "#") { return CssReadHex(p) }
+    if CssAtFunction(p, "var") {
+        if !allow_var {
+            CssFail(p, "nested var() in a fallback is outside Kryon CSS")
+            return result
+        }
+        start: CssVarStart = CssReadVarStart(p)
+        if !start.ok { return result }
+        if start.fallback {
+            fallback: CssValue = CssReadColor(p, false)
+            if !fallback.ok { return result }
+            result = fallback
+        }
+        if !CssCloseFunction(p, "var") { return result }
+        result.ref = start.name
+        result.fallback = start.fallback
+        result.ok = true
+        return result
+    }
+    if CssAtFunction(p, "rgb") { return CssReadColorFunction(p, false, "rgb") }
+    if CssAtFunction(p, "rgba") { return CssReadColorFunction(p, false, "rgba") }
+    if CssAtFunction(p, "hsl") { return CssReadColorFunction(p, true, "hsl") }
+    if CssAtFunction(p, "hsla") { return CssReadColorFunction(p, true, "hsla") }
+    name: CssName = CssReadName(p)
+    if CssFailed(p) { return result }
+    if name.length == 0 {
+        CssFail(p, "expected a color")
+        return result
+    }
+    named: CssValue = CssNamedColor(name)
+    if !named.ok {
+        CssFailName(p, "unknown color", name, "")
+        return result
+    }
+    return named
+}
+
+// Lengths, numbers, durations and materials -------------------------------
+
+CssLengthUnit :: (p: *CssParser, number: CssNumber) -> float32 {
+    if number.percent {
+        CssFail(p, "percentages are not lengths in Kryon CSS; use px or rem")
+        return 0.0
+    }
+    if number.unit.length == 0 {
+        if number.value != 0.0 {
+            CssFail(p, "a length needs a unit; use px or rem")
+        }
+        return 0.0
+    }
+    if CssNameEquals(number.unit, "px") { return cast(float32)number.value }
+    if CssNameEquals(number.unit, "rem") { return cast(float32)(number.value * CssRemPixels) }
+    if CssNameEquals(number.unit, "em") {
+        CssFail(p, "em depends on the inherited font size; use rem or px")
+        return 0.0
+    }
+    CssFailName(p, "unit", number.unit, " is outside Kryon CSS; use px or rem")
+    return 0.0
+}
+
+// One component of the given kind: a literal or var().
+CssReadTyped :: (p: *CssParser, kind: s32, allow_var: bool) -> CssValue {
+    if kind == cast(s32)CssValueColor { return CssReadColor(p, allow_var) }
+    result: CssValue
+    result.kind = kind
+    result.ref = -1
+    CssSkipSpace(p)
+    if CssFailed(p) { return result }
+    if CssAtFunction(p, "var") {
+        if !allow_var {
+            CssFail(p, "nested var() in a fallback is outside Kryon CSS")
+            return result
+        }
+        start: CssVarStart = CssReadVarStart(p)
+        if !start.ok { return result }
+        if start.fallback {
+            fallback: CssValue = CssReadTyped(p, kind, false)
+            if !fallback.ok { return result }
+            result = fallback
+        }
+        if !CssCloseFunction(p, "var") { return result }
+        result.ref = start.name
+        result.fallback = start.fallback
+        result.ok = true
+        return result
+    }
+    if kind == cast(s32)CssValueMaterial {
+        name: CssName = CssReadName(p)
+        if CssFailed(p) { return result }
+        material: s32 = CssMaterialValue(name)
+        if material < 0 {
+            if name.length == 0 { CssFail(p, "expected a material: lightfield, flat or glass") }
+            else { CssFailName(p, "unknown material", name, "; use lightfield, flat or glass") }
+            return result
+        }
+        result.material = material
+        result.ok = true
+        return result
+    }
+    number: CssNumber = CssReadNumber(p)
+    if CssFailed(p) { return result }
+    if !number.ok {
+        if kind == cast(s32)CssValueLength { CssFail(p, "expected a length") }
+        else if kind == cast(s32)CssValueDuration { CssFail(p, "expected a duration") }
+        else { CssFail(p, "expected a number") }
+        return result
+    }
+    if kind == cast(s32)CssValueLength {
+        result.number = CssLengthUnit(p, number)
+        if CssFailed(p) { return result }
+    } else if kind == cast(s32)CssValueDuration {
+        if CssNameEquals(number.unit, "ms") {
+            result.number = cast(float32)number.value
+        } else if CssNameEquals(number.unit, "s") {
+            result.number = cast(float32)(number.value * 1000.0)
+        } else {
+            CssFail(p, "a duration needs s or ms")
+            return result
+        }
+    } else {
+        if number.percent {
+            result.number = cast(float32)(number.value / 100.0)
+        } else if number.unit.length > 0 {
+            CssFailName(p, "unit", number.unit, " is not valid here; expected a number")
+            return result
+        } else {
+            result.number = cast(float32)number.value
+        }
+    }
+    result.ok = true
+    return result
+}
+
+CssMaterialValue :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "lightfield") { return cast(s32)MaterialLightfield }
+    if CssNameEquals(name, "flat") { return cast(s32)MaterialFlat }
+    if CssNameEquals(name, "glass") { return cast(s32)MaterialGlass }
+    return -1
+}
+
+// A custom property's value: one color, length, duration, number or
+// material, or var(--other). The kind follows from the value.
+CssReadDefinition :: (p: *CssParser, end: s32) -> CssToken {
+    token: CssToken
+    token.kind = cast(s32)CssTokenUndefined
+    token.alias = -1
+    CssSkipSpace(p)
+    if CssFailed(p) { return token }
+    byte: u8 = CssPeek(p, 0)
+    if CssAtFunction(p, "var") {
+        start: CssVarStart = CssReadVarStart(p)
+        if !start.ok { return token }
+        if start.fallback {
+            CssFail(p, "a custom property aliases one var() without a fallback")
+            return token
+        }
+        if !CssCloseFunction(p, "var") { return token }
+        token.kind = cast(s32)CssTokenAlias
+        token.alias = start.name
+    } else if byte == #char "#" || CssAtColorFunction(p) {
+        value: CssValue = CssReadColor(p, false)
+        if !value.ok { return token }
+        token.kind = cast(s32)CssTokenColor
+        token.color = value.color
+    } else if CssIsDigit(byte) || byte == #char "." || byte == #char "+" ||
+        (byte == #char "-" && (CssIsDigit(CssPeek(p, 1)) || CssPeek(p, 1) == #char ".")) {
+        number: CssNumber = CssReadNumber(p)
+        if CssFailed(p) { return token }
+        if !number.ok {
+            CssFail(p, "expected a number")
+            return token
+        }
+        if CssNameEquals(number.unit, "ms") || CssNameEquals(number.unit, "s") {
+            token.kind = cast(s32)CssTokenDuration
+            token.number = cast(float32)number.value
+            if CssNameEquals(number.unit, "s") { token.number = cast(float32)(number.value * 1000.0) }
+        } else if number.unit.length == 0 && !number.percent {
+            // Plain numbers stay numbers; 0 also serves as a zero length.
+            token.kind = cast(s32)CssTokenNumber
+            token.number = cast(float32)number.value
+        } else if number.percent {
+            token.kind = cast(s32)CssTokenNumber
+            token.number = cast(float32)(number.value / 100.0)
+        } else {
+            token.kind = cast(s32)CssTokenLength
+            token.number = CssLengthUnit(p, number)
+            if CssFailed(p) { return token }
+        }
+    } else {
+        name: CssName = CssReadName(p)
+        if CssFailed(p) { return token }
+        material: s32 = CssMaterialValue(name)
+        if material >= 0 {
+            token.kind = cast(s32)CssTokenMaterial
+            token.material = material
+        } else if name.length > 0 {
+            named: CssValue = CssNamedColor(name)
+            if !named.ok {
+                CssFailName(p, "unknown custom property value", name,
+                    "; expected a color, length, duration, number or material")
+                return token
+            }
+            token.kind = cast(s32)CssTokenColor
+            token.color = named.color
+        } else {
+            CssFail(p, "expected a color, length, duration, number or material")
+            return token
+        }
+    }
+    if CssMoreValue(p, end) {
+        CssFail(p, "a custom property holds one value in Kryon CSS")
+        token.kind = cast(s32)CssTokenUndefined
+    }
+    return token
+}
+
+css_color_functions: [4]string = .[
+    "rgb(", "rgba(", "hsl(", "hsla("];
+
+CssAtColorFunction :: (p: *CssParser) -> bool {
+    for name: css_color_functions {
+        count: s32 = cast(s32)name.count
+        if p.cursor.pos + count <= cast(s32)p.cursor.source.count {
+            same: bool = true
+            for index: cast(s32)0..count - 1 {
+                if CssLower(p.cursor.source[p.cursor.pos + index]) != name[index] { same = false }
+            }
+            if same { return true }
+        }
+    }
+    return false
+}

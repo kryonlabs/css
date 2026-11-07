@@ -1,0 +1,227 @@
+// The CSS subset: what parses into which rules, and the diagnostic every
+// sheet outside it gets. A sheet either parses whole or not at all.
+#import "css_parser"
+#import "css_sheet"
+#import "css_test_support"
+#import "kryon/style"
+#import "kryon/style_sheet"
+#import "kryon/control_props"
+
+using StyleField;
+using ButtonTone;
+using MaterialKind;
+using CssTokenKind;
+using CssScheme;
+
+Rule :: (index: s32) -> StyleRule { return test_rules.items[index] }
+
+Has :: (style: StyleData, field: u32) -> bool {
+    return (style.fields & field) != cast(u32)0
+}
+
+Values :: () {
+    if Builds("Button { color: #112233; padding-inline: 8px; padding-block: 0.5rem; gap: 4px; }", "plain rule") {
+        Check(test_rules.count == 1, "one rule")
+        style: StyleData = Rule(0).style
+        Check(style.foreground == cast(u32)0x112233ff, "hex color")
+        Check(style.padding_x == 8.0 && style.padding_y == 8.0, "px and rem lengths")
+        Check(Has(style, cast(u32)StyleForeground) && Has(style, cast(u32)StylePaddingX) && Has(style, cast(u32)StyleGap),
+            "fields marked")
+        Check(!Has(style, cast(u32)StyleBackground), "unset fields unmarked")
+        Check(Rule(0).selector.kind == StyleKindButton(), "type selector")
+    }
+    if Builds("Text { color: rebeccapurple; background: rgb(1 2 3 / 50%); border-color: hsl(120 100% 50%); outline-color: #abc; }",
+        "color forms") {
+        style: StyleData = Rule(0).style
+        Check(style.foreground == cast(u32)0x663399ff, "named color")
+        Check(style.background == cast(u32)0x01020380, "rgb with alpha")
+        Check(style.border == cast(u32)0x00ff00ff, "hsl")
+        Check(style.focus == cast(u32)0xaabbccff, "short hex")
+    }
+    if Builds("Button { background: linear-gradient(to bottom, #000000, #ffffff); translate: 3px 4px; border: 2px solid #ff0000; border-radius: 6px; opacity: 0.5; -kryon-material: glass; -kryon-icon-size: 20px; font-size: 1.5rem; letter-spacing: 1px; }",
+        "shorthands") {
+        style: StyleData = Rule(0).style
+        Check(style.background == cast(u32)0x000000ff && style.background_end == cast(u32)0xffffffff,
+            "gradient")
+        Check(Has(style, cast(u32)StyleBackgroundEnd), "gradient end marked")
+        Check(style.offset_x == 3.0 && style.offset_y == 4.0, "translate")
+        Check(style.border_width == 2.0 && style.border == cast(u32)0xff0000ff, "border shorthand")
+        Check(style.radius == 6.0 && style.opacity == 0.5, "radius and opacity")
+        Check(cast(s32)style.material == cast(s32)MaterialGlass, "material")
+        Check(style.icon_size == 20.0 && style.font_size == 24.0, "icon size and rem font")
+        Check(style.letter_spacing == 1.0, "letter spacing")
+    }
+    if Builds("Text { font-family: \"Inter Display\", sans-serif; }", "font family") {
+        Check(test_rules.items[0].style.typeface == "Inter Display", "first family")
+    }
+    // Document properties are for the web export; natively they are skipped.
+    if Builds("Button { width: 20px; margin-inline: 4px; color: red; }", "web properties") {
+        Check(Rule(0).style.foreground == cast(u32)0xff0000ff, "web properties skipped")
+    }
+    if Builds("Button { padding: 4px 8px; }", "padding pair") {
+        Check(Rule(0).style.padding_y == 4.0 && Rule(0).style.padding_x == 8.0, "padding block inline")
+    }
+}
+
+Selectors :: () {
+    if Builds("Button.hero:hover, Text:disabled, *[tone=Accent]:active, Toggle:checked, Button:focus, Button:selected {color: red}",
+        "selector list") {
+        Check(test_rules.count == 6, "one rule per selector")
+        Check(Rule(0).selector.class_name == CssClass("hero") && Rule(0).state == 2, "class and hover")
+        Check(Rule(1).selector.kind == StyleKindText() && Rule(1).state == 5, "disabled")
+        Check(Rule(2).selector.kind == StyleKindAny() && Rule(2).selector.tone == cast(s32)ButtonToneAccent &&
+            Rule(2).state == 3, "universal, attribute, active")
+        Check(Rule(3).state == 7 && Rule(5).state == 7, "checked and selected")
+        Check(Rule(4).state == 4, "focus")
+    }
+    ParseFails("Button > Text { color: red; }", "combinators are outside Kryon CSS", "combinator")
+    ParseFails("Button Text { color: red; }", "combinators are outside Kryon CSS", "descendant")
+    ParseFails("#save { color: red; }", "id selectors are outside Kryon CSS", "id")
+    ParseFails("Button::before { color: red; }", "pseudo-elements are outside Kryon CSS", "pseudo-element")
+    ParseFails("Button:nth-child(2) { color: red; }", "selector function", "selector function")
+    ParseFails("Butt0n { color: red; }", "unknown widget type", "widget name")
+    ParseFails("Button.a.b { color: red; }", "one class per selector", "two classes")
+    ParseFails("Button:hover:focus { color: red; }", "one state pseudo-class per selector", "two states")
+    ParseFails("Button[tone^=Acc] { color: red; }", "only '=' attribute matches", "attribute operator")
+}
+
+Diagnostics :: () {
+    ParseFails("Button {\n  colr: red;\n}", "unknown property 'colr' at sheet.css:2:3", "location")
+    ParseFails("Button { color: red; }\nText { colour: blue; }", "unknown property 'colour'",
+        "no partial sheet")
+    Check(!CssSheetBuild(*test_sheet, CssDefaultEnvironment(), null, *test_rules), "failed sheet never builds")
+    ParseFails("// note\nButton { color: red; }", "'//' comments are not CSS", "line comment")
+    ParseFails("Button { color: red; } /* open", "unterminated comment", "open comment")
+    ParseFails("Button { color: red !important; }", "!important is outside Kryon CSS", "important")
+    ParseFails("Button { gap: 4; }", "a length needs a unit", "unitless length")
+    ParseFails("Button { gap: 2em; }", "em depends on the inherited font size", "em")
+    ParseFails("Button { gap: 50%; }", "percentages are not lengths", "percent")
+    ParseFails("Button { padding-left: 4px; }", "use padding-inline", "one side")
+    ParseFails("Button { padding: 1px 2px 3px 4px; }", "Kryon pads", "uneven sides")
+    ParseFails("Button { border: 1px dashed red; }", "borders are solid", "border style")
+    ParseFails("Button { background: url(a.png); }", "background images are outside Kryon CSS", "image")
+    ParseFails("Button { background: linear-gradient(90deg, red, blue); }", "Kryon gradients run top to bottom",
+        "gradient angle")
+    ParseFails("Button { color: #12345; }", "hex colors have 3, 4, 6 or 8 digits", "hex length")
+    ParseFails("Button { color: blurple; }", "unknown color", "color name")
+    ParseFails("Button { --x: 1px; }", "custom properties belong in :root", "custom property in rule")
+    ParseFails(":root { color: red; }", ":root holds only custom properties", "property in root")
+    ParseFails("Button { color: red; ", "expected '}'", "unclosed rule")
+    ParseFails("Button { Text { color: red; } }", "nested rules are outside Kryon CSS", "nesting")
+    ParseFails("@pack classic;", "KSS directive 'pack'", "KSS directive")
+    ParseFails("@font-face { src: x; }", "at-rule 'font-face' is outside Kryon CSS", "unknown at-rule")
+    ParseFails("@media not print { Button { color: red; } }", "'not' media queries", "not")
+    ParseFails("@media (colour: dark) { Button { color: red; } }", "unknown media feature", "media feature")
+    ParseFails("Button { gap: 1e3px; }", "exponents are outside Kryon CSS", "exponent")
+    ParseFails("Button { font-family: \"a\\\"b\"; }", "escapes in strings", "string escape")
+}
+
+Layers :: () {
+    source: string = "@layer base, app;\n@layer app { Button { color: #000001; } }\n@layer base { Button { color: #000002; } }"
+    if Builds(source, "layers") {
+        Check(Resolve(Facts(StyleKindButton(), 0), 1).foreground == cast(u32)0x000001ff,
+            "declared layer order, not source order")
+    }
+    if Builds("@layer base { Button { color: #000002; } }\nButton { color: #000003; }", "unlayered") {
+        Check(Resolve(Facts(StyleKindButton(), 0), 1).foreground == cast(u32)0x000003ff,
+            "unlayered rules win over layers")
+    }
+    // Within a layer, specificity before order.
+    if Builds("Button.hero { color: #000004; }\nButton { color: #000005; }", "specificity") {
+        Check(Resolve(Facts(StyleKindButton(), CssClass("hero")), 1).foreground == cast(u32)0x000004ff,
+            "class beats type")
+        Check(Resolve(Facts(StyleKindButton(), 0), 1).foreground == cast(u32)0x000005ff, "type alone")
+    }
+    if Builds("Button { color: #000006; }\nButton:hover { color: #000007; }", "state rules") {
+        Check(Resolve(Facts(StyleKindButton(), 0), 2).foreground == cast(u32)0x000007ff, "hover state")
+        Check(Resolve(Facts(StyleKindButton(), 0), 1).foreground == cast(u32)0x000006ff, "normal state")
+    }
+    ParseFails("@layer a.b { Button { color: red; } }", "nested layer names", "dotted layer")
+}
+
+Imports :: () {
+    if Builds("@import \"base\";\nButton { gap: 2px; }", "import") {
+        Check(test_rules.count == 2, "imported rule first")
+        Check(Rule(0).style.foreground == cast(u32)0x010203ff, "imported values")
+        Check(Resolve(Facts(StyleKindButton(), 0), 1).gap == 2.0, "later rule wins")
+    }
+    if Builds("@import url(\"deep\");\nTextField { gap: 1px; }", "nested import") {
+        Check(test_rules.count == 3, "import inside an import")
+    }
+    if Builds("@import \"tokens\";\nText { color: var(--ink); }", "imported custom property") {
+        Check(Rule(0).style.foreground == cast(u32)0x445566ff, "var from import")
+    }
+    ParseFails("Button { gap: 2px; }\n@import \"base\";", "@import must come before every other rule", "late import")
+    ParseFails("@import \"missing\";", "cannot import", "missing import")
+    ParseFails("@import \"loop\";", "import cycle through", "import cycle")
+}
+
+Variables :: () {
+    if Builds(":root { --ink: #000000; }\n@media (prefers-color-scheme: dark) { :root { --ink: #ffffff; } }\nText { color: var(--ink); }",
+        "scheme") {
+        Check(Rule(0).style.foreground == cast(u32)0x000000ff, "light value")
+        Check(BuildIn(":root { --ink: #000000; }\n@media (prefers-color-scheme: dark) { :root { --ink: #ffffff; } }\nText { color: var(--ink); }",
+            Env("dark")) && Rule(0).style.foreground == cast(u32)0xffffffff, "dark value")
+    }
+    if Builds("Button { color: var(--missing, #123456); gap: var(--none, 3px); }", "fallback") {
+        Check(Rule(0).style.foreground == cast(u32)0x123456ff && Rule(0).style.gap == 3.0, "fallback values")
+    }
+    if Builds(":root { --a: #111111; --b: var(--a); --pad: 0; }\nText { color: var(--b); gap: var(--pad); }", "alias") {
+        Check(Rule(0).style.foreground == cast(u32)0x111111ff, "alias followed")
+        Check(Rule(0).style.gap == 0.0, "zero serves as a length")
+    }
+    if Builds(":root { --fast: 150ms; --ratio: 0.5; --look: glass; }\nButton { opacity: var(--ratio); -kryon-material: var(--look); }",
+        "kinds") {
+        Check(Rule(0).style.opacity == 0.5 && cast(s32)Rule(0).style.material == cast(s32)MaterialGlass, "number and material")
+        fast: CssTokenResult = CssSheetToken(*test_sheet, "--fast")
+        Check(fast.found && fast.kind == cast(s32)CssTokenDuration && fast.number == 150.0, "duration in ms")
+    }
+    BuildFails("Text { color: var(--nowhere); }", "undefined custom property", "undefined var")
+    BuildFails(":root { --pad: 8px; }\nText { color: var(--pad); }", "is a length where the property takes another kind",
+        "kind mismatch")
+    BuildFails(":root { --a: var(--b); --b: var(--a); }\nText { color: var(--a); }", "alias cycle", "alias cycle")
+    ParseFails(":root { --a: 1px 2px; }", "a custom property holds one value", "two values")
+    // A host override beats every definition.
+    if Parse(":root { --ink: #000000; }\nText { color: var(--ink); }") {
+        overrides: CssOverrides
+        CssOverrideColor(*overrides, "ink", cast(u32)0x0a0b0cff)
+        Check(CssSheetBuild(*test_sheet, CssDefaultEnvironment(), *overrides, *test_rules) &&
+            Rule(0).style.foreground == cast(u32)0x0a0b0cff, "override")
+    }
+}
+
+Media :: () {
+    source: string = "@media (-kryon-platform: android) { Button { gap: 3px; } }\n@media (pointer: coarse) { Button { gap: 5px; } }\n@media (max-width: 600px) { Button { gap: 7px; } }\n@media (prefers-contrast: more), (-kryon-density: compact) { Text { gap: 9px; } }"
+    if Builds(source, "media") {
+        Check(test_rules.count == 0, "desktop mouse skips every block; viewport queries are for the web")
+    }
+    android: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(), "", "", "touch", "touch", "android")
+    if BuildIn(source, android) {
+        Check(test_rules.count == 2, "android and coarse pointer blocks apply")
+    } else {
+        Check(false, "android build")
+    }
+    compact: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(), "", "", "compact", "", "")
+    Check(BuildIn(source, compact) && test_rules.count == 1, "one branch of a list is enough")
+    themed: string = ":root { --ink: #000000; }\n@media (-kryon-theme: sky_dark) { :root { --ink: #0000ff; } }\nText { color: var(--ink); }"
+    Check(BuildIn(themed, Env("sky_dark")) && Rule(0).style.foreground == cast(u32)0x0000ffff, "catalog theme")
+    Check(BuildIn(themed, Env("ocean_dark")) && Rule(0).style.foreground == cast(u32)0x000000ff, "other theme")
+    Check(Env("sky_dark").scheme == cast(s32)CssSchemeDark, "dark theme names set the dark scheme")
+    nested: string = "@media (prefers-color-scheme: dark) { @media (-kryon-platform: web) { Text { gap: 1px; } } }"
+    web_dark: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(), "dark", "", "", "", "web")
+    Check(BuildIn(nested, web_dark) && test_rules.count == 1, "nested media combine")
+    Check(BuildIn(nested, Env("dark")) && test_rules.count == 0, "nested media need both")
+}
+
+#program_export
+main :: () -> s32 {
+    Values()
+    Selectors()
+    Diagnostics()
+    Layers()
+    Imports()
+    Variables()
+    Media()
+    if test_failures == 0 { TestSay("css parse behavior: PASS\n") }
+    return test_failures
+}

@@ -1,0 +1,89 @@
+// A digest of a built style table and of what it resolves to. The
+// conformance test prints it on every target; the sheet test uses it to
+// compare a compiled pack with the same sheet parsed.
+#import "kryon/style"
+#import "kryon/style_sheet"
+
+CssDigestMix :: (hash: u32, value: u32) -> u32 {
+    return (hash ^ value) * cast(u32)16777619
+}
+
+// Lengths to 1/64 px, so float printing never enters the digest.
+CssDigestFloat :: (hash: u32, value: float32) -> u32 {
+    return CssDigestMix(hash, cast(u32)cast(s32)(value * 64.0))
+}
+
+CssDigestStyle :: (start: u32, style: StyleData) -> u32 {
+    hash: u32 = start
+    hash = CssDigestMix(hash, style.fields)
+    hash = CssDigestMix(hash, style.background)
+    hash = CssDigestMix(hash, style.foreground)
+    hash = CssDigestMix(hash, style.border)
+    hash = CssDigestMix(hash, style.focus)
+    hash = CssDigestFloat(hash, style.radius)
+    hash = CssDigestFloat(hash, style.border_width)
+    hash = CssDigestFloat(hash, style.opacity)
+    hash = CssDigestFloat(hash, style.padding_x)
+    hash = CssDigestFloat(hash, style.padding_y)
+    hash = CssDigestFloat(hash, style.gap)
+    hash = CssDigestFloat(hash, style.font_size)
+    hash = CssDigestFloat(hash, style.icon_size)
+    hash = CssDigestFloat(hash, style.offset_x)
+    hash = CssDigestFloat(hash, style.offset_y)
+    hash = CssDigestMix(hash, style.background_end)
+    hash = CssDigestMix(hash, cast(u32)cast(s32)style.material)
+    hash = CssDigestMix(hash, cast(u32)style.typeface.count)
+    for index: cast(s32)0..cast(s32)style.typeface.count - 1 {
+        hash = CssDigestMix(hash, cast(u32)style.typeface[index])
+    }
+    hash = CssDigestFloat(hash, style.letter_spacing)
+    return hash
+}
+
+CssDigestRule :: (start: u32, rule: StyleRule) -> u32 {
+    hash: u32 = start
+    hash = CssDigestMix(hash, cast(u32)rule.selector.kind)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.name)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.class_name)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.role)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.tone)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.emphasis)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.size)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.state)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.validation)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.orientation)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.placement)
+    hash = CssDigestMix(hash, cast(u32)rule.state)
+    hash = CssDigestMix(hash, cast(u32)rule.layer)
+    hash = CssDigestMix(hash, cast(u32)rule.order)
+    return CssDigestStyle(hash, rule.style)
+}
+
+// The table itself, rule by rule.
+CssDigestTable :: (rules: StyleRules) -> u32 {
+    hash: u32 = 2166136261
+    hash = CssDigestMix(hash, cast(u32)rules.count)
+    for index: cast(s32)0..rules.count - 1 { hash = CssDigestRule(hash, rules.items[index]) }
+    return hash
+}
+
+// What it resolves to: every widget kind in every state, plain and in each
+// tone and emphasis, unclassed.
+CssDigestResolved :: (rules: StyleRules) -> u32 {
+    hash: u32 = 2166136261
+    base: StyleData
+    for kind: cast(s32)1..63 {
+        for state: cast(s32)1..7 {
+            hash = CssDigestStyle(hash, ResolveStyleRules(rules, base, StyleDefaultFacts(kind), state))
+            for tone: cast(s32)0..4 {
+                for emphasis: cast(s32)0..4 {
+                    facts: StyleFacts = StyleDefaultFacts(kind)
+                    facts.tone = tone
+                    facts.emphasis = emphasis
+                    hash = CssDigestStyle(hash, ResolveStyleRules(rules, base, facts, state))
+                }
+            }
+        }
+    }
+    return hash
+}

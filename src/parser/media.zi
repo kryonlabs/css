@@ -1,0 +1,323 @@
+// Part of the css_parser module: media queries. Environment features
+// (prefers-color-scheme, prefers-contrast, pointer, any-pointer, hover and
+// the -kryon-density, -kryon-pointer, -kryon-platform and -kryon-theme
+// features) become bit masks every host tests the same way. Viewport
+// features (width, height, orientation, aspect-ratio and their ranges) and
+// the print type only apply on the web document host; native hosts treat
+// them as not matching.
+
+CssSchemeBits :: 0x3
+CssContrastBits :: 0xc
+CssDensityBits :: 0x70
+CssPointerBits :: 0x380
+CssPlatformBits :: 0x7c00
+CssAllBits :: 0x7fff
+
+CssBit :: (index: s32) -> u32 {
+    return cast(u32)1 << cast(u32)index
+}
+
+#program_export
+CssEnvironmentBits :: (env: CssEnvironment) -> u32 {
+    return CssBit(env.scheme) | CssBit(2 + env.contrast) | CssBit(4 + env.density) |
+        CssBit(7 + env.pointer) | CssBit(10 + env.platform)
+}
+
+css_viewport_features: [13]string = .[
+    "width", "min-width", "max-width", "height", "min-height", "max-height",
+    "orientation", "aspect-ratio", "min-aspect-ratio", "max-aspect-ratio", "resolution", "min-resolution",
+    "max-resolution"];
+
+CssViewportFeature :: (name: CssName) -> bool {
+    for text: css_viewport_features {
+        if CssNameEquals(name, text) { return true }
+    }
+    return false
+}
+
+CssThemeIndex :: (p: *CssParser, name: CssName) -> s32 {
+    for index: cast(s32)0..p.theme_count - 1 {
+        if CssNameEqualsName(p.themes[index], name) { return index }
+    }
+    if p.theme_count >= CssThemeCapacity {
+        CssFail(p, "more than 32 -kryon-theme names")
+        return -1
+    }
+    p.themes[p.theme_count] = name
+    p.theme_count += 1
+    return p.theme_count - 1
+}
+
+CssAddViewport :: (p: *CssParser, branch: *CssBranch, start: s32, length: s32) {
+    if branch.viewport_count >= 4 {
+        CssFail(p, "more than 4 viewport features in one media query")
+        return
+    }
+    branch.viewport[branch.viewport_count].start = start
+    branch.viewport[branch.viewport_count].length = length
+    branch.viewport_count += 1
+}
+
+// The bits a feature value accepts on its axis, or 0 when unknown.
+CssFeatureBits :: (p: *CssParser, feature: CssName, value: CssName) -> u32 {
+    if CssNameEquals(feature, "prefers-color-scheme") {
+        if CssNameEquals(value, "light") { return CssBit(0) }
+        if CssNameEquals(value, "dark") { return CssBit(1) }
+    } else if CssNameEquals(feature, "prefers-contrast") {
+        if CssNameEquals(value, "no-preference") || CssNameEquals(value, "less") { return CssBit(2) }
+        if CssNameEquals(value, "more") || CssNameEquals(value, "high") { return CssBit(3) }
+    } else if CssNameEquals(feature, "-kryon-density") {
+        if CssNameEquals(value, "comfortable") { return CssBit(4) }
+        if CssNameEquals(value, "compact") { return CssBit(5) }
+        if CssNameEquals(value, "touch") { return CssBit(6) }
+    } else if CssNameEquals(feature, "-kryon-pointer") {
+        if CssNameEquals(value, "mouse") { return CssBit(7) }
+        if CssNameEquals(value, "touch") { return CssBit(8) }
+        if CssNameEquals(value, "mixed") { return CssBit(9) }
+    } else if CssNameEquals(feature, "pointer") {
+        if CssNameEquals(value, "fine") { return CssBit(7) | CssBit(9) }
+        if CssNameEquals(value, "coarse") { return CssBit(8) }
+    } else if CssNameEquals(feature, "any-pointer") {
+        if CssNameEquals(value, "fine") { return CssBit(7) | CssBit(9) }
+        if CssNameEquals(value, "coarse") { return CssBit(8) | CssBit(9) }
+    } else if CssNameEquals(feature, "hover") {
+        if CssNameEquals(value, "hover") { return CssBit(7) | CssBit(9) }
+        if CssNameEquals(value, "none") { return CssBit(8) }
+    } else if CssNameEquals(feature, "-kryon-platform") {
+        platform: s32 = CssPlatformValue(value)
+        if platform >= 0 { return CssBit(10 + platform) }
+    }
+    return 0
+}
+
+CssFeatureAxis :: (feature: CssName) -> u32 {
+    if CssNameEquals(feature, "prefers-color-scheme") { return CssSchemeBits }
+    if CssNameEquals(feature, "prefers-contrast") { return CssContrastBits }
+    if CssNameEquals(feature, "-kryon-density") { return CssDensityBits }
+    if CssNameEquals(feature, "-kryon-pointer") || CssNameEquals(feature, "pointer") ||
+        CssNameEquals(feature, "any-pointer") || CssNameEquals(feature, "hover") {
+        return CssPointerBits
+    }
+    if CssNameEquals(feature, "-kryon-platform") { return CssPlatformBits }
+    return 0
+}
+
+// One '(feature: value)' with the cursor on '('.
+CssReadFeature :: (p: *CssParser, branch: *CssBranch) {
+    start: s32 = p.cursor.pos
+    CssAdvance(p, 1)
+    CssSkipSpace(p)
+    if CssFailed(p) { return }
+    feature: CssName = CssReadName(p)
+    if CssFailed(p) { return }
+    if feature.length == 0 {
+        CssFail(p, "expected a media feature")
+        return
+    }
+    if CssViewportFeature(feature) {
+        depth: s32 = 1
+        while !CssAtEnd(p) && depth > 0 {
+            byte: u8 = CssPeek(p, 0)
+            if byte == #char "(" { depth += 1 }
+            if byte == #char ")" { depth -= 1 }
+            if byte == #char "{" || byte == #char ";" || byte == #char "}" { break }
+            CssAdvance(p, 1)
+        }
+        if depth != 0 {
+            CssFail(p, "expected ')' after the media feature")
+            return
+        }
+        CssAddViewport(p, branch, start, p.cursor.pos - start)
+        return
+    }
+    if !CssExpect(p, #char ":", "expected ':' in the media feature") { return }
+    CssSkipSpace(p)
+    if CssFailed(p) { return }
+    value: CssName = CssReadName(p)
+    if CssFailed(p) { return }
+    if value.length == 0 {
+        CssFail(p, "expected a media feature value")
+        return
+    }
+    if !CssExpect(p, #char ")", "expected ')' after the media feature") { return }
+    if CssNameEquals(feature, "-kryon-theme") {
+        theme: s32 = CssThemeIndex(p, value)
+        if theme < 0 { return }
+        if branch.theme >= 0 && branch.theme != theme {
+            // Two different themes never hold at once.
+            branch.mask = 0
+        }
+        branch.theme = theme
+        return
+    }
+    axis: u32 = CssFeatureAxis(feature)
+    if axis == cast(u32)0 {
+        CssFailName(p, "unknown media feature", feature, "")
+        return
+    }
+    bits: u32 = CssFeatureBits(p, feature, value)
+    if bits == cast(u32)0 {
+        CssFailName(p, "unknown value", value, " for this media feature")
+        return
+    }
+    branch.mask &= ~axis | bits
+}
+
+CssMediaWord :: (p: *CssParser, word: CssName, branch: *CssBranch, start: s32) -> bool {
+    if CssNameEquals(word, "all") || CssNameEquals(word, "screen") { return true }
+    if CssNameEquals(word, "print") {
+        CssAddViewport(p, branch, start, p.cursor.pos - start)
+        return !CssFailed(p)
+    }
+    if CssNameEquals(word, "not") {
+        CssFail(p, "'not' media queries are outside Kryon CSS")
+        return false
+    }
+    CssFailName(p, "unknown media type", word, "")
+    return false
+}
+
+// A media query list up to '{', with the cursor after '@media'.
+CssReadMediaQuery :: (p: *CssParser) -> CssCondition {
+    condition: CssCondition
+    while true {
+        CssSkipSpace(p)
+        if CssFailed(p) { return condition }
+        if condition.count >= 4 {
+            CssFail(p, "more than 4 queries in one media list")
+            return condition
+        }
+        branch: CssBranch
+        branch.mask = CssAllBits
+        branch.theme = -1
+        terms: s32 = 0
+        expect_term: bool = true
+        while true {
+            CssSkipSpace(p)
+            if CssFailed(p) { return condition }
+            if CssAtEnd(p) {
+                CssFail(p, "expected '{' after the media query")
+                return condition
+            }
+            if CssAtByte(p, #char "{") || CssAtByte(p, #char ",") { break }
+            if CssAtByte(p, #char "(") {
+                if !expect_term {
+                    CssFail(p, "expected 'and' between media features")
+                    return condition
+                }
+                CssReadFeature(p, *branch)
+                if CssFailed(p) { return condition }
+                terms += 1
+                expect_term = false
+                continue
+            }
+            start: s32 = p.cursor.pos
+            word: CssName = CssReadName(p)
+            if CssFailed(p) { return condition }
+            if word.length == 0 {
+                CssFail(p, "expected a media feature in parentheses")
+                return condition
+            }
+            if CssNameEquals(word, "and") {
+                if expect_term {
+                    CssFail(p, "'and' needs a media feature on both sides")
+                    return condition
+                }
+                expect_term = true
+                continue
+            }
+            if CssNameEquals(word, "only") && terms == 0 { continue }
+            if terms != 0 {
+                CssFail(p, "the media type comes first")
+                return condition
+            }
+            if !CssMediaWord(p, word, *branch, start) { return condition }
+            terms += 1
+            expect_term = false
+        }
+        if terms == 0 || expect_term {
+            CssFail(p, "expected a media query")
+            return condition
+        }
+        condition.branches[condition.count] = branch
+        condition.count += 1
+        if CssAtByte(p, #char "{") { break }
+        CssAdvance(p, 1)
+    }
+    // Branches no environment can satisfy drop out.
+    kept: s32 = 0
+    for index: cast(s32)0..condition.count - 1 {
+        if CssBranchPossible(condition.branches[index]) {
+            condition.branches[kept] = condition.branches[index]
+            kept += 1
+        }
+    }
+    if kept == 0 { condition.never = true }
+    condition.count = kept
+    return condition
+}
+
+CssBranchPossible :: (branch: CssBranch) -> bool {
+    return (branch.mask & CssSchemeBits) != cast(u32)0 && (branch.mask & CssContrastBits) != cast(u32)0 &&
+        (branch.mask & CssDensityBits) != cast(u32)0 && (branch.mask & CssPointerBits) != cast(u32)0 &&
+        (branch.mask & CssPlatformBits) != cast(u32)0
+}
+
+// Both conditions: a query nested in another.
+CssConditionAnd :: (p: *CssParser, outer: CssCondition, inner: CssCondition) -> CssCondition {
+    if outer.never || inner.never {
+        never: CssCondition
+        never.never = true
+        return never
+    }
+    if outer.count == 0 { return inner }
+    if inner.count == 0 { return outer }
+    result: CssCondition
+    for a: cast(s32)0..outer.count - 1 {
+        for b: cast(s32)0..inner.count - 1 {
+            branch: CssBranch = outer.branches[a]
+            other: CssBranch = inner.branches[b]
+            branch.mask &= other.mask
+            if branch.theme >= 0 && other.theme >= 0 && branch.theme != other.theme { continue }
+            if other.theme >= 0 { branch.theme = other.theme }
+            if !CssBranchPossible(branch) { continue }
+            for index: cast(s32)0..other.viewport_count - 1 {
+                CssAddViewport(p, *branch, other.viewport[index].start, other.viewport[index].length)
+            }
+            if CssFailed(p) { return result }
+            if result.count >= 4 {
+                CssFail(p, "nested media queries combine to more than 4 queries")
+                return result
+            }
+            result.branches[result.count] = branch
+            result.count += 1
+        }
+    }
+    if result.count == 0 { result.never = true }
+    return result
+}
+
+// Does the condition hold? Native hosts pass web=false: viewport features
+// never match there. The web exporter passes web=true and keeps them.
+#program_export
+CssConditionMatches :: (condition: *CssCondition, env: CssEnvironment, themes: []CssName,
+    web: bool) -> bool {
+    if condition.never { return false }
+    if condition.count == 0 { return true }
+    bits: u32 = CssEnvironmentBits(env)
+    for index: cast(s32)0..condition.count - 1 {
+        if CssBranchMatches(*condition.branches[index], env, bits, themes, web) { return true }
+    }
+    return false
+}
+
+CssBranchMatches :: (branch: *CssBranch, env: CssEnvironment, bits: u32, themes: []CssName,
+    web: bool) -> bool {
+    if (branch.mask & bits) != bits { return false }
+    if branch.viewport_count > 0 && !web { return false }
+    if branch.theme >= 0 {
+        if branch.theme >= cast(s32)themes.count { return false }
+        if !CssNameEqualsName(themes[branch.theme], env.theme_name) { return false }
+    }
+    return true
+}

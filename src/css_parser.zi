@@ -1,0 +1,401 @@
+#import "kryon/style"
+#import "kryon/style_sheet"
+#import "kryon/control_props"
+
+using CssStatus;
+using CssTokenKind;
+using CssValueKind;
+using CssScheme;
+using CssContrast;
+using CssDensity;
+using CssPointer;
+using CssPlatform;
+using CssField;
+using ButtonTone;
+using ButtonEmphasis;
+using ControlSize;
+using ButtonState;
+using MaterialKind;
+using StyleField;
+
+// Kryon CSS: the closed subset of CSS every Kryon host implements. A sheet
+// is ordinary CSS text and this module is its one parser. It streams each
+// rule lowered to Kryon's typed style table, each :root custom property and
+// the media condition both apply under. var() references stay symbolic until
+// the sheet installs, so a theme switch only swaps custom property values.
+// Anything outside the subset is a diagnostic with file, line and column;
+// a sheet never installs partly. Hosts own I/O: they feed source text in and
+// answer @import requests.
+
+CssStatus :: enum {
+    CssStatusContinue :: 0
+    // p.rule holds a style rule.
+    CssStatusRule :: 1
+    // p.pending_import names a sheet: answer with CssProvideImport or CssFailImport.
+    CssStatusNeedImport :: 2
+    CssStatusDone :: 3
+    // CssDiagnostic(p) says what and where.
+    CssStatusError :: 4
+    // p.definition holds a :root custom property.
+    CssStatusProperty :: 5
+    // p.raw_start/raw_length span an @keyframes block (web hosts only).
+    CssStatusKeyframes :: 6
+}
+
+// Custom property value types, inferred from the value.
+CssTokenKind :: enum {
+    CssTokenColor :: 0
+    CssTokenLength :: 1
+    CssTokenDuration :: 2
+    CssTokenMaterial :: 3
+    CssTokenNumber :: 4
+    CssTokenAlias :: 5
+    CssTokenUndefined :: 6
+}
+
+CssScheme :: enum {
+    CssSchemeLight :: 0
+    CssSchemeDark :: 1
+}
+
+CssContrast :: enum {
+    CssContrastNormal :: 0
+    CssContrastHigh :: 1
+}
+
+CssDensity :: enum {
+    CssDensityComfortable :: 0
+    CssDensityCompact :: 1
+    CssDensityTouch :: 2
+}
+
+CssPointer :: enum {
+    CssPointerMouse :: 0
+    CssPointerTouch :: 1
+    CssPointerMixed :: 2
+}
+
+CssPlatform :: enum {
+    CssPlatformDesktop :: 0
+    CssPlatformAndroid :: 1
+    CssPlatformWeb :: 2
+    CssPlatformPlan9 :: 3
+    CssPlatformTerminal :: 4
+}
+
+// Style table fields a declaration, or one part of a shorthand, sets.
+CssField :: enum {
+    CssFieldBackground :: 0
+    CssFieldBackgroundEnd :: 1
+    CssFieldForeground :: 2
+    CssFieldBorder :: 3
+    CssFieldFocus :: 4
+    CssFieldRadius :: 5
+    CssFieldBorderWidth :: 6
+    CssFieldOpacity :: 7
+    CssFieldPaddingX :: 8
+    CssFieldPaddingY :: 9
+    CssFieldGap :: 10
+    CssFieldFontSize :: 11
+    CssFieldIconSize :: 12
+    CssFieldOffsetX :: 13
+    CssFieldOffsetY :: 14
+    CssFieldMaterial :: 15
+    CssFieldLetterSpacing :: 16
+}
+
+// Rules outside every @layer outrank layered ones, as in CSS.
+CssLayerUnlayered :: 1000
+CssNameCapacity :: 256
+CssThemeCapacity :: 32
+
+CssName :: struct {
+    bytes: [64]u8
+    length: s32
+}
+
+CssCursor :: struct {
+    source: string
+    pos: s32
+    line: s32
+    column: s32
+    file: s32
+}
+
+// What media queries test. Hosts fill it from the platform; theme_name names
+// a theme from a host catalog, tested by (-kryon-theme: name).
+CssEnvironment :: struct {
+    scheme: s32
+    theme_name: CssName
+    contrast: s32
+    density: s32
+    pointer: s32
+    platform: s32
+}
+
+CssSourceFile :: struct {
+    name: [96]u8
+    length: s32
+}
+
+// A custom property value. Lengths are px, durations milliseconds; an alias
+// names another custom property by index.
+CssToken :: struct {
+    name: CssName
+    kind: s32
+    color: u32
+    number: float32
+    material: s32
+    alias: s32
+    file: s32
+    line: s32
+    column: s32
+}
+
+CssOrigin :: struct {
+    file: s32
+    line: s32
+    column: s32
+}
+
+// A var() in the rule being read: custom property `token` fills `field`.
+// With a fallback the rule already holds the fallback value.
+CssLocalRef :: struct {
+    token: s32
+    field: s32
+    line: s32
+    fallback: bool
+}
+
+// Source spans of the yielded rule, for the web exporter and formatter.
+CssRuleSpan :: struct {
+    file: s32
+    selector_start: s32
+    selector_length: s32
+    body_start: s32
+    body_length: s32
+}
+
+CssDeclaration :: struct {
+    name_start: s32
+    name_length: s32
+    value_start: s32
+    value_length: s32
+    // CssScopeNative, CssScopeWeb (document layout) or CssScopeKryon (-kryon-).
+    scope: s32
+}
+
+// A viewport feature such as '(max-width: 600px)': only the web document
+// host evaluates it, so the exporter keeps its text.
+CssFeatureSpan :: struct {
+    start: s32
+    length: s32
+}
+
+// One branch of a media query list: the environment values it accepts (one
+// bit per axis value), a catalog theme it requires, and viewport features.
+CssBranch :: struct {
+    mask: u32
+    theme: s32
+    viewport: [4]CssFeatureSpan
+    viewport_count: s32
+}
+
+// Branches are alternatives. No branches means always; `never` means none
+// can match (a nested query that contradicts its parent).
+CssCondition :: struct {
+    branches: [4]CssBranch
+    count: s32
+    never: bool
+}
+
+CssBlockLayer :: 1
+CssBlockMedia :: 2
+CssBlockRoot :: 3
+
+CssBlock :: struct {
+    kind: s32
+    // The layer restored at '}'.
+    outer_layer: s32
+    // The media condition for everything inside, nested queries combined.
+    condition: CssCondition
+    query_start: s32
+    query_length: s32
+    file: s32
+}
+
+CssImportFrame :: struct {
+    name: CssName
+    outer: CssCursor
+    outer_imports_open: bool
+}
+
+// A selector of the current rule block; a selector list yields one rule each.
+CssPendingSelector :: struct {
+    selector: StyleSelector
+    state: s32
+    start: s32
+    length: s32
+}
+
+CssParser :: struct {
+    cursor: CssCursor
+    files: [8]CssSourceFile
+    file_count: s32
+    imports: [8]CssImportFrame
+    import_depth: s32
+    // @import is allowed until the file's first other construct.
+    imports_open: bool
+    // Custom property names, without '--', in first-use order.
+    names: [CssNameCapacity]CssName
+    name_count: s32
+    themes: [CssThemeCapacity]CssName
+    theme_count: s32
+    layer_names: [12]CssName
+    layer_count: s32
+    layer: s32
+    layer_of_rule: s32
+    blocks: [6]CssBlock
+    depth: s32
+    status: s32
+    // The yielded rule, its var() references, origin and spans.
+    rule: StyleRule
+    rule_refs: [24]CssLocalRef
+    rule_ref_count: s32
+    origin: CssOrigin
+    rule_span: CssRuleSpan
+    // The innermost block around the yielded item, or -1, and its condition.
+    rule_block: s32
+    rule_condition: CssCondition
+    // The yielded custom property and its name index.
+    definition: CssToken
+    definition_index: s32
+    raw_start: s32
+    raw_length: s32
+    pending_import: CssName
+    selectors: [8]CssPendingSelector
+    selector_count: s32
+    selector_next: s32
+    selector_start: s32
+    selector_length: s32
+    template: StyleData
+    declarations: [48]CssDeclaration
+    declaration_count: s32
+    // Web document declarations in the yielded rule; native hosts skip them.
+    web_declarations: s32
+    pending_name_start: s32
+    pending_name_cursor: CssCursor
+    pending_name_length: s32
+    pending_value_start: s32
+    pending_value_length: s32
+    pending_end: CssCursor
+    diagnostic: [256]u8
+    diagnostic_length: s32
+    rule_total: s32
+}
+
+#program_export
+CssDefaultEnvironment :: () -> CssEnvironment {
+    env: CssEnvironment
+    env.scheme = cast(s32)CssSchemeLight
+    env.contrast = cast(s32)CssContrastNormal
+    env.density = cast(s32)CssDensityComfortable
+    env.pointer = cast(s32)CssPointerMouse
+    env.platform = cast(s32)CssPlatformDesktop
+    return env
+}
+
+// Hosts supply platform names; their meaning stays here. A theme other than
+// light or dark is a catalog theme; names ending in dark select the dark
+// scheme as well.
+#program_export
+CssEnvironmentWithNames :: (env: CssEnvironment, theme: string,
+    contrast: string, density: string, pointer: string,
+    platform: string) -> CssEnvironment {
+    name: CssName = CssMakeName(theme)
+    env.theme_name = name
+    if CssNameEquals(name, "dark") || CssTextEndsWith(theme, "_dark") ||
+        CssTextEndsWith(theme, "-dark") {
+        env.scheme = cast(s32)CssSchemeDark
+    } else if theme.count > 0 {
+        env.scheme = cast(s32)CssSchemeLight
+    }
+    if CssNameEquals(CssMakeName(contrast), "high") ||
+        CssNameEquals(CssMakeName(contrast), "more") {
+        env.contrast = cast(s32)CssContrastHigh
+    } else if contrast.count > 0 {
+        env.contrast = cast(s32)CssContrastNormal
+    }
+    if CssNameEquals(CssMakeName(density), "compact") {
+        env.density = cast(s32)CssDensityCompact
+    } else if CssNameEquals(CssMakeName(density), "touch") {
+        env.density = cast(s32)CssDensityTouch
+    } else if density.count > 0 {
+        env.density = cast(s32)CssDensityComfortable
+    }
+    if CssNameEquals(CssMakeName(pointer), "touch") {
+        env.pointer = cast(s32)CssPointerTouch
+    } else if CssNameEquals(CssMakeName(pointer), "mixed") {
+        env.pointer = cast(s32)CssPointerMixed
+    } else if pointer.count > 0 {
+        env.pointer = cast(s32)CssPointerMouse
+    }
+    if platform.count > 0 {
+        value: s32 = CssPlatformValue(CssMakeName(platform))
+        if value >= 0 { env.platform = value }
+    }
+    return env
+}
+
+CssTextEndsWith :: (text: string, suffix: string) -> bool {
+    if suffix.count > text.count { return false }
+    return text[text.count - suffix.count:text.count] == suffix
+}
+
+CssPlatformValue :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "desktop") { return cast(s32)CssPlatformDesktop }
+    if CssNameEquals(name, "android") { return cast(s32)CssPlatformAndroid }
+    if CssNameEquals(name, "web") { return cast(s32)CssPlatformWeb }
+    if CssNameEquals(name, "plan9") { return cast(s32)CssPlatformPlan9 }
+    if CssNameEquals(name, "terminal") { return cast(s32)CssPlatformTerminal }
+    return -1
+}
+
+// Start reading `source`, named `path` in diagnostics. The parser is large:
+// keep it in static or heap storage, not on a small thread stack.
+#program_export
+CssBegin :: (p: *CssParser, source: string, path: string) {
+    p.cursor.source = source
+    p.cursor.pos = 0
+    p.cursor.line = 1
+    p.cursor.column = 1
+    p.cursor.file = 0
+    p.files[0] = CssCopyFileName(path)
+    p.file_count = 1
+    p.import_depth = 0
+    p.imports_open = true
+    p.name_count = 0
+    p.theme_count = 0
+    p.layer_count = 0
+    p.layer = CssLayerUnlayered
+    p.depth = 0
+    p.status = cast(s32)CssStatusContinue
+    p.rule_ref_count = 0
+    p.rule_block = -1
+    p.rule_condition = CssCondition.{}
+    p.selector_count = 0
+    p.selector_next = 0
+    p.declaration_count = 0
+    p.web_declarations = 0
+    p.diagnostic_length = 0
+    p.rule_total = 0
+}
+
+// The rest of the module, in this order.
+#load "parser/lexer.zi";
+#load "parser/vocabulary.zi";
+#load "parser/values.zi";
+#load "parser/selectors.zi";
+#load "parser/properties.zi";
+#load "parser/media.zi";
+#load "parser/statements.zi";

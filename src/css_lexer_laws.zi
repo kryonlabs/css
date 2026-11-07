@@ -1,0 +1,28 @@
+#import "css_parser"
+
+// Laws for the byte classes the CSS lexer reads. Each states the expected
+// behavior independently of the implementation; `ziran check --project`
+// proves it for every byte. An implementation edit may not change this
+// file.
+
+Digit :: (b: s32) -> bool { return b >= 48 && b <= 57 }
+Letter :: (b: s32) -> bool { return (b >= 65 && b <= 90) || (b >= 97 && b <= 122) }
+
+// White space is CSS white space: space, tab, line feed, form feed and
+// carriage return; nothing else, NUL and vertical tab included.
+#law SpaceRule forall b: 0..255 => CssIsSpace(cast(u8)b) == (b == 32 || b == 9 || b == 10 || b == 12 || b == 13);
+
+// Digits are 0 to 9, letters are A to Z in either case, and hex digits are
+// digits and the letters A to F in either case.
+#law DigitRule forall b: 0..255 => CssIsDigit(cast(u8)b) == Digit(b);
+#law AlphaRule forall b: 0..255 => CssIsAlpha(cast(u8)b) == Letter(b);
+#law HexRule forall b: 0..255 => CssIsHexDigit(cast(u8)b) == (Digit(b) || (b >= 65 && b <= 70) || (b >= 97 && b <= 102));
+
+// Identifiers start with a letter, underscore or non-ASCII byte, never a
+// digit, hyphen or dot, and every byte that starts one may continue it.
+#law NameStartRule forall b: 0..255 => CssNameStart(cast(u8)b) == (Letter(b) || b == 95 || b >= 128);
+#law StartContinues forall b: 0..255 => !CssNameStart(cast(u8)b) || CssNameChar(cast(u8)b);
+
+// Identifiers continue with digits and hyphens too, never a dot, which
+// starts a class.
+#law NameCharRule forall b: 0..255 => CssNameChar(cast(u8)b) == (Letter(b) || Digit(b) || b == 95 || b == 45 || b >= 128);

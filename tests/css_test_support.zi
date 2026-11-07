@@ -1,0 +1,143 @@
+// Shared by the behavior tests: a sheet, its built rules, and checks that
+// print what failed. Each test's main returns test_failures.
+#import "css_parser"
+#import "css_sheet"
+#import "kryon/style"
+#import "kryon/style_sheet"
+
+libc :: #system_library "libc";
+RawWrite :: (descriptor: s32, input: *u8, count: u64) -> s64 #foreign libc "write";
+
+test_failures: s32 = 0;
+test_sheet: CssSheet;
+test_rules: StyleRules;
+test_diagnostic: [256]u8;
+
+TestSay :: (text: string) {
+    chunk: [512]u8
+    at: s32 = 0
+    while at < cast(s32)text.count {
+        count: s32 = cast(s32)text.count - at
+        if count > 512 { count = 512 }
+        for index: cast(s32)0..count - 1 { chunk[index] = text[at + index] }
+        if RawWrite(2, *chunk[0], cast(u64)count) <= 0 { return }
+        at += count
+    }
+}
+
+Check :: (ok: bool, label: string) {
+    if ok { return }
+    TestSay("FAIL ")
+    TestSay(label)
+    TestSay("\n")
+    test_failures += 1
+}
+
+Contains :: (text: string, fragment: string) -> bool {
+    if fragment.count == 0 { return true }
+    if fragment.count > text.count { return false }
+    for start: cast(s32)0..cast(s32)(text.count - fragment.count) {
+        if text[start:start + cast(s32)fragment.count] == fragment { return true }
+    }
+    return false
+}
+
+// Imports the tests may name.
+TestImports :: (name: string) -> CssImportAnswer {
+    answer: CssImportAnswer
+    if name == "base" {
+        answer.found = true
+        answer.source = "Button { color: #010203; gap: 1px; }"
+    } else if name == "tokens" {
+        answer.found = true
+        answer.source = ":root { --ink: #445566; }"
+    } else if name == "loop" {
+        answer.found = true
+        answer.source = "@import \"loop\";"
+    } else if name == "deep" {
+        answer.found = true
+        answer.source = "@import \"base\";\nText { color: red; }"
+    }
+    return answer
+}
+
+Diagnostic :: () -> string {
+    return CssSheetDiagnostic(*test_sheet, test_diagnostic[:])
+}
+
+Parse :: (source: string) -> bool {
+    CssSheetReset(*test_sheet)
+    return CssSheetParse(*test_sheet, source, "sheet.css", TestImports)
+}
+
+Env :: (theme: string) -> CssEnvironment {
+    return CssEnvironmentWithNames(CssDefaultEnvironment(), theme, "", "", "", "")
+}
+
+// Parse and build for `env`; false on either failure.
+BuildIn :: (source: string, env: CssEnvironment) -> bool {
+    if !Parse(source) { return false }
+    return CssSheetBuild(*test_sheet, env, null, *test_rules)
+}
+
+Build :: (source: string) -> bool {
+    return BuildIn(source, CssDefaultEnvironment())
+}
+
+// The sheet must fail to parse, saying `fragment`.
+ParseFails :: (source: string, fragment: string, label: string) {
+    if Parse(source) {
+        Check(false, label)
+        return
+    }
+    message: string = Diagnostic()
+    if !Contains(message, fragment) {
+        TestSay("  diagnostic: ")
+        TestSay(message)
+        TestSay("\n")
+        Check(false, label)
+    }
+}
+
+// The sheet parses but must fail to build, saying `fragment`.
+BuildFails :: (source: string, fragment: string, label: string) {
+    if !Parse(source) {
+        TestSay("  diagnostic: ")
+        TestSay(Diagnostic())
+        TestSay("\n")
+        Check(false, label)
+        return
+    }
+    if CssSheetBuild(*test_sheet, CssDefaultEnvironment(), null, *test_rules) {
+        Check(false, label)
+        return
+    }
+    message: string = Diagnostic()
+    if !Contains(message, fragment) {
+        TestSay("  diagnostic: ")
+        TestSay(message)
+        TestSay("\n")
+        Check(false, label)
+    }
+}
+
+// Like Build, printing the diagnostic when it fails.
+Builds :: (source: string, label: string) -> bool {
+    if Build(source) { return true }
+    TestSay("  diagnostic: ")
+    TestSay(Diagnostic())
+    TestSay("\n")
+    Check(false, label)
+    return false
+}
+
+Facts :: (kind: s32, class_name: s32) -> StyleFacts {
+    facts: StyleFacts = StyleDefaultFacts(kind)
+    facts.class_name = class_name
+    return facts
+}
+
+Resolve :: (facts: StyleFacts, state: s32) -> StyleData {
+    base: StyleData
+    return ResolveStyleRules(test_rules, base, facts, state)
+}

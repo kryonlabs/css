@@ -1,0 +1,2187 @@
+/* Kryon material style pack. `make style-packs` compiles it into
+   src/style_pack_material.zi, the table apps load. */
+
+:root {
+  --canvas: #101217;
+  --text: #f5f2ff;
+  --muted: #8d919a;
+  --surface: #151922;
+  --card: #1a1f29;
+  --panel: #202631;
+  --panel-hover: #2a3140;
+  --panel-pressed: #181d26;
+  --border: #3a4250;
+  --border-soft: #2a303b;
+  --border-hover: #4a5363;
+  --focus: #c9a8ff;
+  --accent: #c9a8ff;
+  --accent-hover: #d5bbff;
+  --accent-ink: #171022;
+  --danger: #f07178;
+  --danger-ink: #220b0d;
+  --danger-border: #ff9da2;
+  --success: #60d6a4;
+  --success-ink: #0d241a;
+  --warning: #f3cb78;
+  --warning-ink: #2a200c;
+  --accent-soft: #322940;
+  --danger-soft: #3c272d;
+  --success-soft: #24392f;
+  --warning-soft: #3d3527;
+  --divider: #343b48;
+  --row: #171c25;
+  --track: #222832;
+  --field-border: #2b3039;
+  --accent-border: #d8c0ff;
+  --border-hover-strong: #4b5361;
+  --scroll-thumb: #6f7480;
+  --scroll-border: #9ca2ad;
+  --field: #11151d;
+  --thumb-ink: #ffffff;
+  --transparent: #00000000;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --border-size: 1px;
+  --border-none: 0;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --pad-control-y: 10px;
+  --pad-field-y: 9px;
+  --font-sm: 15px;
+  --font-md: 18px;
+  --font-lg: 20px;
+  --icon-md: 20px;
+  --default: flat;
+}
+
+@layer base {
+  App {
+    background: var(--canvas);
+    color: var(--text);
+    -kryon-material: var(--default);
+  }
+
+  Surface {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: var(--space-4);
+    padding-block: 14px;
+    gap: var(--space-3);
+    -kryon-material: var(--default);
+  }
+
+  Popup {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Popup[role=Panel] {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Canvas {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Card {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+    border-radius: 16px;
+    border-width: var(--border-size);
+    padding-inline: 18px;
+    padding-block: var(--space-4);
+    gap: var(--space-3);
+    -kryon-material: var(--default);
+  }
+
+  Image {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--transparent);
+    color: #ffffff;
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: 0;
+    border-width: var(--border-none);
+    opacity: 1;
+    -kryon-material: flat;
+  }
+
+  Image[role=Label] {
+    color: var(--muted);
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Focus {
+    color: var(--focus);
+    border-color: var(--focus);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Focus:focus {
+    color: var(--focus);
+    border-color: var(--focus);
+  }
+
+  Focus[role=Box] {
+    color: var(--muted);
+    border-color: var(--border-hover);
+    border-width: 2px;
+    padding-inline: 3px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Focus[role=Box]:focus {
+    color: var(--focus);
+    border-color: var(--focus);
+  }
+
+  Focus[role=Label] {
+    color: var(--muted);
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Focus[role=Label]:focus {
+    color: var(--focus);
+  }
+
+  NavigationBar {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--transparent);
+    border-radius: 0;
+    border-width: var(--border-none);
+    padding-inline: 0;
+    padding-block: 0;
+    gap: var(--space-3);
+    -kryon-icon-size: 80px;
+    translate: 96px 56px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  NavigationBar[role=Panel] {
+    translate: 340px 0;
+    -kryon-icon-size: 128px;
+    padding-block: 58px;
+  }
+
+  NavigationBar[role=Row] {
+    -kryon-icon-size: 58px;
+    translate: 0 22px;
+    padding-inline: 36px;
+    padding-block: 36px;
+  }
+
+  NavigationBar[role=Action] {
+    -kryon-icon-size: 34px;
+    translate: 180px 16px;
+    padding-inline: 92px;
+    padding-block: 36px;
+    gap: 8px;
+  }
+
+  NavigationBar[role=Divider] {
+    -kryon-icon-size: 48px;
+    translate: 0 8px;
+    padding-block: 12px;
+    gap: 8px;
+  }
+
+  NavigationBarItem {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: 16px;
+    border-width: var(--border-none);
+    padding-inline: 3px;
+    padding-block: 12px;
+    gap: 4px;
+    font-size: var(--font-md);
+    -kryon-icon-size: 24px;
+    translate: 8px 0;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  NavigationBarItem:hover {
+    background: var(--panel);
+    color: var(--text);
+    padding-inline: 64px;
+    padding-block: 32px;
+  }
+
+  NavigationBarItem:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    padding-inline: 64px;
+    padding-block: 32px;
+  }
+
+  NavigationBarItem:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+  /* A tab bar is a row of labels over a divider. The selected tab's border is */
+  /* its indicator on the edge facing the content. */
+
+  TabBar {
+    font-size: var(--font-md);
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: 72px;
+    -kryon-icon-size: 48px;
+    translate: 168px 0;
+    gap: var(--space-2);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Tab {
+    background: var(--transparent);
+    color: var(--muted);
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: 3px;
+    padding-inline: var(--space-3);
+    padding-block: var(--space-2);
+    -kryon-icon-size: 44px;
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Tab:hover {
+    background: var(--panel);
+    color: var(--text);
+  }
+
+  Tab:active {
+    background: var(--panel-pressed);
+    color: var(--text);
+  }
+
+  Tab:selected {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  Tab:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  TabClose {
+    background: var(--transparent);
+    color: var(--muted);
+    border-color: var(--transparent);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    -kryon-icon-size: 24px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TabClose:hover {
+    background: var(--panel);
+    color: var(--text);
+  }
+
+  SegmentedControl {
+    font-size: var(--font-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+    border-radius: 21px;
+    border-width: var(--border-size);
+    padding-inline: 2px;
+    padding-block: 2px;
+    -kryon-icon-size: 30px;
+    translate: 72px 180px;
+    gap: var(--space-2);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Segment {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: 19px;
+    border-width: var(--border-none);
+    padding-inline: var(--space-3);
+    padding-block: 7px;
+    translate: 20px 0;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Segment:hover {
+    background: var(--panel);
+    color: var(--text);
+  }
+
+  Segment:active {
+    background: var(--panel-pressed);
+    color: var(--text);
+  }
+
+  Segment:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  Segment:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  Menu {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: var(--space-2);
+    padding-block: var(--space-2);
+    gap: var(--space-2);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Menu[role=Bar] {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    padding-inline: 12px;
+    padding-block: 3px;
+    gap: 2px;
+  }
+
+  Menu[role=Popup] {
+    background: var(--card);
+    color: var(--text);
+    border-color: var(--border);
+    padding-inline: 12px;
+    gap: 4px;
+    translate: 180px 0;
+  }
+
+  Menu[role=Context] {
+    background: var(--card);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  MenuItem {
+    -kryon-icon-size: var(--icon-md);
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    padding-inline: var(--space-3);
+    padding-block: var(--space-2);
+    translate: 88px 30px;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  MenuItem:hover {
+    background: var(--panel-hover);
+    color: var(--text);
+  }
+
+  MenuItem:active {
+    background: var(--panel-pressed);
+    color: var(--text);
+  }
+
+  MenuItem:selected {
+    background: var(--panel-hover);
+    color: var(--text);
+  }
+
+  MenuItem:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  MenuSeparator {
+    background: var(--transparent);
+    color: var(--border-soft);
+    border-color: var(--border-soft);
+    border-radius: 0;
+    border-width: var(--border-size);
+    padding-inline: 12px;
+    gap: 4px;
+    -kryon-icon-size: 32px;
+    translate: 60px 0;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Spinbox {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  SpinboxValue {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-size);
+    padding-inline: var(--space-3);
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Drag {
+    -kryon-icon-size: var(--icon-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    font-size: var(--font-sm);
+    padding-inline: 6px;
+    padding-block: 4px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  DragValue {
+    -kryon-icon-size: var(--icon-md);
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-size);
+    padding-inline: var(--space-3);
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  DragValue:disabled {
+    background: var(--surface);
+    color: var(--muted);
+    border-color: var(--border-soft);
+    opacity: 0.55;
+  }
+
+  ColorPicker {
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+    gap: 4px;
+    -kryon-icon-size: 36px;
+    padding-block: 2px;
+    translate: 20px 28px;
+  }
+
+  ColorPickerSwatch {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-size);
+    padding-inline: var(--space-2);
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  ListBox {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: var(--space-2);
+    padding-block: var(--space-2);
+    translate: 0 8px;
+    gap: var(--space-2);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  ListBoxItem {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    padding-inline: var(--space-3);
+    padding-block: var(--space-2);
+    -kryon-icon-size: 30px;
+    translate: 0 30px;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  ListBoxItem:hover {
+    background: var(--panel-hover);
+    color: var(--text);
+  }
+
+  ListBoxItem:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  ListBoxItem:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  TreeView {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: var(--space-2);
+    padding-block: var(--space-2);
+    gap: var(--space-2);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TreeViewItem {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    padding-inline: var(--space-3);
+    padding-block: 7px;
+    gap: 2px;
+    -kryon-icon-size: 16px;
+    translate: 18px 28px;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TreeViewItem:hover {
+    background: var(--panel-hover);
+    color: var(--text);
+  }
+
+  TreeViewItem:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  TreeViewItem:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  ListBoxMulti {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: var(--space-2);
+    padding-block: var(--space-2);
+    gap: var(--space-2);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  ListBoxMultiItem {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    padding-inline: var(--space-3);
+    padding-block: var(--space-2);
+    -kryon-icon-size: 28px;
+    translate: 0 28px;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  ListBoxMultiItem:hover {
+    background: var(--panel-hover);
+    color: var(--text);
+  }
+
+  ListBoxMultiItem:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  ListBoxMultiItem:focus {
+    border-color: var(--focus);
+  }
+
+  ListBoxMultiItem:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  DragDropTarget {
+    background: var(--transparent);
+    border-color: var(--border-hover);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    -kryon-material: var(--default);
+  }
+
+  DragDropTarget:hover {
+    border-color: var(--accent);
+    border-width: 2px;
+  }
+
+  Reorder {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Reorder[role=Handle] {
+    background: var(--transparent);
+    color: var(--muted);
+    border-color: var(--transparent);
+    border-width: var(--border-none);
+    padding-inline: 8px;
+    gap: 4px;
+    -kryon-icon-size: 3px;
+    translate: 36px 5px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Reorder[role=Handle]:selected {
+    color: var(--accent);
+  }
+
+  Reorder[role=Placeholder] {
+    background: var(--accent);
+    color: var(--accent);
+    border-color: var(--accent);
+    border-radius: var(--radius-md);
+    border-width: 2px;
+    padding-inline: 3px;
+    -kryon-icon-size: 32px;
+    translate: 34px 12px;
+    opacity: 0.10;
+    -kryon-material: var(--default);
+  }
+
+  Selectable {
+    -kryon-icon-size: var(--icon-md);
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-none);
+    padding-inline: var(--space-2);
+    padding-block: var(--space-2);
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Selectable:hover {
+    background: var(--panel);
+    color: var(--text);
+  }
+
+  Selectable:active {
+    background: var(--panel-pressed);
+    color: var(--text);
+  }
+
+  Selectable:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  Selectable:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  Fieldset {
+    -kryon-icon-size: var(--icon-md);
+    background: var(--canvas);
+    color: var(--muted);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: 8px;
+    padding-block: 8px;
+    gap: 9px;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  PanedView {
+    background: var(--transparent);
+    color: var(--muted);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  PanedView[role=Handle] {
+    background: var(--border-soft);
+    color: var(--muted);
+    border-color: var(--transparent);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    -kryon-icon-size: 8px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  PanedView[role=Handle]:hover {
+    background: var(--border-hover);
+  }
+
+  PanedView[role=Handle]:active {
+    background: var(--accent);
+  }
+
+  Toast {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: 14px;
+    padding-block: 10px;
+    gap: 18px;
+    opacity: 0.98;
+    -kryon-material: var(--default);
+  }
+
+  Toast[role=Label] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Collapsible {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Collapsible[role=Header] {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    font-size: var(--font-md);
+    -kryon-icon-size: 20px;
+    padding-inline: 8px;
+    padding-block: 8px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Collapsible[role=Header]:hover {
+    background: var(--panel-hover);
+  }
+
+  Collapsible[role=Header]:active {
+    background: var(--panel-pressed);
+  }
+
+  Collapsible[role=Header]:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  Collapsible[role=Header]:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  Collapsible[role=TreeHeader] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    font-size: var(--font-md);
+    -kryon-icon-size: 20px;
+    padding-inline: 20px;
+    padding-block: 8px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Collapsible[role=TreeHeader]:hover {
+    background: var(--panel);
+  }
+
+  Collapsible[role=TreeHeader]:selected {
+    background: var(--transparent);
+    color: var(--accent);
+  }
+
+  Collapsible[role=TreeHeader]:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  Collapsible[role=Close] {
+    background: var(--transparent);
+    color: var(--muted);
+    border-color: var(--transparent);
+    font-size: var(--font-md);
+    -kryon-icon-size: 28px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Collapsible[role=Close]:hover {
+    color: var(--text);
+  }
+
+  Collapsible[role=Close]:disabled {
+    opacity: 0.45;
+  }
+
+  TitleBar {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TitleBar[role=Bar] {
+    background: var(--canvas);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: 0;
+    border-width: var(--border-none);
+    padding-inline: 12px;
+    gap: 4px;
+    -kryon-icon-size: 32px;
+    translate: 60px 0;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TitleBar[role=Title] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    font-size: var(--font-lg);
+    -kryon-icon-size: 48px;
+    padding-inline: 16px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TitleBar[role=Action] {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--transparent);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    -kryon-icon-size: 24px;
+    padding-inline: 10px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TitleBar[role=Action]:hover {
+    background: var(--panel-hover);
+  }
+
+  TitleBar[role=Action]:active {
+    background: var(--panel-pressed);
+  }
+
+  Toolbar {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Toolbar[role=Bar] {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: 0;
+    border-width: var(--border-size);
+    padding-inline: 12px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Toolbar[role=Divider] {
+    background: var(--transparent);
+    color: var(--muted);
+    border-color: var(--border-soft);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Toolbar[role=Action] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    padding-inline: 8px;
+    gap: 0;
+    -kryon-icon-size: 20px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Toolbar[role=Action]:hover {
+    background: var(--panel);
+  }
+
+  Toolbar[role=Action]:active {
+    background: var(--panel-pressed);
+  }
+
+  Toolbar[role=BottomBar] {
+    padding-inline: 24px;
+    padding-block: 6px;
+    gap: 8px;
+    translate: 120px 0;
+  }
+
+  Toolbar[role=BottomAction] {
+    padding-inline: 10px;
+    gap: 12px;
+    -kryon-icon-size: 24px;
+    translate: 16px 6px;
+  }
+
+  Modal {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Modal[role=Scrim] {
+    background: #000000;
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 0.62;
+    -kryon-material: var(--default);
+  }
+
+  Modal[role=Panel] {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    padding-inline: 18px;
+    padding-block: 18px;
+    gap: 24px;
+    -kryon-icon-size: 280px;
+    translate: 420px 58px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Modal[role=Title] {
+    color: var(--text);
+    font-size: var(--font-lg);
+    padding-inline: 24px;
+    padding-block: 18px;
+    -kryon-icon-size: 48px;
+    translate: 0 14px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Modal[role=Message] {
+    color: var(--text);
+    font-size: var(--font-md);
+    padding-inline: 120px;
+    padding-block: 160px;
+    gap: 18px;
+    -kryon-icon-size: 38px;
+    translate: 0 18px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Modal[role=Action] {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-hover);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: 24px;
+    gap: 8px;
+    -kryon-icon-size: 44px;
+    translate: 88px 150px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Modal[role=Action]:hover {
+    background: var(--panel-hover);
+  }
+
+  Modal[role=Action]:active {
+    background: var(--panel-pressed);
+  }
+
+  Modal[role=Action][tone=Accent] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  Modal[role=Action][tone=Danger] {
+    background: var(--danger);
+    color: var(--danger-ink);
+    border-color: var(--danger-border);
+  }
+
+  Modal[role=Close] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    padding-inline: 8px;
+    padding-block: 16px;
+    gap: 6px;
+    -kryon-icon-size: 20px;
+    translate: 120px 96px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Modal[role=Close]:hover {
+    background: var(--panel-hover);
+  }
+
+  Modal[role=Close]:active {
+    background: var(--panel-pressed);
+  }
+
+  Guide {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Scrim] {
+    background: #000000;
+    color: var(--text);
+    border-color: var(--transparent);
+    opacity: 0.34;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Bar] {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: 0;
+    border-width: var(--border-none);
+    padding-inline: 12px;
+    gap: 12px;
+    -kryon-icon-size: 48px;
+    translate: 48px 0;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Divider] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Panel] {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    padding-inline: 12px;
+    padding-block: 12px;
+    gap: 20px;
+    translate: 300px 112px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Anchor] {
+    background: var(--transparent);
+    color: var(--accent);
+    border-color: var(--accent);
+    border-width: var(--border-size);
+    padding-inline: 4px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Label] {
+    color: var(--text);
+    font-size: var(--font-md);
+    padding-inline: 8px;
+    padding-block: 6px;
+    gap: 8px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Action] {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-hover);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: 7px;
+    gap: 8px;
+    -kryon-icon-size: 19px;
+    translate: 0 34px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Action]:hover {
+    background: var(--panel-hover);
+  }
+
+  Guide[role=Close] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-none);
+    padding-inline: 6px;
+    gap: 12px;
+    -kryon-icon-size: 16px;
+    translate: 0 28px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Guide[role=Close]:hover {
+    background: var(--panel-hover);
+  }
+
+  TableView {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    translate: 0 28px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TableView[role=Panel] {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TableView[role=Header] {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-size);
+    padding-inline: 6px;
+    translate: 0 30px;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TableView[role=Header]:hover {
+    background: var(--panel-hover);
+  }
+
+  TableView[role=Header]:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  TableView[role=Row] {
+    background: var(--row);
+    color: var(--text);
+    border-color: var(--transparent);
+    border-radius: 0;
+    border-width: var(--border-none);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TableView[role=Cell] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    translate: 32px 0;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TableView[role=Selection] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    border-radius: var(--radius-sm);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  TableView[role=Selection]:hover {
+    background: var(--accent-hover);
+  }
+
+  TableView[role=Divider] {
+    background: var(--transparent);
+    color: var(--muted);
+    border-color: var(--border-soft);
+    border-width: var(--border-size);
+    padding-inline: 5px;
+    translate: 0 8px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Plot {
+    -kryon-icon-size: var(--icon-md);
+    background: var(--card);
+    color: var(--muted);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: 6px;
+    padding-block: 4px;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  PlotMark {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Text {
+    color: var(--text);
+    font-size: var(--font-md);
+    opacity: 1;
+  }
+
+  Text.muted {
+    color: var(--muted);
+  }
+
+  Page {
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  Section {
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  Heading {
+    color: var(--text);
+    font-size: 24px;
+    opacity: 1;
+  }
+
+  ParagraphText {
+    color: var(--text);
+    font-size: var(--font-md);
+    gap: var(--space-2);
+    opacity: 1;
+  }
+
+  Link {
+    -kryon-icon-size: var(--icon-md);
+    color: var(--accent);
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Link:hover {
+    color: var(--accent-hover);
+  }
+
+  Link:disabled {
+    color: var(--muted);
+    opacity: 0.45;
+  }
+
+  Separator {
+    -kryon-material: var(--default);
+    background: var(--divider);
+    color: var(--muted);
+    gap: var(--space-3);
+    opacity: 1;
+  }
+
+  Separator[role=Line] {
+    background: var(--divider);
+    color: var(--muted);
+    gap: var(--space-3);
+    opacity: 1;
+  }
+
+  Separator[role=Label] {
+    background: var(--divider);
+    color: var(--muted);
+    font-size: var(--font-sm);
+    gap: var(--space-3);
+    opacity: 1;
+  }
+
+  Separator[role=Bullet] {
+    background: var(--divider);
+    color: var(--muted);
+    -kryon-icon-size: 6px;
+    gap: var(--space-3);
+    opacity: 1;
+  }
+
+  Progress {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--track);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Progress[role=Track] {
+    background: var(--track);
+    color: var(--text);
+    border-color: var(--border-soft);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Progress[role=Fill] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Progress[role=Label] {
+    background: var(--transparent);
+    color: var(--text);
+    border-color: var(--transparent);
+    padding-inline: 6px;
+    font-size: var(--font-sm);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+}
+
+@layer components {
+  Button {
+    background: linear-gradient(var(--panel), var(--panel));
+    color: var(--text);
+    border-color: var(--border);
+    outline-color: var(--focus);
+    border-radius: var(--radius-md);
+    border-width: var(--border-size);
+    padding-inline: var(--space-4);
+    padding-block: var(--pad-control-y);
+    gap: var(--space-2);
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Button:hover {
+    background: linear-gradient(var(--panel-hover), var(--panel-hover));
+    border-color: var(--border-hover);
+  }
+
+  Button:active {
+    background: linear-gradient(var(--panel-pressed), var(--panel-pressed));
+  }
+
+  Button:selected {
+    border-color: var(--focus);
+    border-width: 2px;
+  }
+
+  Button:focus {
+    border-color: var(--focus);
+  }
+
+  Button:disabled {
+    color: var(--muted);
+    border-color: var(--field-border);
+    opacity: 0.55;
+  }
+
+  Button:loading {
+    color: var(--accent);
+  }
+
+  Button[tone=Accent] {
+    background: linear-gradient(var(--accent), var(--accent));
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+  }
+
+  Button[tone=Accent]:hover {
+    background: linear-gradient(var(--accent-hover), var(--accent-hover));
+  }
+
+  Button[tone=Accent]:focus {
+    border-color: var(--focus);
+  }
+
+  Button[tone=Accent]:loading {
+    color: var(--accent);
+  }
+
+  Button[tone=Danger] {
+    background: linear-gradient(var(--danger), var(--danger));
+    color: var(--danger-ink);
+    border-color: var(--danger-border);
+  }
+
+  Button[tone=Success] {
+    background: linear-gradient(var(--success), var(--success));
+    color: var(--success-ink);
+    border-color: var(--success);
+  }
+
+  Button[tone=Warning] {
+    background: linear-gradient(var(--warning), var(--warning));
+    color: var(--warning-ink);
+    border-color: var(--warning);
+  }
+
+  Button[emphasis=Soft] {
+    background: linear-gradient(var(--panel), var(--panel));
+    color: var(--text);
+    border-color: var(--border-soft);
+  }
+
+  Button[emphasis=Soft]:hover {
+    background: linear-gradient(var(--panel-hover), var(--panel-hover));
+  }
+
+  Button[emphasis=Soft]:active {
+    background: linear-gradient(var(--panel-pressed), var(--panel-pressed));
+  }
+
+  Button[tone=Accent][emphasis=Soft] {
+    background: linear-gradient(var(--accent-soft), var(--accent-soft));
+    color: var(--accent);
+    border-color: var(--accent-soft);
+  }
+
+  Button[tone=Danger][emphasis=Soft] {
+    background: linear-gradient(var(--danger-soft), var(--danger-soft));
+    color: var(--danger);
+    border-color: var(--danger-soft);
+  }
+
+  Button[tone=Success][emphasis=Soft] {
+    background: linear-gradient(var(--success-soft), var(--success-soft));
+    color: var(--success);
+    border-color: var(--success-soft);
+  }
+
+  Button[tone=Warning][emphasis=Soft] {
+    background: linear-gradient(var(--warning-soft), var(--warning-soft));
+    color: var(--warning);
+    border-color: var(--warning-soft);
+  }
+
+  Button[emphasis=Outline] {
+    background: linear-gradient(var(--transparent), var(--transparent));
+    color: var(--text);
+    border-color: var(--border-hover-strong);
+  }
+
+  Button[emphasis=Ghost] {
+    background: linear-gradient(var(--transparent), var(--transparent));
+    color: var(--text);
+    border-color: var(--transparent);
+    border-width: var(--border-none);
+  }
+
+  Button[tone=Accent][emphasis=Outline] {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  Button[tone=Accent][emphasis=Ghost] {
+    color: var(--accent);
+  }
+
+  Button[tone=Danger][emphasis=Outline] {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+
+  Button[tone=Danger][emphasis=Ghost] {
+    color: var(--danger);
+  }
+
+  Button[tone=Success][emphasis=Outline] {
+    color: var(--success);
+    border-color: var(--success);
+  }
+
+  Button[tone=Success][emphasis=Ghost] {
+    color: var(--success);
+  }
+
+  Button[tone=Warning][emphasis=Outline] {
+    color: var(--warning);
+    border-color: var(--warning);
+  }
+
+  Button[tone=Warning][emphasis=Ghost] {
+    color: var(--warning);
+  }
+
+  Button[emphasis=Link] {
+    background: linear-gradient(var(--transparent), var(--transparent));
+    color: var(--accent);
+    border-color: var(--transparent);
+    border-width: var(--border-none);
+  }
+
+  Button[tone=Danger][emphasis=Link] {
+    color: var(--danger);
+  }
+
+  Button[tone=Success][emphasis=Link] {
+    color: var(--success);
+  }
+
+  Button[tone=Warning][emphasis=Link] {
+    color: var(--warning);
+  }
+
+  Button[emphasis=Link]:hover {
+    color: var(--accent-hover);
+  }
+
+  Button[tone=Danger][emphasis=Link]:hover {
+    color: var(--danger-border);
+  }
+
+  Button[tone=Accent][emphasis=Filled]:loading {
+    color: var(--accent-ink);
+  }
+
+  Button[emphasis=Ghost]:hover {
+    background: linear-gradient(var(--panel-hover), var(--panel-hover));
+  }
+
+  Button[emphasis=Ghost]:active {
+    background: linear-gradient(var(--panel-pressed), var(--panel-pressed));
+  }
+
+  Button[emphasis=Outline]:hover {
+    background: linear-gradient(var(--panel-hover), var(--panel-hover));
+  }
+
+  Button[emphasis=Outline]:active {
+    background: linear-gradient(var(--panel-pressed), var(--panel-pressed));
+  }
+
+  Button[size=Small] {
+    border-radius: var(--radius-sm);
+    padding-inline: var(--space-3);
+    padding-block: 7px;
+    font-size: var(--font-sm);
+    -kryon-icon-size: 18px;
+  }
+
+  Button[size=Large] {
+    border-radius: var(--radius-lg);
+    padding-inline: var(--space-5);
+    padding-block: 13px;
+    font-size: var(--font-lg);
+    -kryon-icon-size: 22px;
+  }
+
+  Dropdown {
+    -kryon-icon-size: var(--icon-md);
+    opacity: 1;
+    background: var(--row);
+    color: var(--text);
+    border-color: var(--border);
+    outline-color: var(--focus);
+    border-radius: 8px;
+    border-width: 1px;
+    padding-inline: 14px;
+    padding-block: 9px;
+    gap: 8px;
+    font-size: var(--font-md);
+    -kryon-material: flat;
+    translate: 24px 16px;
+  }
+
+  Dropdown:hover {
+    background: var(--panel-hover);
+    border-color: var(--border-hover);
+  }
+
+  Dropdown:active {
+    background: var(--panel-pressed);
+  }
+
+  Dropdown:focus {
+    border-color: var(--focus);
+  }
+
+  Dropdown:disabled {
+    color: var(--muted);
+    opacity: 0.55;
+  }
+
+  Dropdown[tone=Accent] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+  }
+
+  Dropdown:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+  }
+
+  Dropdown[role=Panel] {
+    background: var(--panel);
+    border-color: var(--border);
+    padding-block: 4px;
+    gap: 4px;
+    translate: 0 16px;
+  }
+
+  Dropdown[role=Option] {
+    padding-inline: 4px;
+    padding-block: 2px;
+  }
+
+  Dropdown[role=Scrollbar] {
+    -kryon-icon-size: 8px;
+    padding-block: 2px;
+    gap: 2px;
+    translate: 8px 0;
+  }
+
+  Dropdown[role=Option]:hover {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+  }
+
+  Dropdown[role=Option]:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+  }
+
+  Slider {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--border-soft);
+    color: var(--text);
+    border-color: var(--border);
+    outline-color: var(--focus);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Slider[role=Track] {
+    padding-inline: 32px;
+    padding-block: 6px;
+    gap: 14px;
+    -kryon-icon-size: 8px;
+    translate: 36px 28px;
+    opacity: 1;
+  }
+
+  Slider[role=Label] {
+    color: var(--text);
+    font-size: var(--font-md);
+  }
+
+  Slider:hover {
+    background: var(--divider);
+  }
+
+  Slider:active {
+    background: var(--panel);
+  }
+
+  Slider[role=Fill] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+  }
+
+  Slider:disabled {
+    color: var(--muted);
+    opacity: 0.5;
+  }
+
+  SliderThumb {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+    outline-color: var(--accent);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    gap: 8px;
+    -kryon-icon-size: 22px;
+    opacity: 1;
+    -kryon-material: flat;
+  }
+
+  SliderThumb:disabled {
+    background: var(--muted);
+    color: var(--surface);
+    border-color: var(--border);
+    outline-color: var(--border);
+    opacity: 0.5;
+  }
+
+  Scroll {
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--border-soft);
+    outline-color: var(--focus);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    -kryon-icon-size: 10px;
+    padding-inline: 16px;
+    padding-block: 8px;
+    gap: 20px;
+    translate: 5px 42px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  ScrollThumb {
+    background: var(--scroll-thumb);
+    color: var(--surface);
+    border-color: var(--scroll-border);
+    outline-color: var(--focus);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    -kryon-icon-size: 16px;
+    padding-inline: 2px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  ScrollThumb:hover {
+    background: var(--accent-hover);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+  }
+
+  ScrollThumb:active {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+  }
+
+  Toggle {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--border-soft);
+    color: var(--text);
+    border-color: var(--border);
+    outline-color: var(--focus);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Toggle[role=Track] {
+    padding-inline: 54px;
+    padding-block: 32px;
+    gap: 4px;
+    border-radius: 999px;
+    opacity: 1;
+  }
+
+  Toggle[role=Label] {
+    color: var(--text);
+    padding-inline: 10px;
+    font-size: var(--font-md);
+    opacity: 1;
+  }
+
+  Toggle:hover {
+    background: var(--divider);
+  }
+
+  Toggle:active {
+    background: var(--panel);
+  }
+
+  Toggle[role=Fill] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent-border);
+    border-radius: 999px;
+    gap: 3px;
+  }
+
+  Toggle:disabled {
+    color: var(--muted);
+    opacity: 0.5;
+  }
+
+  ToggleThumb {
+    background: var(--surface);
+    color: var(--thumb-ink);
+    border-color: var(--border-hover);
+    outline-color: var(--focus);
+    border-radius: var(--radius-lg);
+    border-width: var(--border-size);
+    gap: 4px;
+    -kryon-icon-size: 20px;
+    opacity: 1;
+    -kryon-material: flat;
+  }
+
+  ToggleThumb[tone=Accent] {
+    background: var(--thumb-ink);
+    color: var(--thumb-ink);
+    border-color: var(--accent-border);
+    outline-color: var(--accent);
+    -kryon-icon-size: 24px;
+  }
+
+  ToggleThumb:disabled {
+    background: var(--muted);
+    color: var(--surface);
+    border-color: var(--border);
+    outline-color: var(--border);
+    opacity: 0.5;
+  }
+
+  Checkbox {
+    font-size: var(--font-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-hover);
+    outline-color: var(--focus);
+    border-width: var(--border-size);
+    padding-inline: 22px;
+    padding-block: 3px;
+    gap: 4px;
+    -kryon-icon-size: 20px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Checkbox:hover {
+    background: var(--panel);
+  }
+
+  Checkbox:active {
+    background: var(--panel-pressed);
+  }
+
+  Checkbox:selected {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+  }
+
+  Checkbox:disabled {
+    background: var(--surface);
+    color: var(--muted);
+    border-color: var(--border-soft);
+    opacity: 0.55;
+  }
+
+  Checkbox[role=Box] {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-hover);
+    outline-color: var(--focus);
+    border-width: var(--border-size);
+    padding-inline: 22px;
+    padding-block: 3px;
+    gap: 4px;
+    -kryon-icon-size: 20px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Checkbox[role=Mark] {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    outline-color: var(--focus);
+    border-width: var(--border-size);
+    padding-inline: 5px;
+    -kryon-icon-size: 2.4px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Checkbox[role=Label] {
+    color: var(--text);
+    gap: 10px;
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Checkbox[role=Label]:disabled {
+    color: var(--muted);
+    opacity: 0.55;
+  }
+
+  Radio {
+    font-size: var(--font-md);
+    -kryon-icon-size: var(--icon-md);
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-hover);
+    outline-color: var(--focus);
+    border-width: var(--border-size);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Radio:hover {
+    border-color: var(--focus);
+  }
+
+  Radio:selected {
+    background: var(--accent);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  Radio:disabled {
+    color: var(--muted);
+    border-color: var(--border-soft);
+    opacity: 0.55;
+  }
+
+  Radio[role=Ring] {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-hover);
+    outline-color: var(--focus);
+    border-width: var(--border-size);
+    -kryon-icon-size: 20px;
+    padding-inline: 40px;
+    gap: 4px;
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Radio[role=Mark] {
+    background: var(--accent);
+    color: var(--text);
+    border-color: var(--accent);
+    outline-color: var(--focus);
+    border-width: var(--border-size);
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Radio[role=Label] {
+    color: var(--text);
+    font-size: var(--font-md);
+    opacity: 1;
+    -kryon-material: var(--default);
+  }
+
+  Radio[role=Label]:disabled {
+    color: var(--muted);
+    opacity: 0.55;
+  }
+
+  TextField {
+    opacity: 1;
+    background: var(--field);
+    color: var(--text);
+    border-color: var(--border);
+    outline-color: var(--focus);
+    border-radius: 8px;
+    border-width: 1px;
+    padding-inline: 12px;
+    padding-block: 9px;
+    font-size: 16px;
+    -kryon-material: flat;
+  }
+
+  TextArea {
+    opacity: 1;
+    background: var(--field);
+    color: var(--text);
+    border-color: var(--border);
+    outline-color: var(--focus);
+    border-radius: 8px;
+    border-width: 1px;
+    padding-inline: 12px;
+    padding-block: 10px;
+    font-size: 16px;
+    gap: 6px;
+    -kryon-material: flat;
+  }
+}

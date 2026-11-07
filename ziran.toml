@@ -1,5 +1,5 @@
 [package]
-name = "Kss"
+name = "Css"
 module_roots = ["src", "tests", "tools"]
 
 [toolchain]
@@ -11,5 +11,5 @@ git = "https://github.com/kryonlabs/kryon.git"
 ref = "1cd873fda5d12cd4dd562956da94cee33c3e364c"
 
 [exports]
-Kss = "src/Kss/module.zi"
+Css = "src/Css/module.zi"
 SystemStyle = "src/system_style.zi"

@@ -1,0 +1,134 @@
+// One answer on every target. Each style pack, with an app sheet parsed
+// over it, is built in the light and dark scheme; the digest covers the
+// rule table and what it resolves to for every widget kind and state.
+// tests/css_conformance.sh runs it as C, C++, Go, ZX and Android code and
+// compares each with tests/css_conformance.expected; css_conformance_main
+// is the C program and writes the browser pages.
+#import "css_parser"
+#import "css_sheet"
+#import "css_digest"
+#import "style_pack_classic"
+#import "style_pack_material"
+#import "style_pack_lightfield"
+#import "kryon/style"
+#import "kryon/style_sheet"
+
+conformance_sheet: CssSheet;
+conformance_rules: StyleRules;
+
+// Everything the subset has that a browser can show, without attribute
+// selectors, so the same sheet also goes through the DOM export.
+conformance_app :: #string CSS
+@layer base, app;
+
+:root {
+  --ink: #1d2733;
+  --paper: #fbfaf7;
+  --brand: rgb(40 90 160);
+  --pad: 6px;
+  --round: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8eef5;
+    --paper: #151a20;
+  }
+}
+
+@layer app {
+  Button {
+    color: var(--ink);
+    background: var(--paper);
+    border-color: var(--ink);
+    padding-inline: var(--pad);
+    padding-block: 2px;
+    border-radius: var(--round);
+  }
+
+  Button.primary {
+    color: #ffffff;
+    background: var(--brand);
+  }
+}
+
+@layer base {
+  Button.primary {
+    color: #ff0000;
+    font-size: 20px;
+  }
+
+  Text {
+    color: var(--ink);
+    font-size: 15px;
+  }
+}
+
+Button:disabled {
+  opacity: 0.5;
+}
+
+Button:selected {
+  border-color: var(--brand);
+}
+
+Button.primary:loading {
+  background: hsl(210 40% 50%);
+}
+
+.quiet {
+  color: #556677;
+  gap: 3px;
+}
+
+Text.quiet {
+  font-size: 13px;
+}
+
+Card, TextField {
+  background: var(--paper);
+  border-color: rgba(0, 0, 0, 0.25);
+  padding: 4px 8px;
+}
+
+TextField:disabled {
+  color: #888888;
+}
+CSS;
+
+PackName :: (pack: s32) -> string {
+    if pack == 0 { return "classic" }
+    if pack == 1 { return "material" }
+    return "lightfield"
+}
+
+Pack :: (pack: s32) -> CssCompiledSheet {
+    if pack == 0 { return StylePackClassic() }
+    if pack == 1 { return StylePackMaterial() }
+    return StylePackLightfield()
+}
+
+ThemeEnv :: (theme: s32) -> CssEnvironment {
+    return CssEnvironmentWithNames(CssDefaultEnvironment(), ifx theme == 1 then "dark" else "light", "", "", "", "")
+}
+
+// Small numbers are failures: 1 the pack, 2 the app sheet, 3 the build.
+#program_export
+CssConformanceDigest :: (pack: s32, theme: s32) -> u32 {
+    CssSheetReset(*conformance_sheet)
+    if !CssSheetLoad(*conformance_sheet, Pack(pack)) { return 1 }
+    if !CssSheetParse(*conformance_sheet, conformance_app, "conformance.css", CssNoImports) { return 2 }
+    if !CssSheetBuild(*conformance_sheet, ThemeEnv(theme), null, *conformance_rules) { return 3 }
+    return CssDigestMix(CssDigestTable(conformance_rules), CssDigestResolved(conformance_rules))
+}
+
+// All six digests in one number, for hosts that only return an integer.
+#program_export
+CssConformanceAll :: () -> s32 {
+    hash: u32 = 2166136261
+    for pack: cast(s32)0..2 {
+        for theme: cast(s32)0..1 { hash = CssDigestMix(hash, CssConformanceDigest(pack, theme)) }
+    }
+    return cast(s32)(hash & cast(u32)0x7fffffff)
+}
+

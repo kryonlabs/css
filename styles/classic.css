@@ -1523,7 +1523,6 @@
     opacity: 1;
     -kryon-material: var(--default);
   }
-
 }
 
 @layer components {

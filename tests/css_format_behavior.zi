@@ -1,0 +1,127 @@
+// The formatter: exact layout, strings and comments untouched, invalid
+// sheets refused with their diagnostic, and formatting twice changes nothing.
+#import "file_linux"
+#import "css_parser"
+#import "css_format"
+#import "css_test_support"
+
+formatted: [262144]u8;
+again: [262144]u8;
+pack_source: [262144]u8;
+
+messy :: #string CSS
+:root{--ink:#102030;--pad:   4px}
+/* buttons */
+Button,Text{color:var(--ink);padding-inline:var(--pad)}
+
+
+@media (prefers-color-scheme: dark){:root{--ink:#eeeeee}}
+Text { font-family: "Inter   Display" , sans-serif ; }
+CSS;
+
+tidy :: #string CSS
+:root {
+  --ink: #102030;
+  --pad: 4px;
+}
+
+/* buttons */
+Button, Text {
+  color: var(--ink);
+  padding-inline: var(--pad);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eeeeee;
+  }
+}
+
+Text {
+  font-family: "Inter   Display" , sans-serif;
+}
+CSS;
+
+Trimmed :: (text: string) -> string {
+    count: s32 = cast(s32)text.count
+    while count > 0 && (text[count - 1] == 10 || text[count - 1] == 32) { count -= 1 }
+    return text[:count]
+}
+
+Format :: (source: string, output: []u8) -> CssFormatResult {
+    return CssFormat(source, output)
+}
+
+Exact :: () {
+    result: CssFormatResult = Format(messy, formatted[:])
+    if !result.ok {
+        TestSay("  diagnostic: ")
+        TestSay(TextView(result.diagnostic[:result.diagnostic_length]))
+        TestSay("\n")
+        Check(false, "messy sheet formats")
+        return
+    }
+    output: string = TextView(formatted[:result.count])
+    if Trimmed(output) != Trimmed(tidy) {
+        TestSay(output)
+        Check(false, "formatted layout is exact")
+    }
+    second: CssFormatResult = Format(output, again[:])
+    Check(second.ok && TextView(again[:second.count]) == output, "formatting tidy text changes nothing")
+}
+
+Strings :: () {
+    source: string = "Text { font-family: \"a  b;{}\"; }\n/* keep   this  {  } */\n"
+    result: CssFormatResult = Format(source, formatted[:])
+    Check(result.ok, "strings and comments format")
+    if !result.ok { return }
+    output: string = TextView(formatted[:result.count])
+    Check(Contains(output, "\"a  b;{}\""), "string kept byte for byte")
+    Check(Contains(output, "/* keep   this  {  } */"), "comment kept byte for byte")
+}
+
+Invalid :: () {
+    result: CssFormatResult = Format("Button { colr: red; }", formatted[:])
+    Check(!result.ok, "invalid sheet refused")
+    Check(Contains(TextView(result.diagnostic[:result.diagnostic_length]), "unknown property 'colr'"),
+        "refusal carries the parse diagnostic")
+    small: [8]u8
+    tight: CssFormatResult = Format("Button { color: red; }", small[:])
+    Check(!tight.ok && Contains(TextView(tight.diagnostic[:tight.diagnostic_length]), "does not fit"),
+        "small output refused")
+}
+
+// Each shipped pack is already formatted.
+Packs :: () {
+    paths: [3]string = .["styles/classic.css", "styles/material.css", "styles/lightfield.css"]
+    for path: paths {
+        file: FileHandle = OpenRead(path)
+        if !file.valid {
+            Check(false, path)
+            continue
+        }
+        read: s64 = ReadAt(file, pack_source[:], 0)
+        CloseFile(file)
+        if read <= 0 || read >= cast(s64)pack_source.count {
+            Check(false, path)
+            continue
+        }
+        source: string = TextView(pack_source[:cast(s32)read])
+        result: CssFormatResult = Format(source, formatted[:])
+        if !result.ok {
+            TestSay("  diagnostic: ")
+            TestSay(TextView(result.diagnostic[:result.diagnostic_length]))
+            TestSay("\n")
+        }
+        Check(result.ok && TextView(formatted[:result.count]) == source, path)
+    }
+}
+
+main :: () -> s32 {
+    Exact()
+    Strings()
+    Invalid()
+    Packs()
+    if test_failures == 0 { TestSay("css format behavior: PASS\n") }
+    return test_failures
+}

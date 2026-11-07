@@ -3,6 +3,8 @@
 //   css_tool migrate IN.kss OUT.css   convert a KSS sheet to Kryon CSS and
 //                                     check the result parses
 //   css_tool check FILE.css           parse a sheet; imports count as empty
+//   css_tool format FILE.css          rewrite a sheet in the standard layout
+//   css_tool format-check FILE.css    fail when a sheet is not formatted
 //   css_tool pack NAME                compile styles/NAME.css into
 //                                     src/style_pack_NAME.zi
 //   css_tool pack-check NAME          fail when src/style_pack_NAME.zi is
@@ -16,6 +18,7 @@
 #import "css_parser"
 #import "css_sheet"
 #import "css_migrate"
+#import "css_format"
 #import "kryon/style"
 #import "kryon/style_sheet"
 
@@ -356,7 +359,7 @@ Argument :: (argv: **s8, index: s32) -> string {
 #program_export
 main :: (argc: s32, argv: **s8) -> s32 {
     if argc < 3 {
-        WriteText(2, "usage: css_tool migrate IN.kss OUT.css | check FILE.css | pack NAME | pack-check NAME\n")
+        WriteText(2, "usage: css_tool migrate IN.kss OUT.css | check FILE.css | format FILE.css | format-check FILE.css | pack NAME | pack-check NAME\n")
         return 2
     }
     mode: string = Argument(argv, 1)
@@ -365,6 +368,21 @@ main :: (argc: s32, argv: **s8) -> s32 {
         count: s32 = ReadFile(path)
         if count < 0 { return Fail(path, "cannot read") }
         return CheckSheet(path, TextView(source_bytes[:count]))
+    }
+    if mode == "format" || mode == "format-check" {
+        path: string = Argument(argv, 2)
+        count: s32 = ReadFile(path)
+        if count < 0 { return Fail(path, "cannot read") }
+        source: string = TextView(source_bytes[:count])
+        result: CssFormatResult = CssFormat(source, output_bytes[:])
+        if !result.ok { return Fail(path, TextView(result.diagnostic[:result.diagnostic_length])) }
+        formatted: string = TextView(output_bytes[:result.count])
+        if formatted == source { return 0 }
+        if mode == "format-check" { return Fail(path, "not formatted; run `css_tool format`") }
+        if !WriteFile(path, output_bytes[:result.count]) { return Fail(path, "cannot write") }
+        WriteText(1, path)
+        WriteText(1, "\n")
+        return 0
     }
     if mode == "migrate" {
         if argc != 4 { return Fail("migrate", "usage: css_tool migrate IN.kss OUT.css") }
@@ -388,7 +406,10 @@ main :: (argc: s32, argv: **s8) -> s32 {
         }
         converted: string = TextView(output_bytes[:result.count])
         if CheckSheet(target, converted) != 0 { return 1 }
-        if !WriteFile(target, output_bytes[:result.count]) { return Fail(target, "cannot write") }
+        // Written in the layout `format` keeps.
+        tidy: CssFormatResult = CssFormat(converted, disk_bytes[:])
+        if !tidy.ok { return Fail(target, TextView(tidy.diagnostic[:tidy.diagnostic_length])) }
+        if !WriteFile(target, disk_bytes[:tidy.count]) { return Fail(target, "cannot write") }
         WriteText(1, target)
         WriteText(1, "\n")
         return 0

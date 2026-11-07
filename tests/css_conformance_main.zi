@@ -1,0 +1,277 @@
+// The conformance program for C and Android: prints every digest, or with
+// `web DIR` writes light.html and dark.html, pages that compare the browser
+// export of the app sheet with what Kryon resolves natively.
+#import "byte_text_linux"
+#import "c_string"
+#import "file_linux"
+#import "css_parser"
+#import "css_sheet"
+#import "css_export"
+#import "css_digest"
+#import "css_conformance"
+#import "kryon/style"
+#import "kryon/style_sheet"
+#import "kryon/control_props"
+Number :: #import "std/number_text";
+
+using StyleField;
+
+libc :: #system_library "libc";
+RawWrite :: (descriptor: s32, input: *u8, count: u64) -> s64 #foreign libc "write";
+
+conformance_text: [262144]u8;
+conformance_length: s32 = 0;
+conformance_export: [131072]u8;
+
+Say :: (text: string) {
+    for byte: text {
+        if conformance_length < cast(s32)conformance_text.count {
+            conformance_text[conformance_length] = byte
+            conformance_length += 1
+        }
+    }
+}
+
+SayNumber :: (value: s64) {
+    digits: [32]u8
+    Say(Number.FormatInteger(value, digits[:]))
+}
+
+Flush :: (descriptor: s32) {
+    at: s32 = 0
+    while at < conformance_length {
+        written: s64 = RawWrite(descriptor, *conformance_text[at], cast(u64)(conformance_length - at))
+        if written <= 0 { break }
+        at += cast(s32)written
+    }
+    conformance_length = 0
+}
+
+// The text the C, C++ and Go hosts print alike.
+Report :: () {
+    for pack: cast(s32)0..2 {
+        for theme: cast(s32)0..1 {
+            Say(PackName(pack))
+            Say(ifx theme == 1 then " dark " else " light ")
+            SayNumber(cast(s64)CssConformanceDigest(pack, theme))
+            Say("\n")
+        }
+    }
+    Say("all ")
+    SayNumber(cast(s64)CssConformanceAll())
+    Say("\n")
+}
+
+// Browser pages ------------------------------------------------------------
+
+WebKinds :: () -> [5]s32 {
+    kinds: [5]s32 = s32.[StyleKindApp(), StyleKindButton(), StyleKindText(), StyleKindTextField(), StyleKindCard()]
+    return kinds
+}
+
+// The widget names the DOM host writes for those kinds.
+WebNames :: () -> [5]string {
+    names: [5]string = string.["Screen", "Button", "Text", "TextField", "Card"]
+    return names
+}
+
+SayColor :: (color: u32) {
+    Say("[")
+    SayNumber(cast(s64)((color >> 24) & cast(u32)255))
+    Say(",")
+    SayNumber(cast(s64)((color >> 16) & cast(u32)255))
+    Say(",")
+    SayNumber(cast(s64)((color >> 8) & cast(u32)255))
+    Say(",")
+    SayNumber(cast(s64)(color & cast(u32)255))
+    Say("]")
+}
+
+// Lengths and opacity in thousandths, so the page compares integers.
+SayMilli :: (value: float32) {
+    SayNumber(cast(s64)(value * 1000.0))
+}
+
+SayCheck :: (property: string, kind: string) {
+    Say("[\"")
+    Say(property)
+    Say("\",\"")
+    Say(kind)
+    Say("\",")
+}
+
+// One element and what Kryon resolves for it.
+SayElement :: (kind: s32, name: string, class_name: string, state: s32) {
+    facts: StyleFacts = StyleDefaultFacts(kind)
+    if class_name.count > 0 { facts.class_name = CssClass(class_name) }
+    base: StyleData
+    style: StyleData = ResolveStyleRules(conformance_rules, base, facts, state)
+    Say("<div data-kryon-widget=\"")
+    Say(name)
+    Say("\"")
+    if class_name.count > 0 {
+        Say(" data-kryon-class=\"")
+        SayNumber(cast(s64)facts.class_name)
+        Say("\"")
+    }
+    if state == 5 { Say(" aria-disabled=\"true\"") }
+    if state == 6 { Say(" aria-busy=\"true\"") }
+    if state == 7 { Say(" aria-selected=\"true\"") }
+    Say(" data-expect='[")
+    first: bool = true
+    if (style.fields & cast(u32)StyleForeground) != cast(u32)0 {
+        SayCheck("color", "color")
+        SayColor(style.foreground)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StyleBackground) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("background-color", "color")
+        SayColor(style.background)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StyleBorder) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("border-top-color", "color")
+        SayColor(style.border)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StylePaddingX) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("padding-left", "length")
+        SayMilli(style.padding_x)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StylePaddingY) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("padding-top", "length")
+        SayMilli(style.padding_y)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StyleRadius) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("border-top-left-radius", "length")
+        SayMilli(style.radius)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StyleGap) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("row-gap", "length")
+        SayMilli(style.gap)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StyleFontSize) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("font-size", "length")
+        SayMilli(style.font_size)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StyleOpacity) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("opacity", "number")
+        SayMilli(style.opacity)
+        Say("]")
+        first = false
+    }
+    Say("]'></div>\n")
+}
+
+page_script :: #string JS
+<script>
+const failures = [];
+let checked = 0;
+for (const element of document.querySelectorAll("[data-expect]")) {
+  const style = getComputedStyle(element);
+  for (const [property, kind, expected] of JSON.parse(element.dataset.expect)) {
+    const actual = style.getPropertyValue(property);
+    let same = false;
+    if (kind === "color") {
+      const parts = (actual.match(/[\d.]+/g) || []).map(Number);
+      const alpha = parts.length > 3 ? Math.round(parts[3] * 255) : 255;
+      same = parts.length >= 3 && parts[0] === expected[0] && parts[1] === expected[1] &&
+        parts[2] === expected[2] && Math.abs(alpha - expected[3]) <= 1;
+    } else {
+      same = Math.abs(parseFloat(actual) * 1000 - expected) <= 5;
+    }
+    checked += 1;
+    if (!same) {
+      failures.push(element.outerHTML.replace(/ data-expect='[^']*'/, "") + " " + property +
+        ": browser " + actual + ", Kryon " + JSON.stringify(expected));
+    }
+  }
+}
+const result = document.createElement("pre");
+result.id = "conformance-result";
+result.textContent = failures.length === 0 && checked > 0 ?
+  "CONFORMANCE PASS " + checked : "CONFORMANCE FAIL\n" + failures.join("\n");
+document.body.appendChild(result);
+</script>
+JS;
+
+WritePage :: (dir: string, theme: s32) -> bool {
+    CssSheetReset(*conformance_sheet)
+    if !CssSheetParse(*conformance_sheet, conformance_app, "conformance.css", CssNoImports) { return false }
+    if !CssSheetBuild(*conformance_sheet, ThemeEnv(theme), null, *conformance_rules) { return false }
+    exported: CSSExport = ExportCSS(conformance_app, "conformance.css", ThemeEnv(theme), conformance_export[:])
+    if !exported.ok {
+        Say("css_conformance: export: ")
+        Say(TextView(exported.error[:exported.error_length]))
+        Say("\n")
+        Flush(2)
+        return false
+    }
+    conformance_length = 0
+    Say("<!doctype html>\n<html><head><meta charset=\"utf-8\"><style>\n")
+    Say(TextView(conformance_export[:exported.count]))
+    Say("</style></head><body>\n<div id=\"kryon-dom-root\">\n")
+    kinds: [5]s32 = WebKinds()
+    names: [5]string = WebNames()
+    classes: [3]string = string.["", "primary", "quiet"]
+    states: [4]s32 = s32.[1, 5, 6, 7]
+    for index: cast(s32)0..4 {
+        for class_name: classes {
+            for state: states { SayElement(kinds[index], names[index], class_name, state) }
+        }
+    }
+    Say("</div>\n")
+    Say(page_script)
+    Say("</body></html>\n")
+    path_bytes: [512]u8
+    path_length: s32 = 0
+    name: string = ifx theme == 1 then "/dark.html" else "/light.html"
+    for byte: dir {
+        path_bytes[path_length] = byte
+        path_length += 1
+    }
+    for byte: name {
+        path_bytes[path_length] = byte
+        path_length += 1
+    }
+    file: FileHandle = OpenReplace(TextView(path_bytes[:path_length]))
+    if !file.valid { return false }
+    written: s64 = WriteAt(file, conformance_text[:conformance_length], 0)
+    CloseFile(file)
+    ok: bool = written == cast(s64)conformance_length
+    conformance_length = 0
+    return ok
+}
+
+#program_export
+main :: (argc: s32, argv: **s8) -> s32 {
+    if argc == 3 && TextFromCString(cast(*u8)argv[1]) == "web" {
+        dir: string = TextFromCString(cast(*u8)argv[2])
+        if !WritePage(dir, 0) || !WritePage(dir, 1) { return 1 }
+        return 0
+    }
+    Report()
+    Flush(1)
+    return 0
+}

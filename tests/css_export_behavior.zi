@@ -1,0 +1,131 @@
+// Browser CSS for the DOM host: selectors scoped under #kryon-dom-root and
+// mapped to the attributes the host writes, -kryon-* declarations dropped,
+// environment queries decided, viewport queries kept, and every construct
+// the DOM cannot express refused rather than left out.
+#import "css_parser"
+#import "css_export"
+#import "css_test_support"
+Number :: #import "std/number_text";
+
+exported: [65536]u8;
+
+Export :: (source: string, env: CssEnvironment) -> string {
+    result: CSSExport = ExportCSS(source, "app.css", env, exported[:])
+    if !result.ok {
+        TestSay("  export error: ")
+        TestSay(TextView(result.error[:result.error_length]))
+        TestSay("\n")
+        Check(false, "export succeeds")
+        return ""
+    }
+    return TextView(exported[:result.count])
+}
+
+ExportFails :: (source: string, fragment: string, label: string) {
+    result: CSSExport = ExportCSS(source, "app.css", CssDefaultEnvironment(), exported[:])
+    message: string = TextView(result.error[:result.error_length])
+    if result.ok || !Contains(message, fragment) {
+        TestSay("  export error: ")
+        TestSay(message)
+        TestSay("\n")
+        Check(false, label)
+    }
+}
+
+Selectors :: () {
+    output: string = Export("App { background: #ffffff; }\nButton.primary, Text:disabled { color: red; }\n* { gap: 2px; }",
+        CssDefaultEnvironment())
+    Check(Contains(output, "#kryon-dom-root :where([data-kryon-widget=\"Screen\"]) {"), "App is the screen")
+    digits: [32]u8
+    class_value: string = Number.FormatInteger(CssClass("primary"), digits[:])
+    selector: [256]u8
+    count: s32 = 0
+    head: string = "#kryon-dom-root :where([data-kryon-widget=\"Button\"][data-kryon-class=\""
+    for byte: head {
+        selector[count] = byte
+        count += 1
+    }
+    for byte: class_value {
+        selector[count] = byte
+        count += 1
+    }
+    tail: string = "\"]) {"
+    for byte: tail {
+        selector[count] = byte
+        count += 1
+    }
+    Check(Contains(output, TextView(selector[:count])), "classes map")
+    Check(Contains(output, "#kryon-dom-root :where([data-kryon-widget=\"Text\"][aria-disabled=\"true\"]) {"),
+        "lists split, disabled maps")
+    Check(Contains(output, "#kryon-dom-root :where(*) {\n  gap: 2px;"), "universal selector scoped")
+    states: string = Export("Tab:selected { color: red; }\nButton:loading { opacity: 0.5; }\nButton:hover { color: blue; }",
+        CssDefaultEnvironment())
+    Check(Contains(states, "[aria-selected=\"true\"]:not(:hover):not(:active):not([aria-disabled=\"true\"])"),
+        "selected yields to hover, press and disabled")
+    Check(Contains(states, "[aria-busy=\"true\"]:not([aria-disabled=\"true\"])"), "loading yields to disabled")
+    Check(Contains(states, ":hover:not(:active):not([aria-disabled=\"true\"]):not([aria-busy=\"true\"])"),
+        "hover yields to press, disabled and loading")
+}
+
+At :: (text: string, fragment: string) -> s32 {
+    if fragment.count > text.count { return -1 }
+    for start: cast(s32)0..cast(s32)(text.count - fragment.count) {
+        if text[start:start + cast(s32)fragment.count] == fragment { return start }
+    }
+    return -1
+}
+
+// Rules come out in Kryon's priority order: layer, then specificity, then
+// source order, all at the same browser specificity.
+Ranking :: () {
+    output: string = Export("@layer base, app;\n.x { color: red; }\n@layer app { Text { color: green; } }\n@layer base { Text.x { color: blue; } }\nText { gap: 1px; }\nText.x { gap: 2px; }",
+        CssDefaultEnvironment())
+    Check(!Contains(output, "@layer"), "layers are flattened into order")
+    blue: s32 = At(output, "color: blue")
+    green: s32 = At(output, "color: green")
+    red: s32 = At(output, "color: red")
+    one: s32 = At(output, "gap: 1px")
+    two: s32 = At(output, "gap: 2px")
+    Check(blue >= 0 && green > blue, "a later layer comes after an earlier one")
+    Check(red > green && one > green, "unlayered rules come last")
+    Check(two > one && red > one, "a class outranks a type")
+}
+
+Declarations :: () {
+    output: string = Export(":root { --ink: #102030; }\nButton { color: var(--ink); -kryon-material: glass; -kryon-icon-size: 20px; width: 40px; }",
+        CssDefaultEnvironment())
+    Check(Contains(output, "#kryon-dom-root { --ink: #102030; }"), "custom properties on the root")
+    Check(Contains(output, "  color: var(--ink);\n"), "declarations copied")
+    Check(Contains(output, "  width: 40px;\n"), "document properties kept for the web")
+    Check(!Contains(output, "-kryon-material") && !Contains(output, "-kryon-icon-size"), "-kryon-* declarations dropped")
+}
+
+Media :: () {
+    source: string = "@media (prefers-color-scheme: dark) { Text { color: white; } }\n@media (min-width: 600px) { Text { gap: 4px; } }\n@media (-kryon-density: compact) { Text { gap: 1px; } }"
+    light: string = Export(source, Env("light"))
+    Check(!Contains(light, "white"), "light drops dark rules")
+    Check(Contains(light, "@media (min-width: 600px) {"), "viewport query kept")
+    Check(!Contains(light, "gap: 1px"), "other density dropped")
+    dark: string = Export(source, Env("dark"))
+    Check(Contains(dark, "color: white;") && !Contains(dark, "prefers-color-scheme"),
+        "dark rules decided, not queried")
+}
+
+Refusals :: () {
+    ExportFails("@import \"base\";\nText { color: red; }", "resolve @import before CSS export", "imports")
+    ExportFails("Button[role=Label] { color: red; }", "attribute selectors are native only", "attributes")
+    ExportFails("Button { colr: red; }", "unknown property 'colr'", "invalid sheet")
+    small: [16]u8
+    result: CSSExport = ExportCSS("Text { color: red; }", "app.css", CssDefaultEnvironment(), small[:])
+    Check(!result.ok && Contains(TextView(result.error[:result.error_length]), "does not fit"), "small output")
+}
+
+main :: () -> s32 {
+    Selectors()
+    Declarations()
+    Ranking()
+    Media()
+    Refusals()
+    if test_failures == 0 { TestSay("css export behavior: PASS\n") }
+    return test_failures
+}

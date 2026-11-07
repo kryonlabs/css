@@ -1,6 +1,7 @@
 #import "css_parser"
 
 using CssTokenKind;
+using CssStatus;
 
 // One-way conversion of a KSS sheet to Kryon CSS, for files and for saved
 // user sheets. It rewrites structure, not meaning: tokens become :root
@@ -43,9 +44,15 @@ CssMigrator :: struct {
     error_line: s32
     // A blank line goes between top-level items.
     items: s32
+    // A rule or block has been written; CSS imports must come before it.
+    content: bool
+    // The KSS line each output line came from, for errors in the result.
+    output_lines: s32
 }
 
 css_migrator: CssMigrator;
+css_migrate_lines: [16384]s32;
+css_migrate_parser: CssParser;
 
 // Rule declarations collected before they are written.
 CssMigrateDeclaration :: struct {
@@ -101,6 +108,8 @@ CssMigrateWrite :: (m: *CssMigrator, text: string) {
 CssMigrateNewline :: (m: *CssMigrator) {
     CssMigrateRaw(m, "\n")
     m.line_start = true
+    if m.output_lines < cast(s32)css_migrate_lines.count { css_migrate_lines[m.output_lines] = m.line }
+    m.output_lines += 1
 }
 
 CssMigrateBlank :: (m: *CssMigrator) {
@@ -111,6 +120,7 @@ CssMigrateBlank :: (m: *CssMigrator) {
 }
 
 CssMigrateOpen :: (m: *CssMigrator, head: string) {
+    m.content = true
     CssMigrateWrite(m, head)
     CssMigrateWrite(m, " {")
     CssMigrateNewline(m)
@@ -587,6 +597,10 @@ CssMigrateSelector :: (m: *CssMigrator, text: string, out: *CssMigrateText) {
         if byte == #char "[" {
             close: s32 = at
             while close < cast(s32)text.count && text[close] != #char "]" { close += 1 }
+            if close >= cast(s32)text.count {
+                CssMigrateFail(m, "expected ']' in the selector")
+                return
+            }
             inner: string = text[at + 1:close]
             if inner.count > 6 && CssNameEquals(CssMakeName(inner[0:6]), "class=") {
                 CssMigrateTextAdd(out, ".")
@@ -829,6 +843,16 @@ CssMigrateDirective :: (m: *CssMigrator, nested: bool) {
             return
         }
         if !CssMigrateExpect(m, #char ";", "expected ';' after @import") { return }
+        for byte: target {
+            if byte == 10 || byte == 13 || byte == #char "\"" || byte == #char "\\" {
+                CssMigrateFail(m, "an import target with a line break, quote or backslash has no CSS form")
+                return
+            }
+        }
+        if m.content {
+            CssMigrateFail(m, "@import after rules has no CSS form; move it to the top of the sheet")
+            return
+        }
         CssMigrateWrite(m, "@import \"")
         CssMigrateWrite(m, target)
         CssMigrateWrite(m, "\";")
@@ -964,6 +988,8 @@ CssMigratePass :: (m: *CssMigrator, source: string, output: []u8) {
     m.indent = 0
     m.line_start = true
     m.layer_open = false
+    m.content = false
+    m.output_lines = 0
     m.failed = false
     m.error_length = 0
     CssMigrateItems(m, false)
@@ -987,12 +1013,56 @@ CssMigrateKss :: (source: string, output: []u8) -> CssMigration {
         return result
     }
     if m.overflow {
-        message: string = "the converted sheet does not fit the output"
-        for index: cast(s32)0..cast(s32)message.count - 1 { result.error[index] = message[index] }
-        result.error_length = cast(s32)message.count
+        result.line = m.line
+        CssMigrateResultError(*result, "the converted sheet does not fit the output", "")
         return result
+    }
+    // What KSS allowed but Kryon CSS does not, such as an unknown property,
+    // fails here at the KSS line it came from; nothing invalid is returned.
+    p: *CssParser = *css_migrate_parser
+    CssBegin(p, TextView(output[:m.count]), "migrated.css")
+    while true {
+        status: s32 = CssStep(p)
+        if status == cast(s32)CssStatusDone { break }
+        if status == cast(s32)CssStatusNeedImport {
+            name: [64]u8
+            CssProvideImport(p, "", CssPendingImport(p, name[:]))
+        } else if status == cast(s32)CssStatusError {
+            line: s32 = p.cursor.line - 1
+            result.line = m.line
+            if line >= 0 && line < m.output_lines && line < cast(s32)css_migrate_lines.count {
+                result.line = css_migrate_lines[line]
+            }
+            if result.line <= 0 { result.line = 1 }
+            text: [256]u8
+            message: string = CssDiagnostic(p, text[:])
+            // The position is in the converted text; the line above is the KSS one.
+            cut: s32 = cast(s32)message.count
+            for index: cast(s32)0..cast(s32)message.count - 4 {
+                if message[index:index + 4] == " at " { cut = index }
+            }
+            CssMigrateResultError(*result, "converted to invalid CSS: ", message[:cut])
+            return result
+        }
     }
     result.ok = true
     result.count = m.count
     return result
+}
+
+CssMigrateResultError :: (result: *CssMigration, message: string, detail: string) {
+    count: s32 = 0
+    for byte: message {
+        if count < 160 {
+            result.error[count] = byte
+            count += 1
+        }
+    }
+    for byte: detail {
+        if count < 160 {
+            result.error[count] = byte
+            count += 1
+        }
+    }
+    result.error_length = count
 }

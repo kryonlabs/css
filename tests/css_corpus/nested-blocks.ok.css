@@ -1,0 +1,9 @@
+@layer a, b;
+@layer b {
+  @media (prefers-color-scheme: dark) {
+    @media (min-width: 400px) {
+      Text { color: white; }
+    }
+  }
+}
+@layer a { Text { color: black; } }

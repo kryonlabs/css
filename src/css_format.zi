@@ -262,6 +262,8 @@ CssFormat :: (source: string, output: []u8) -> CssFormatResult {
             continue
         }
         CssFormatLineByte(f, byte)
+        // 'a,b' lists read 'a, b'.
+        if byte == #char "," { f.line_space = true }
         at += 1
     }
     if f.line_length > 0 { CssFormatFlush(f, "") }

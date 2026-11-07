@@ -1,0 +1,167 @@
+// Sheets as apps use them: a compiled pack is the same table as its CSS
+// parsed, app sheets layer over a pack, an install either takes whole or
+// leaves the previous style, and themes switch by environment.
+#import "file_linux"
+#import "css_parser"
+#import "css_sheet"
+#import "css_test_support"
+#import "css_digest"
+#import "style_pack_classic"
+#import "style_pack_material"
+#import "style_pack_lightfield"
+#import "kryon/style"
+#import "kryon/style_sheet"
+#import "kryon/drawing_props"
+
+parsed_sheet: CssSheet;
+compiled_sheet: CssSheet;
+parsed_rules: StyleRules;
+compiled_rules: StyleRules;
+pack_source: [262144]u8;
+
+ReadPack :: (path: string) -> string {
+    file: FileHandle = OpenRead(path)
+    if !file.valid { return "" }
+    read: s64 = ReadAt(file, pack_source[:], 0)
+    CloseFile(file)
+    if read <= 0 || read >= cast(s64)pack_source.count { return "" }
+    return TextView(pack_source[:cast(s32)read])
+}
+
+// The committed module must build the table its CSS builds, in both schemes.
+SamePack :: (path: string, compiled: CssCompiledSheet, label: string) {
+    source: string = ReadPack(path)
+    if source.count == 0 {
+        Check(false, label)
+        return
+    }
+    CssSheetReset(*parsed_sheet)
+    CssSheetReset(*compiled_sheet)
+    if !CssSheetParse(*parsed_sheet, source, path, CssNoImports) {
+        TestSay("  diagnostic: ")
+        TestSay(CssSheetDiagnostic(*parsed_sheet, test_diagnostic[:]))
+        TestSay("\n")
+        Check(false, label)
+        return
+    }
+    Check(CssSheetLoad(*compiled_sheet, compiled), label)
+    for theme: cast(s32)0..1 {
+        env: CssEnvironment = Env(ifx theme == 0 then "light" else "dark")
+        Check(CssSheetBuild(*parsed_sheet, env, null, *parsed_rules), label)
+        Check(CssSheetBuild(*compiled_sheet, env, null, *compiled_rules), label)
+        Check(parsed_rules.count > 0 && parsed_rules.count == compiled_rules.count, label)
+        Check(CssDigestTable(parsed_rules) == CssDigestTable(compiled_rules), label)
+    }
+    accent_parsed: CssTokenResult = CssSheetToken(*parsed_sheet, "--accent")
+    accent_compiled: CssTokenResult = CssSheetToken(*compiled_sheet, "--accent")
+    Check(accent_parsed.found && accent_compiled.found && accent_parsed.color == accent_compiled.color,
+        label)
+}
+
+Packs :: () {
+    SamePack("styles/classic.css", StylePackClassic(), "classic pack matches its CSS")
+    SamePack("styles/material.css", StylePackMaterial(), "material pack matches its CSS")
+    SamePack("styles/lightfield.css", StylePackLightfield(), "lightfield pack matches its CSS")
+}
+
+Resolved :: (kind: s32) -> StyleData {
+    base: StyleData
+    return ResolveInstalledStyleRules(base, StyleDefaultFacts(kind), 1)
+}
+
+// An app sheet appended to a pack: its var() reads the pack's custom
+// properties, and its unlayered rules beat the pack's layered ones.
+AppOverPack :: () {
+    CssSheetReset(*test_sheet)
+    Check(CssSheetLoad(*test_sheet, StylePackClassic()), "pack loads")
+    app: string = ":root { --brand: #123456; }\nButton { background: var(--brand); color: var(--accent-ink); }"
+    if !CssSheetParse(*test_sheet, app, "app.css", CssNoImports) {
+        TestSay("  diagnostic: ")
+        TestSay(Diagnostic())
+        TestSay("\n")
+        Check(false, "app sheet parses over the pack")
+        return
+    }
+    Check(CssSheetInstall(*test_sheet, Env("light"), null), "app over pack installs")
+    button: StyleData = Resolved(StyleKindButton())
+    Check(button.background == cast(u32)0x123456ff, "app rule beats the pack")
+    Check(button.foreground == cast(u32)0xffffffff, "app reads a pack custom property")
+    Check(StyleTokenColorOr("brand", Color.{0, 0, 0, 0}).r == 0x12, "app color custom property installed")
+}
+
+// A sheet that fails to build leaves the installed rules and colors alone.
+AtomicInstall :: () {
+    CssSheetReset(*test_sheet)
+    good: string = ":root { --ink: #102030; }\nText { color: var(--ink); }"
+    Check(CssSheetParse(*test_sheet, good, "good.css", CssNoImports), "good sheet parses")
+    Check(CssSheetInstall(*test_sheet, CssDefaultEnvironment(), null), "good sheet installs")
+    Check(Resolved(StyleKindText()).foreground == cast(u32)0x102030ff, "good sheet styles text")
+    CssSheetReset(*test_sheet)
+    bad: string = ":root { --ink: #ff0000; }\nText { color: var(--missing); }"
+    Check(CssSheetParse(*test_sheet, bad, "bad.css", CssNoImports), "bad sheet parses")
+    Check(!CssSheetInstall(*test_sheet, CssDefaultEnvironment(), null), "bad sheet refuses to install")
+    Check(Contains(Diagnostic(), "undefined custom property '--missing' at bad.css:2"), "bad sheet says why")
+    Check(Resolved(StyleKindText()).foreground == cast(u32)0x102030ff, "old rules stay")
+    Check(StyleTokenColorOr("ink", Color.{0, 0, 0, 0}).r == 0x10, "old colors stay")
+    // Too many color custom properties fails before anything changes.
+    CssSheetReset(*test_sheet)
+    many: [8192]u8
+    count: s32 = 0
+    head: string = ":root {"
+    for byte: head {
+        many[count] = byte
+        count += 1
+    }
+    for index: cast(s32)0..129 {
+        line: string = " --c000: #000000;"
+        for byte: line {
+            many[count] = byte
+            count += 1
+        }
+        many[count - 13] = cast(u8)(48 + index / 100)
+        many[count - 12] = cast(u8)(48 + (index / 10) % 10)
+        many[count - 11] = cast(u8)(48 + index % 10)
+    }
+    many[count] = #char "}"
+    count += 1
+    Check(CssSheetParse(*test_sheet, TextView(many[:count]), "many.css", CssNoImports), "many colors parse")
+    Check(!CssSheetInstall(*test_sheet, CssDefaultEnvironment(), null), "too many colors refuse")
+    Check(Contains(Diagnostic(), "more than 128 color custom properties"), "too many colors say why")
+    Check(Resolved(StyleKindText()).foreground == cast(u32)0x102030ff, "rules stay after a full color table")
+}
+
+Themes :: () {
+    source: string = ":root { --ink: #111111; }\n@media (prefers-color-scheme: dark) { :root { --ink: #eeeeee; } }\nText { color: var(--ink); }"
+    CssSheetReset(*test_sheet)
+    Check(CssSheetParse(*test_sheet, source, "theme.css", CssNoImports), "theme sheet parses")
+    Check(CssSheetInstall(*test_sheet, Env("light"), null), "light installs")
+    Check(Resolved(StyleKindText()).foreground == cast(u32)0x111111ff, "light value")
+    Check(CssSheetInstall(*test_sheet, Env("dark"), null), "dark installs")
+    Check(Resolved(StyleKindText()).foreground == cast(u32)0xeeeeeeff, "dark value")
+    // A host override beats every definition.
+    overrides: CssOverrides
+    CssOverrideColor(*overrides, "--ink", cast(u32)0x336699ff)
+    Check(CssSheetInstall(*test_sheet, Env("dark"), *overrides), "override installs")
+    Check(Resolved(StyleKindText()).foreground == cast(u32)0x336699ff, "override value")
+}
+
+// More rules than Kryon's table holds is an error, never a cut table.
+Capacity :: () {
+    CssSheetReset(*test_sheet)
+    // The three packs together load (the sheet holds 1024 rules) but are
+    // far more than Kryon applies at once.
+    Check(CssSheetLoad(*test_sheet, StylePackClassic()) && CssSheetLoad(*test_sheet, StylePackMaterial()) &&
+        CssSheetLoad(*test_sheet, StylePackLightfield()), "three packs load")
+    Check(!CssSheetBuild(*test_sheet, CssDefaultEnvironment(), null, *test_rules), "over 512 refuses")
+    Check(Contains(Diagnostic(), "more than 512 rules apply at once"), "over 512 says why")
+}
+
+main :: () -> s32 {
+    Packs()
+    AppOverPack()
+    AtomicInstall()
+    Themes()
+    Capacity()
+    if test_failures == 0 { TestSay("css sheet behavior: PASS\n") }
+    return test_failures
+}

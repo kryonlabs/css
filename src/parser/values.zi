@@ -233,14 +233,17 @@ CssReadChannel :: (p: *CssParser, full: float64, hue: bool) -> CssChannel {
     return result
 }
 
-CssHueChannel :: (m1: float64, m2: float64, hue: float64) -> float64 {
-    h: float64 = hue
-    if h < 0.0 { h += 1.0 }
-    if h > 1.0 { h -= 1.0 }
-    if h * 6.0 < 1.0 { return m1 + (m2 - m1) * h * 6.0 }
-    if h * 2.0 < 1.0 { return m2 }
-    if h * 3.0 < 2.0 { return m1 + (m2 - m1) * (2.0 / 3.0 - h) * 6.0 }
-    return m1
+// CSS Color 4's hsl-to-rgb for channel n (0 red, 8 green, 4 blue), so
+// results round as browsers round them.
+CssHslChannel :: (n: float64, hue: float64, saturation: float64, lightness: float64) -> float64 {
+    k: float64 = n + hue / 30.0
+    k = k - 12.0 * cast(float64)cast(s64)(k / 12.0)
+    a: float64 = saturation * (ifx lightness < 1.0 - lightness then lightness else 1.0 - lightness)
+    step: float64 = k - 3.0
+    if 9.0 - k < step { step = 9.0 - k }
+    if 1.0 < step { step = 1.0 }
+    if step < -1.0 { step = -1.0 }
+    return lightness - a * step
 }
 
 // rgb(r g b / a), rgb(r, g, b, a), hsl(h s l / a) and their -a aliases.
@@ -267,10 +270,6 @@ CssReadColorFunction :: (p: *CssParser, hsl: bool, name: string) -> CssValue {
         if index == 3 { full = 1.0 }
         channel: CssChannel = CssReadChannel(p, full, hsl && index == 0)
         if !channel.ok { return result }
-        if index == 3 || (hsl && index > 0) {
-            // Plain alpha is 0..1; hsl saturation and lightness need '%'.
-            if hsl && index > 0 && index < 3 { channel.value = channel.value }
-        }
         channels[index] = channel.value
         count = index + 1
     }
@@ -283,21 +282,17 @@ CssReadColorFunction :: (p: *CssParser, hsl: bool, name: string) -> CssValue {
     green: float64 = channels[1]
     blue: float64 = channels[2]
     if hsl {
-        hue: float64 = channels[0] / 360.0
-        hue = hue - cast(float64)cast(s64)hue
-        if hue < 0.0 { hue += 1.0 }
+        hue: float64 = channels[0] - 360.0 * cast(float64)cast(s64)(channels[0] / 360.0)
+        if hue < 0.0 { hue += 360.0 }
         saturation: float64 = channels[1]
         lightness: float64 = channels[2]
         if saturation < 0.0 { saturation = 0.0 }
         if saturation > 1.0 { saturation = 1.0 }
         if lightness < 0.0 { lightness = 0.0 }
         if lightness > 1.0 { lightness = 1.0 }
-        m2: float64 = lightness * (1.0 + saturation)
-        if lightness > 0.5 { m2 = lightness + saturation - lightness * saturation }
-        m1: float64 = 2.0 * lightness - m2
-        red = CssHueChannel(m1, m2, hue + 1.0 / 3.0) * 255.0
-        green = CssHueChannel(m1, m2, hue) * 255.0
-        blue = CssHueChannel(m1, m2, hue - 1.0 / 3.0) * 255.0
+        red = CssHslChannel(0.0, hue, saturation, lightness) * 255.0
+        green = CssHslChannel(8.0, hue, saturation, lightness) * 255.0
+        blue = CssHslChannel(4.0, hue, saturation, lightness) * 255.0
     }
     alpha: float64 = channels[3] * 255.0
     result.color = (CssClampByte(red) << cast(u32)24) | (CssClampByte(green) << cast(u32)16) |

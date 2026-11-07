@@ -9,14 +9,14 @@ STYLE_PACKS := classic material lightfield
 CSS_TOOL := $(BUILD)/tools/css_tool
 INCLUDE = -I$$($(ZIRAN) pkg path ziran)/include
 
-.PHONY: check test conformance style-packs style-pack-check migrate fuzz clean
+.PHONY: check test conformance style-packs style-pack-check format migrate fuzz clean
 
 check: test conformance style-pack-check fuzz
 
 # A behavior test: build one Ziran entry to C and run it.
 define native_test
 	rm -rf $(BUILD)/$(1)-c
-	$(ZIRAN) build --project --target=c --entry $(1):main -o $(BUILD)/$(1)-c tests/$(1).zi
+	$(ZIRAN) build --project --target=c --exe --entry $(1):main -o $(BUILD)/$(1)-c tests/$(1).zi
 	$(CC) -std=c11 -O1 $(INCLUDE) -I$(BUILD)/$(1)-c $(BUILD)/$(1)-c/*.c -o $(BUILD)/$(1) -lm
 	$(BUILD)/$(1)
 endef
@@ -39,7 +39,7 @@ conformance:
 $(CSS_TOOL): tools/css_tool.zi src/*.zi src/parser/*.zi
 	rm -rf $@-c
 	mkdir -p $(dir $@)
-	$(ZIRAN) build --project --target=c --entry css_tool:main -o $@-c tools/css_tool.zi
+	$(ZIRAN) build --project --target=c --exe --entry css_tool:main -o $@-c tools/css_tool.zi
 	$(CC) -std=c11 -O2 $(INCLUDE) -I$@-c $@-c/*.c -o $@ -lm
 
 # Packs are compiled into rule tables apps load without parsing. The
@@ -50,7 +50,12 @@ style-packs: $(CSS_TOOL)
 
 style-pack-check: $(CSS_TOOL)
 	@for pack in $(STYLE_PACKS); do $(CSS_TOOL) pack-check $$pack || exit 1; done
-	@echo "Style pack modules match: $(STYLE_PACKS)"
+	@for pack in $(STYLE_PACKS); do $(CSS_TOOL) format-check styles/$$pack.css || exit 1; done
+	@echo "Style pack modules match and are formatted: $(STYLE_PACKS)"
+
+# Rewrite sheets in the standard layout: make format FILES="a.css b.css"
+format: $(CSS_TOOL)
+	@for file in $(FILES); do $(CSS_TOOL) format $$file || exit 1; done
 
 # Convert a KSS sheet: make migrate IN=old.kss OUT=new.css
 migrate: $(CSS_TOOL)

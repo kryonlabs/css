@@ -1,0 +1,545 @@
+// CSS fuzz: generated and damaged sheets through the parser, the sheet, the
+// formatter, the DOM export and the KSS migrator.
+//
+//   css_fuzz CURRENT SEED COUNT FILE...   COUNT cases from SEED; each FILE
+//                                         (.css or .kss) seeds damaged cases
+//   css_fuzz CURRENT corpus FILE...       the checks on each file; one named
+//                                         *.ok.css must parse and *.ok.kss
+//                                         must convert
+//   css_fuzz CURRENT check FILE           the checks on one file
+//
+// Every case is checked for:
+//   - no abort (Ziran stops a program on an out-of-range index or cast) and,
+//     under the sanitizers, no memory error;
+//   - an end: the shell's timeout stops a parse that never finishes;
+//   - a failure that says what went wrong, never a partial sheet;
+//   - formatting that keeps meaning (CssFormat re-parses its own output), only
+//     moves whitespace and line ends, and is stable when run again;
+//   - an export that is whole or refused with a reason;
+//   - a KSS migration that parses as Kryon CSS, or an error with a line.
+//
+// Before each case the input is written to CURRENT, so when a check fails or
+// the program is killed, CURRENT holds the sheet that did it.
+#import "byte_text_linux"
+#import "c_string"
+#import "file_linux"
+#import "css_parser"
+#import "css_sheet"
+#import "css_format"
+#import "css_export"
+#import "css_migrate"
+#import "kryon/style"
+#import "kryon/style_sheet"
+
+libc :: #system_library "libc";
+RawWrite :: (descriptor: s32, input: *u8, count: u64) -> s64 #foreign libc "write";
+
+fuzz_sheet: CssSheet;
+fuzz_rules: StyleRules;
+fuzz_source: [65536]u8;
+fuzz_length: s32 = 0;
+fuzz_formatted: [262144]u8;
+fuzz_again: [262144]u8;
+fuzz_exported: [262144]u8;
+fuzz_migrated: [262144]u8;
+fuzz_file: [65536]u8;
+fuzz_seeds: [8][65536]u8;
+fuzz_seed_lengths: [8]s32;
+fuzz_seed_kss: [8]bool;
+fuzz_seed_count: s32 = 0;
+fuzz_current: string;
+fuzz_random: u64 = 1;
+fuzz_failed: bool = false;
+fuzz_diagnostic: [256]u8;
+
+Say :: (descriptor: s32, text: string) {
+    chunk: [512]u8
+    at: s32 = 0
+    while at < cast(s32)text.count {
+        count: s32 = cast(s32)text.count - at
+        if count > 512 { count = 512 }
+        for index: cast(s32)0..count - 1 { chunk[index] = text[at + index] }
+        if RawWrite(descriptor, *chunk[0], cast(u64)count) <= 0 { return }
+        at += count
+    }
+}
+
+SayNumber :: (descriptor: s32, value: s64) {
+    digits: [24]u8
+    count: s32 = 0
+    number: s64 = value
+    if number == 0 {
+        Say(descriptor, "0")
+        return
+    }
+    while number > 0 && count < 24 {
+        digits[23 - count] = cast(u8)(48 + number % 10)
+        number = number / 10
+        count += 1
+    }
+    Say(descriptor, TextView(digits[24 - count:24]))
+}
+
+Fail :: (message: string) {
+    if fuzz_failed { return }
+    fuzz_failed = true
+    Say(2, "css fuzz: ")
+    Say(2, message)
+    Say(2, "\n")
+}
+
+// ------------------------------------------------------------------ random
+
+Next :: () -> u64 {
+    x: u64 = fuzz_random
+    x = x ^ (x << cast(u64)13)
+    x = x ^ (x >> cast(u64)7)
+    x = x ^ (x << cast(u64)17)
+    fuzz_random = x
+    return x
+}
+
+Below :: (count: s32) -> s32 {
+    if count <= 1 { return 0 }
+    return cast(s32)(Next() % cast(u64)count)
+}
+
+// ------------------------------------------------------------------ text
+
+Add :: (text: string) {
+    for byte: text {
+        if fuzz_length < cast(s32)fuzz_source.count {
+            fuzz_source[fuzz_length] = byte
+            fuzz_length += 1
+        }
+    }
+}
+
+Pick :: (choices: []string) -> string {
+    return choices[Below(cast(s32)choices.count)]
+}
+
+css_selectors: [16]string = .["Button", "Text", "App", "*", "Card", ".x", ".primary", "Button.x",
+    "Button:hover", "Text:disabled", "Tab:selected", "Button[role=Label]", "Button[tone=Accent]:active",
+    "TextField:focus", "Button:loading", "Checkbox:checked"];
+
+css_declarations: [26]string = .["color: #102030", "color: red", "color: var(--ink)",
+    "color: var(--missing, #fff)", "background: rgb(1 2 3 / 50%)",
+    "background: linear-gradient(#000000, #ffffff)", "border-color: hsl(120 50% 50%)",
+    "border: 1px solid red", "border-radius: 4px", "padding: 2px 4px", "padding-inline: 0.5rem",
+    "padding-block: var(--pad)", "gap: 3px", "font-size: 1.25rem", "font-family: \"Inter\", sans-serif",
+    "opacity: 0.5", "translate: 1px 2px", "outline-color: #abc", "-kryon-material: glass",
+    "-kryon-icon-size: 16px", "letter-spacing: 1px", "width: 20px", "margin-inline: 4px",
+    "transition: color 150ms", "border-width: var(--pad)", "opacity: var(--n)"];
+
+css_definitions: [7]string = .["--ink: #123456", "--pad: 4px", "--fast: 150ms", "--alias: var(--ink)",
+    "--glass: glass", "--n: 0.5", "--ink: rgba(0, 0, 0, 0.5)"];
+
+css_media: [5]string = .["(prefers-color-scheme: dark)", "(min-width: 600px)",
+    "(-kryon-density: compact), (pointer: coarse)", "(prefers-contrast: more)", "(-kryon-theme: ocean)"];
+
+Rule :: () {
+    Add(Pick(css_selectors[:]))
+    if Below(4) == 0 {
+        Add(", ")
+        Add(Pick(css_selectors[:]))
+    }
+    Add(" { ")
+    for index: cast(s32)0..Below(4) {
+        Add(Pick(css_declarations[:]))
+        Add("; ")
+    }
+    Add("}\n")
+}
+
+Root :: () {
+    Add(":root {\n")
+    for index: cast(s32)0..Below(4) {
+        Add("  ")
+        Add(Pick(css_definitions[:]))
+        Add(";\n")
+    }
+    Add("}\n")
+}
+
+Item :: (depth: s32) {
+    choice: s32 = Below(12)
+    if choice < 5 {
+        Rule()
+    } else if choice == 5 {
+        Root()
+    } else if choice == 6 && depth < 2 {
+        Add("@media ")
+        Add(Pick(css_media[:]))
+        Add(" {\n")
+        for index: cast(s32)0..Below(3) { Item(depth + 1) }
+        Add("}\n")
+    } else if choice == 7 && depth < 2 {
+        Add(ifx Below(2) == 0 then "@layer a {\n" else "@layer b {\n")
+        for index: cast(s32)0..Below(3) { Item(depth + 1) }
+        Add("}\n")
+    } else if choice == 8 {
+        Add("@layer a, b;\n")
+    } else if choice == 9 {
+        Add("@keyframes spin { from { opacity: 0; } to { opacity: 1; } }\n")
+    } else if choice == 10 {
+        Add(ifx Below(3) == 0 then "@import \"loop\";\n" else "@import \"base\";\n")
+    } else {
+        Add("/* note { } */\n")
+    }
+}
+
+kss_items: [10]string = .["tokens { color { ink: #102030; paper: #ffffff; } length { pad: 4; } }\n",
+    "Button { foreground: ink; padding-x: pad; radius: 4; }\n", "@theme dark { ink: #eeeeee; }\n",
+    "@env density(compact) { Text { font-size: 12; } }\n", "Button:pressed { background: ink; background-end: paper; }\n",
+    "@layer components;\n", "@import \"base\";\n", "@pack sample;\n",
+    "Button[class=primary] { offset-x: 1; offset-y: 2; }\n", "@variant big \"Big\" { Button { gap: 2; } }\n"];
+
+// One random sheet, CSS or KSS.
+Generate :: (kss: bool) {
+    fuzz_length = 0
+    count: s32 = 1 + Below(10)
+    for index: cast(s32)0..count - 1 {
+        if kss { Add(Pick(kss_items[:])) } else { Item(0) }
+    }
+}
+
+damage_bytes :: "{}();:,\"'/*@-.#[]=! \n%";
+
+// Damage the sheet in place: flipped bytes, deleted, repeated or cut ranges.
+Damage :: () {
+    rounds: s32 = 1 + Below(4)
+    for round: cast(s32)0..rounds - 1 {
+        if fuzz_length == 0 { return }
+        kind: s32 = Below(5)
+        at: s32 = Below(fuzz_length)
+        if kind == 0 {
+            fuzz_source[at] = damage_bytes[Below(cast(s32)damage_bytes.count)]
+        } else if kind == 1 {
+            span: s32 = 1 + Below(16)
+            if at + span > fuzz_length { span = fuzz_length - at }
+            for index: at..fuzz_length - span - 1 { fuzz_source[index] = fuzz_source[index + span] }
+            fuzz_length -= span
+        } else if kind == 2 {
+            span: s32 = 1 + Below(32)
+            if at + span > fuzz_length { span = fuzz_length - at }
+            if fuzz_length + span <= cast(s32)fuzz_source.count {
+                index: s32 = fuzz_length - 1
+                while index >= at + span {
+                    fuzz_source[index + span] = fuzz_source[index]
+                    index -= 1
+                }
+                fuzz_length += span
+            }
+        } else if kind == 3 {
+            fuzz_length = at
+        } else if fuzz_length < cast(s32)fuzz_source.count {
+            index: s32 = fuzz_length
+            while index > at {
+                fuzz_source[index] = fuzz_source[index - 1]
+                index -= 1
+            }
+            fuzz_source[at] = damage_bytes[Below(cast(s32)damage_bytes.count)]
+            fuzz_length += 1
+        }
+    }
+}
+
+// ------------------------------------------------------------------ checks
+
+FuzzImports :: (name: string) -> CssImportAnswer {
+    answer: CssImportAnswer
+    if name == "base" {
+        answer.found = true
+        answer.source = "Button { color: red; gap: 1px; }"
+    } else if name == "loop" {
+        answer.found = true
+        answer.source = "@import \"loop\";"
+    }
+    return answer
+}
+
+// The bytes that are not whitespace or ';', with strings and comments whole.
+SameBytes :: (a: string, b: string) -> bool {
+    i: s32 = 0
+    j: s32 = 0
+    while true {
+        i = Significant(a, i)
+        j = Significant(b, j)
+        if i >= cast(s32)a.count || j >= cast(s32)b.count {
+            return i >= cast(s32)a.count && j >= cast(s32)b.count
+        }
+        if a[i] != b[j] { return false }
+        i += 1
+        j += 1
+    }
+    return false
+}
+
+// The next byte at or after `at` that formatting must keep. Inside strings
+// and comments every byte counts; the caller walks them in step.
+Significant :: (text: string, at: s32) -> s32 {
+    index: s32 = at
+    while index < cast(s32)text.count {
+        byte: u8 = text[index]
+        if byte == 32 || byte == 9 || byte == 10 || byte == 13 || byte == 12 || byte == #char ";" {
+            index += 1
+            continue
+        }
+        return index
+    }
+    return index
+}
+
+// Strings and comments must come through byte for byte; the formatter only
+// collapses space between tokens, so compare those runs exactly.
+SameQuoted :: (a: string, b: string) -> bool {
+    ra: s32 = 0
+    rb: s32 = 0
+    while true {
+        sa: s32 = NextQuoted(a, ra)
+        sb: s32 = NextQuoted(b, rb)
+        if sa < 0 || sb < 0 { return sa < 0 && sb < 0 }
+        ea: s32 = QuotedEnd(a, sa)
+        eb: s32 = QuotedEnd(b, sb)
+        if a[sa:ea] != b[sb:eb] { return false }
+        ra = ea
+        rb = eb
+    }
+    return false
+}
+
+NextQuoted :: (text: string, at: s32) -> s32 {
+    index: s32 = at
+    while index < cast(s32)text.count {
+        byte: u8 = text[index]
+        if byte == #char "\"" || byte == #char "'" { return index }
+        if byte == #char "/" && index + 1 < cast(s32)text.count && text[index + 1] == #char "*" { return index }
+        index += 1
+    }
+    return -1
+}
+
+QuotedEnd :: (text: string, start: s32) -> s32 {
+    count: s32 = cast(s32)text.count
+    if text[start] == #char "/" {
+        index: s32 = start + 2
+        while index + 1 < count && !(text[index] == #char "*" && text[index + 1] == #char "/") { index += 1 }
+        return ifx index + 2 <= count then index + 2 else count
+    }
+    index: s32 = start + 1
+    while index < count && text[index] != text[start] && text[index] != 10 { index += 1 }
+    return ifx index < count then index + 1 else count
+}
+
+EmptyImports :: (name: string) -> CssImportAnswer {
+    answer: CssImportAnswer
+    answer.found = true
+    answer.source = ""
+    return answer
+}
+
+CheckCss :: (source: string, must_parse: bool) {
+    // The sheet, with imports.
+    CssSheetReset(*fuzz_sheet)
+    if CssSheetParse(*fuzz_sheet, source, "fuzz.css", FuzzImports) {
+        for theme: cast(s32)0..1 {
+            env: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(),
+                ifx theme == 1 then "dark" else "light", "", "", "", "")
+            if !CssSheetBuild(*fuzz_sheet, env, null, *fuzz_rules) &&
+                CssSheetDiagnostic(*fuzz_sheet, fuzz_diagnostic[:]).count == 0 {
+                Fail("a build failed without a diagnostic")
+            }
+        }
+    } else if CssSheetDiagnostic(*fuzz_sheet, fuzz_diagnostic[:]).count == 0 {
+        Fail("a parse failed without a diagnostic")
+    }
+    // The formatter answers imports with empty sheets.
+    CssSheetReset(*fuzz_sheet)
+    parses: bool = CssSheetParse(*fuzz_sheet, source, "fuzz.css", EmptyImports)
+    if must_parse && !parses {
+        Say(2, "  parser: ")
+        Say(2, CssSheetDiagnostic(*fuzz_sheet, fuzz_diagnostic[:]))
+        Say(2, "\n")
+        Fail("a sheet that must parse did not")
+    }
+    formatted: CssFormatResult = CssFormat(source, fuzz_formatted[:])
+    if !formatted.ok {
+        message: string = TextView(formatted.diagnostic[:formatted.diagnostic_length])
+        if message.count == 0 { Fail("formatting failed without a diagnostic") }
+        if parses {
+            Say(2, "  formatter: ")
+            Say(2, message)
+            Say(2, "\n")
+            Fail("a sheet that parses did not format")
+        }
+    } else {
+        if !parses { Fail("a sheet that does not parse was formatted") }
+        output: string = TextView(fuzz_formatted[:formatted.count])
+        if !SameBytes(source, output) { Fail("formatting changed more than whitespace") }
+        if !SameQuoted(source, output) { Fail("formatting changed a string or comment") }
+        again: CssFormatResult = CssFormat(output, fuzz_again[:])
+        if !again.ok || TextView(fuzz_again[:again.count]) != output { Fail("formatting is not stable") }
+    }
+    // The export, for both schemes.
+    for theme: cast(s32)0..1 {
+        env: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(),
+            ifx theme == 1 then "dark" else "light", "", "", "", "")
+        exported: CSSExport = ExportCSS(source, "fuzz.css", env, fuzz_exported[:])
+        if exported.ok {
+            if exported.count < 0 || exported.count > cast(s32)fuzz_exported.count { Fail("export count out of range") }
+        } else if exported.error_length == 0 {
+            Fail("an export failed without a reason")
+        }
+    }
+}
+
+CheckKss :: (source: string, must_convert: bool) {
+    result: CssMigration = CssMigrateKss(source, fuzz_migrated[:])
+    if !result.ok {
+        if result.error_length == 0 { Fail("a migration failed without a reason") }
+        if result.line <= 0 { Fail("a migration error has no line") }
+        if must_convert { Fail("a corpus sheet marked .ok did not convert") }
+        return
+    }
+    converted: string = TextView(fuzz_migrated[:result.count])
+    CssSheetReset(*fuzz_sheet)
+    if !CssSheetParse(*fuzz_sheet, converted, "migrated.css", EmptyImports) {
+        Say(2, "  parser: ")
+        Say(2, CssSheetDiagnostic(*fuzz_sheet, fuzz_diagnostic[:]))
+        Say(2, "\n")
+        Fail("a migrated sheet does not parse")
+        return
+    }
+    CheckCss(converted, true)
+}
+
+SaveCurrent :: (source: string) {
+    file: FileHandle = OpenReplace(fuzz_current)
+    if !file.valid { return }
+    copy: [65536]u8
+    count: s32 = cast(s32)source.count
+    if count > 65536 { count = 65536 }
+    for index: cast(s32)0..count - 1 { copy[index] = source[index] }
+    unused WriteAt(file, copy[:count], 0)
+    CloseFile(file)
+}
+
+Case :: (source: string, kss: bool, must_convert: bool) -> bool {
+    SaveCurrent(source)
+    if kss { CheckKss(source, must_convert) } else { CheckCss(source, must_convert) }
+    return !fuzz_failed
+}
+
+EndsWith :: (text: string, tail: string) -> bool {
+    if tail.count > text.count { return false }
+    return text[cast(s32)(text.count - tail.count):] == tail
+}
+
+ReadInto :: (path: string, output: []u8) -> s32 {
+    file: FileHandle = OpenRead(path)
+    if !file.valid { return -1 }
+    read: s64 = ReadAt(file, output, 0)
+    CloseFile(file)
+    if read < 0 || read >= cast(s64)output.count { return -1 }
+    return cast(s32)read
+}
+
+Argument :: (argv: **s8, index: s32) -> string {
+    return TextFromCString(cast(*u8)argv[index])
+}
+
+ParseCount :: (text: string) -> s64 {
+    value: s64 = 0
+    for byte: text {
+        if byte < #char "0" || byte > #char "9" { return -1 }
+        value = value * 10 + cast(s64)(byte - #char "0")
+    }
+    return value
+}
+
+#program_export
+main :: (argc: s32, argv: **s8) -> s32 {
+    if argc < 4 {
+        Say(2, "usage: css_fuzz CURRENT SEED COUNT FILE... | CURRENT corpus FILE... | CURRENT check FILE\n")
+        return 2
+    }
+    fuzz_current = Argument(argv, 1)
+    mode: string = Argument(argv, 2)
+    if mode == "corpus" || mode == "check" {
+        for index: cast(s32)3..argc - 1 {
+            path: string = Argument(argv, index)
+            count: s32 = ReadInto(path, fuzz_file[:])
+            if count < 0 {
+                Say(2, "css fuzz: cannot read ")
+                Say(2, path)
+                Say(2, "\n")
+                return 1
+            }
+            kss: bool = EndsWith(path, ".kss")
+            ok: bool = EndsWith(path, ".ok.kss") || EndsWith(path, ".ok.css")
+            if !Case(TextView(fuzz_file[:count]), kss, ok) {
+                Say(2, "  in ")
+                Say(2, path)
+                Say(2, "\n")
+                return 1
+            }
+        }
+        return 0
+    }
+    seed: s64 = ParseCount(mode)
+    total: s64 = ParseCount(Argument(argv, 3))
+    if seed < 0 || total < 0 {
+        Say(2, "css fuzz: SEED and COUNT are numbers\n")
+        return 2
+    }
+    fuzz_random = cast(u64)seed * cast(u64)2654435761 + cast(u64)1
+    for index: cast(s32)4..argc - 1 {
+        if fuzz_seed_count >= 8 { break }
+        path: string = Argument(argv, index)
+        count: s32 = ReadInto(path, fuzz_seeds[fuzz_seed_count][:])
+        if count < 0 { continue }
+        fuzz_seed_lengths[fuzz_seed_count] = count
+        fuzz_seed_kss[fuzz_seed_count] = EndsWith(path, ".kss")
+        fuzz_seed_count += 1
+    }
+    for case_index: cast(s64)0..total - 1 {
+        kind: s32 = Below(8)
+        kss: bool = false
+        if kind < 3 || fuzz_seed_count == 0 {
+            kss = kind == 2
+            Generate(kss)
+            if Below(2) == 0 { Damage() }
+        } else {
+            seed_index: s32 = Below(fuzz_seed_count)
+            kss = fuzz_seed_kss[seed_index]
+            // A slice of a seed file, damaged.
+            length: s32 = fuzz_seed_lengths[seed_index]
+            start: s32 = ifx Below(2) == 0 then 0 else Below(length)
+            span: s32 = length - start
+            if span > 6000 { span = 1 + Below(6000) }
+            fuzz_length = 0
+            for at: start..start + span - 1 {
+                if fuzz_length < cast(s32)fuzz_source.count {
+                    fuzz_source[fuzz_length] = fuzz_seeds[seed_index][at]
+                    fuzz_length += 1
+                }
+            }
+            Damage()
+        }
+        if !Case(TextView(fuzz_source[:fuzz_length]), kss, false) {
+            Say(2, ifx kss then "  KSS case " else "  CSS case ")
+            SayNumber(2, case_index)
+            Say(2, " of seed ")
+            SayNumber(2, seed)
+            Say(2, "\n")
+            return 1
+        }
+    }
+    Say(1, "css fuzz: ")
+    SayNumber(1, total)
+    Say(1, " cases from seed ")
+    SayNumber(1, seed)
+    Say(1, " passed\n")
+    return 0
+}

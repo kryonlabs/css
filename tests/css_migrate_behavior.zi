@@ -1,0 +1,187 @@
+// The one-way KSS converter: exact CSS for each KSS construct, the same
+// styles once built, and an error naming the line for what has no CSS form.
+#import "css_parser"
+#import "css_sheet"
+#import "css_migrate"
+#import "css_test_support"
+#import "kryon/style"
+#import "kryon/style_sheet"
+
+migrated: [65536]u8;
+
+sample_kss :: #string KSS
+@pack sample;
+@layer components;
+
+tokens {
+  color { ink: #102030; paper: #ffffff; }
+  length { pad: 6; }
+}
+
+@theme dark {
+  ink: #eeeeee;
+}
+
+Button {
+  background: paper;
+  background-end: ink;
+  foreground: ink;
+  border: ink;
+  focus: ink;
+  radius: 4;
+  padding-x: pad;
+  padding-y: 2;
+  offset-x: 1;
+  offset-y: 2;
+}
+
+Button:pressed { background: ink; }
+Button[class=primary] { foreground: paper; }
+
+@env density(compact) {
+  Text { font-size: 12; }
+}
+KSS;
+
+sample_css :: #string CSS
+@layer components {
+  :root {
+    --ink: #102030;
+    --paper: #ffffff;
+    --pad: 6px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #eeeeee;
+    }
+  }
+
+  Button {
+    background: linear-gradient(var(--paper), var(--ink));
+    color: var(--ink);
+    border-color: var(--ink);
+    outline-color: var(--ink);
+    border-radius: 4px;
+    padding-inline: var(--pad);
+    padding-block: 2px;
+    translate: 1px 2px;
+  }
+
+  Button:active {
+    background: var(--ink);
+  }
+
+  Button.primary {
+    color: var(--paper);
+  }
+
+  @media (-kryon-density: compact) {
+    Text {
+      font-size: 12px;
+    }
+  }
+}
+CSS;
+
+Trimmed :: (text: string) -> string {
+    count: s32 = cast(s32)text.count
+    while count > 0 && (text[count - 1] == 10 || text[count - 1] == 32) { count -= 1 }
+    return text[:count]
+}
+
+Migrate :: (source: string) -> CssMigration {
+    return CssMigrateKss(source, migrated[:])
+}
+
+Output :: (result: CssMigration) -> string {
+    return TextView(migrated[:result.count])
+}
+
+MigrateFails :: (source: string, fragment: string, line: s32, label: string) {
+    result: CssMigration = Migrate(source)
+    message: string = TextView(result.error[:result.error_length])
+    if result.ok || !Contains(message, fragment) || result.line != line {
+        TestSay("  error: ")
+        TestSay(message)
+        TestSay("\n")
+        Check(false, label)
+    }
+}
+
+Exact :: () {
+    result: CssMigration = Migrate(sample_kss)
+    Check(result.ok, "sample migrates")
+    if !result.ok {
+        TestSay("  error: ")
+        TestSay(TextView(result.error[:result.error_length]))
+        TestSay("\n")
+        return
+    }
+    output: string = Output(result)
+    if Trimmed(output) != Trimmed(sample_css) {
+        TestSay(output)
+        Check(false, "sample output is exact")
+    }
+}
+
+// What the KSS meant, the CSS builds: same colors, lengths and states.
+Meaning :: () {
+    result: CssMigration = Migrate(sample_kss)
+    if !result.ok { return }
+    for theme: cast(s32)0..1 {
+        dark: bool = theme == 1
+        if !BuildIn(Output(result), Env(ifx dark then "dark" else "light")) {
+            TestSay("  diagnostic: ")
+            TestSay(Diagnostic())
+            TestSay("\n")
+            Check(false, "migrated sample builds")
+            return
+        }
+        ink: u32 = ifx dark then cast(u32)0xeeeeeeff else cast(u32)0x102030ff
+        button: StyleData = Resolve(Facts(StyleKindButton(), 0), 1)
+        Check(button.background == cast(u32)0xffffffff && button.background_end == ink, "gradient ends")
+        Check(button.foreground == ink && button.border == ink && button.focus == ink, "renamed colors")
+        Check(button.radius == 4.0 && button.padding_x == 6.0 && button.padding_y == 2.0, "lengths in px")
+        Check(button.offset_x == 1.0 && button.offset_y == 2.0, "offsets as translate")
+        Check(Resolve(Facts(StyleKindButton(), 0), 3).background == ink, ":pressed is :active")
+        Check(Resolve(Facts(StyleKindButton(), CssClass("primary")), 1).foreground == cast(u32)0xffffffff,
+            "[class=x] is .x")
+    }
+}
+
+Errors :: () {
+    MigrateFails("Button { gap: 1; }\n@variant big \"Big\" { Button { gap: 2; } }",
+        "@variant has no CSS form", 2, "variant")
+    MigrateFails("Button { background-end: #000000; }", "background-end needs a background", 1,
+        "lone gradient end")
+    MigrateFails("@env mood(happy) { Text { gap: 1; } }", "unknown @env axis", 1, "unknown axis")
+    MigrateFails("@frobnicate;", "unknown KSS directive", 1, "unknown directive")
+    MigrateFails("Button { gap: 1;\n", "expected '}'", 2, "open rule")
+    MigrateFails("/* open\nButton { }", "unterminated comment", 2, "open comment")
+}
+
+// Every migrated sheet must parse: the corpus files marked .ok convert,
+// the rest fail with a line.
+Corpus :: () {
+    imports: string = "@import \"base\";\nButton { gap: 1; }"
+    result: CssMigration = Migrate(imports)
+    Check(result.ok && Contains(Output(result), "@import \"base\";"), "imports are kept")
+    if result.ok { Check(Parse(Output(result)), "migrated import parses") }
+    // Layer sections become blocks; the default layer order survives.
+    layered: CssMigration = Migrate("@layer app;\nText { gap: 1; }\n@layer reset;\nText { gap: 2; }")
+    Check(layered.ok, "layer sections migrate")
+    if layered.ok {
+        Check(Contains(Output(layered), "@layer app {") && Contains(Output(layered), "@layer reset {"),
+            "layer sections become blocks")
+    }
+}
+
+main :: () -> s32 {
+    Exact()
+    Meaning()
+    Errors()
+    Corpus()
+    if test_failures == 0 { TestSay("css migrate behavior: PASS\n") }
+    return test_failures
+}

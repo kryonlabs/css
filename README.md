@@ -14,6 +14,11 @@ apps built through the C, C++ and Go targets.
 ziran add https://github.com/kryonlabs/css.git
 ```
 
+It needs Ziran 03e01d08 (2026-11-05) or newer; older toolchains cap the
+array literals the compiled packs use. The package depends on Kryon
+`master`. An app that pins Kryon to a commit should lock the same commit,
+so the styles install into the one Kryon the app draws with.
+
 ```zi
 using Styles :: #import "css/Css";
 #import "css/SystemStyle"

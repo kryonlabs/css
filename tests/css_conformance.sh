@@ -63,11 +63,14 @@ same Go "$OUT/go.txt"
 # ZX: the bundle returns the combined digest.
 "$ZIRAN" bundle --project --entry css_conformance:CssConformanceAll -o "$OUT/conformance.zx" \
     tests/css_conformance.zi 2>&1 | quiet
-# The bundle is run by the toolchain that wrote it, the project's own.
-ZX_RUN="$ZIRAN"
+# The bundle is run by the toolchain that wrote it, the project's own; where
+# that is not built, the portable runtime runs the entry from source.
 TOOLCHAIN="$("$ZIRAN" pkg path ziran 2> /dev/null)/build/bin/ziran"
-if [ -x "$TOOLCHAIN" ]; then ZX_RUN="$TOOLCHAIN"; fi
-echo "all $("$ZX_RUN" run "$OUT/conformance.zx")" > "$OUT/zx.txt"
+if [ -x "$TOOLCHAIN" ]; then
+    echo "all $("$TOOLCHAIN" run "$OUT/conformance.zx")" > "$OUT/zx.txt"
+else
+    echo "all $("$ZIRAN" run --entry css_conformance:CssConformanceAll tests/css_conformance.zi 2>&1 | quiet)" > "$OUT/zx.txt"
+fi
 if ! grep -qx "$(cat "$OUT/zx.txt")" "$EXPECTED"; then
     echo "css conformance: ZX printed '$(cat "$OUT/zx.txt")', expected the 'all' line of $EXPECTED" >&2
     exit 1

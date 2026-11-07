@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          path: kss
+          path: css
 
       - name: Build the ziran launcher
         run: |
@@ -21,20 +21,26 @@ jobs:
           echo "$PWD/ziran/build/bin" >> "$GITHUB_PATH"
 
       - name: Test
-        working-directory: kss
+        working-directory: css
         run: |
           ziran fetch --locked
           make test style-pack-check
 
+      # C, C++, Go, ZX and the browser export must agree; Android runs
+      # where a phone is attached, so it is skipped here.
+      - name: Conformance
+        working-directory: css
+        run: env -u DISPLAY -u WAYLAND_DISPLAY make conformance
+
       # A failure names the seed; rerun it with make fuzz FUZZ_SEED=N.
       - name: Fuzz with this run's seed
-        working-directory: kss
+        working-directory: css
         run: env -u DISPLAY -u WAYLAND_DISPLAY make fuzz FUZZ_SEED=${{ github.run_number }} FUZZ_COUNT=10000
 
       - name: Keep a failing sheet
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: kss-fuzz-failure
-          path: kss/build/kss-fuzz/failure-*.kss
+          name: css-fuzz-failure
+          path: css/build/css-fuzz/failure-*
           if-no-files-found: ignore

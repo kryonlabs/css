@@ -60,7 +60,7 @@ Selectors :: () {
     Check(Contains(output, "#kryon-dom-root :where(*) {\n  gap: 2px;"), "universal selector scoped")
     states: string = Export("Tab:selected { color: red; }\nButton:loading { opacity: 0.5; }\nButton:hover { color: blue; }",
         CssDefaultEnvironment())
-    Check(Contains(states, "[aria-selected=\"true\"]:not(:hover):not(:active):not([aria-disabled=\"true\"])"),
+    Check(Contains(states, ":is([data-kryon-selected=\"true\"],[aria-selected=\"true\"]):not(:hover):not(:active):not([aria-disabled=\"true\"])"),
         "selected yields to hover, press and disabled")
     Check(Contains(states, "[aria-busy=\"true\"]:not([aria-disabled=\"true\"])"), "loading yields to disabled")
     Check(Contains(states, ":hover:not(:active):not([aria-disabled=\"true\"]):not([aria-busy=\"true\"])"),
@@ -91,6 +91,22 @@ Ranking :: () {
     Check(two > one && red > one, "a class outranks a type")
 }
 
+IdRanking :: () {
+    output: string = Export("Button.primary { color: red; }\nButton#save { color: green; }",
+        CssDefaultEnvironment())
+    digits: [32]u8
+    id_value: string = Number.FormatInteger(StyleId("save"), digits[:])
+    selector: [256]u8
+    count: s32 = 0
+    head: string = "#kryon-dom-root :where([data-kryon-widget=\"Button\"][data-kryon-id=\""
+    for byte: head { selector[count] = byte; count += 1 }
+    for byte: id_value { selector[count] = byte; count += 1 }
+    tail: string = "\"]) {"
+    for byte: tail { selector[count] = byte; count += 1 }
+    Check(Contains(output, TextView(selector[:count])), "ids map to DOM attributes")
+    Check(At(output, "color: red") < At(output, "color: green"), "an id outranks a class")
+}
+
 Declarations :: () {
     output: string = Export(":root { --ink: #102030; }\nButton { color: var(--ink); -kryon-material: glass; -kryon-icon-size: 20px; width: 40px; }",
         CssDefaultEnvironment())
@@ -98,6 +114,11 @@ Declarations :: () {
     Check(Contains(output, "  color: var(--ink);\n"), "declarations copied")
     Check(Contains(output, "  width: 40px;\n"), "document properties kept for the web")
     Check(!Contains(output, "-kryon-material") && !Contains(output, "-kryon-icon-size"), "-kryon-* declarations dropped")
+    authoring: string = Export("Button { min-block-size: 44px; color: hwb(.5turn 20% 20% / 50%); opacity: 75%; }",
+        CssDefaultEnvironment())
+    Check(Contains(authoring, "  min-block-size: 44px;") &&
+        Contains(authoring, "  color: hwb(.5turn 20% 20% / 50%);") &&
+        Contains(authoring, "  opacity: 75%;"), "logical size, modern color and opacity export as CSS")
 }
 
 Media :: () {
@@ -109,6 +130,14 @@ Media :: () {
     dark: string = Export(source, Env("dark"))
     Check(Contains(dark, "color: white;") && !Contains(dark, "prefers-color-scheme"),
         "dark rules decided, not queried")
+    reduced: string = Export("@media (prefers-reduced-motion: reduce) { Text { gap: 2px; } }",
+        CssDefaultEnvironment())
+    Check(Contains(reduced, "@media (prefers-reduced-motion: reduce) {") &&
+        Contains(reduced, "gap: 2px;"), "reduced motion stays a browser query")
+    unreduced: string = Export("@media (prefers-reduced-motion: no-preference) { Text { gap: 3px; } }",
+        CssDefaultEnvironment())
+    Check(Contains(unreduced, "@media (prefers-reduced-motion: no-preference) {") &&
+        Contains(unreduced, "gap: 3px;"), "no preference stays a browser query")
 }
 
 Refusals :: () {
@@ -124,6 +153,7 @@ main :: () -> s32 {
     Selectors()
     Declarations()
     Ranking()
+    IdRanking()
     Media()
     Refusals()
     if test_failures == 0 { TestSay("css export behavior: PASS\n") }

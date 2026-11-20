@@ -1,12 +1,12 @@
 #!/bin/sh
 # Build tests/css_fuzz.zi with AddressSanitizer and UndefinedBehaviorSanitizer
 # and run it: the corpus first, then generated sheets and damaged copies of
-# the shipped packs and the KSS corpus.
+# the shipped packs.
 #
 #   sh tests/css_fuzz.sh SEED COUNT      COUNT cases from SEED
 #   sh tests/css_fuzz.sh check FILE      the checks on one saved sheet
 #
-# A failing sheet is kept as build/css-fuzz/failure-SEED.css (or .kss).
+# A failing sheet is kept as build/css-fuzz/failure-SEED.css.
 set -eu
 
 repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -41,13 +41,13 @@ if test "$1" = check; then
 fi
 status=0
 # Sheets that once failed come first.
-run corpus tests/css_corpus/*.css tests/css_corpus/kss/*.kss || status=$?
+run corpus tests/css_corpus/*.css || status=$?
 if test "$status" -ne 0; then
     cp "$current" "$out/failure-corpus"
     echo "css fuzz: a corpus sheet failed; it is kept in build/css-fuzz/failure-corpus" >&2
     exit 1
 fi
-run "$1" "$2" styles/*.css tests/css_corpus/kss/*.ok.kss || status=$?
+run "$1" "$2" styles/*.css || status=$?
 if test "$status" -ne 0; then
     cp "$current" "$out/failure-$1"
     if test "$status" -eq 124; then

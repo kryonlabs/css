@@ -101,9 +101,11 @@ SayCheck :: (property: string, kind: string) {
 }
 
 // One element and what Kryon resolves for it.
-SayElement :: (kind: s32, name: string, class_name: string, state: s32) {
+SayElement :: (kind: s32, name: string, class_name: string, state: s32,
+    id_name: string = "") {
     facts: StyleFacts = StyleDefaultFacts(kind)
     if class_name.count > 0 { facts.class_name = CssClass(class_name) }
+    if id_name.count > 0 { facts.id = StyleId(id_name) }
     base: StyleData
     style: StyleData = ResolveStyleRules(conformance_rules, base, facts, state)
     Say("<div data-kryon-widget=\"")
@@ -114,9 +116,14 @@ SayElement :: (kind: s32, name: string, class_name: string, state: s32) {
         SayNumber(cast(s64)facts.class_name)
         Say("\"")
     }
+    if id_name.count > 0 {
+        Say(" data-kryon-id=\"")
+        SayNumber(cast(s64)facts.id)
+        Say("\"")
+    }
     if state == 5 { Say(" aria-disabled=\"true\"") }
     if state == 6 { Say(" aria-busy=\"true\"") }
-    if state == 7 { Say(" aria-selected=\"true\"") }
+    if state == 7 { Say(" data-kryon-selected=\"true\"") }
     Say(" data-expect='[")
     first: bool = true
     if (style.fields & cast(u32)StyleForeground) != cast(u32)0 {
@@ -136,6 +143,13 @@ SayElement :: (kind: s32, name: string, class_name: string, state: s32) {
         if !first { Say(",") }
         SayCheck("border-top-color", "color")
         SayColor(style.border)
+        Say("]")
+        first = false
+    }
+    if (style.fields & cast(u32)StyleMinHeight) != cast(u32)0 {
+        if !first { Say(",") }
+        SayCheck("min-height", "length")
+        SayMilli(style.min_height)
         Say("]")
         first = false
     }
@@ -241,6 +255,7 @@ WritePage :: (dir: string, theme: s32) -> bool {
             for state: states { SayElement(kinds[index], names[index], class_name, state) }
         }
     }
+    SayElement(StyleKindButton(), "Button", "", 7, "conformance")
     Say("</div>\n")
     Say(page_script)
     Say("</body></html>\n")

@@ -17,6 +17,11 @@ using ControlSize;
 using ButtonState;
 using MaterialKind;
 using StyleField;
+using ElevationRole;
+using FontRole;
+using MotionEasing;
+using FontStyle;
+using LineHeightUnit;
 
 // Kryon CSS: the closed subset of CSS every Kryon host implements. A sheet
 // is ordinary CSS text and this module is its one parser. It streams each
@@ -51,6 +56,15 @@ CssTokenKind :: enum {
     CssTokenNumber :: 4
     CssTokenAlias :: 5
     CssTokenUndefined :: 6
+    CssTokenFontRole :: 7
+    CssTokenElevation :: 8
+    CssTokenEasing :: 9
+    CssTokenMotionReduced :: 10
+    CssTokenInherit :: 11
+    CssTokenPercentage :: 12
+    CssTokenNormal :: 13
+    CssTokenBold :: 14
+    CssTokenFontStyle :: 15
 }
 
 CssScheme :: enum {
@@ -102,6 +116,18 @@ CssField :: enum {
     CssFieldOffsetY :: 14
     CssFieldMaterial :: 15
     CssFieldLetterSpacing :: 16
+    CssFieldMinHeight :: 17
+    CssFieldLineHeight :: 18
+    CssFieldFontRole :: 19
+    CssFieldElevation :: 20
+    CssFieldMotionDuration :: 21
+    CssFieldMotionMultiplier :: 22
+    CssFieldMotionEasing :: 23
+    CssFieldMotionReduced :: 24
+    CssFieldRowGap :: 25
+    CssFieldColumnGap :: 26
+    CssFieldFontWeight :: 27
+    CssFieldFontStyle :: 28
 }
 
 // Rules outside every @layer outrank layered ones, as in CSS.

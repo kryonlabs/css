@@ -3,6 +3,7 @@
 // compare a compiled pack with the same sheet parsed.
 #import "kryon/style"
 #import "kryon/style_sheet"
+#import "css_export"
 
 CssDigestMix :: (hash: u32, value: u32) -> u32 {
     return (hash ^ value) * cast(u32)16777619
@@ -37,6 +38,19 @@ CssDigestStyle :: (start: u32, style: StyleData) -> u32 {
         hash = CssDigestMix(hash, cast(u32)style.typeface[index])
     }
     hash = CssDigestFloat(hash, style.letter_spacing)
+    hash = CssDigestFloat(hash, style.min_height)
+    hash = CssDigestFloat(hash, style.line_height)
+    hash = CssDigestMix(hash, cast(u32)cast(s32)style.font_role)
+    hash = CssDigestMix(hash, cast(u32)cast(s32)style.elevation)
+    hash = CssDigestFloat(hash, style.motion_duration)
+    hash = CssDigestFloat(hash, style.motion_multiplier)
+    hash = CssDigestMix(hash, cast(u32)cast(s32)style.motion_easing)
+    hash = CssDigestMix(hash, ifx style.motion_reduced then cast(u32)1 else cast(u32)0)
+    hash = CssDigestFloat(hash, style.row_gap)
+    hash = CssDigestFloat(hash, style.column_gap)
+    hash = CssDigestMix(hash, cast(u32)style.font_weight)
+    hash = CssDigestMix(hash, cast(u32)cast(s32)style.font_style)
+    hash = CssDigestMix(hash, cast(u32)cast(s32)style.line_height_unit)
     return hash
 }
 
@@ -45,6 +59,7 @@ CssDigestRule :: (start: u32, rule: StyleRule) -> u32 {
     hash = CssDigestMix(hash, cast(u32)rule.selector.kind)
     hash = CssDigestMix(hash, cast(u32)rule.selector.name)
     hash = CssDigestMix(hash, cast(u32)rule.selector.class_name)
+    hash = CssDigestMix(hash, cast(u32)rule.selector.id)
     hash = CssDigestMix(hash, cast(u32)rule.selector.role)
     hash = CssDigestMix(hash, cast(u32)rule.selector.tone)
     hash = CssDigestMix(hash, cast(u32)rule.selector.emphasis)
@@ -67,14 +82,17 @@ CssDigestTable :: (rules: StyleRules) -> u32 {
     return hash
 }
 
-// What it resolves to: every widget kind in every state, plain and in each
-// tone and emphasis, unclassed.
-CssDigestResolved :: (rules: StyleRules) -> u32 {
+// What it resolves to: every widget kind in every state, plain, with one ID
+// and in each tone and emphasis, unclassed.
+CssDigestResolved :: (rules: StyleRules, id: s32) -> u32 {
     hash: u32 = 2166136261
     base: StyleData
-    for kind: cast(s32)1..63 {
+    for kind: cast(s32)1..65 {
         for state: cast(s32)1..7 {
             hash = CssDigestStyle(hash, ResolveStyleRules(rules, base, StyleDefaultFacts(kind), state))
+            id_facts: StyleFacts = StyleDefaultFacts(kind)
+            id_facts.id = id
+            hash = CssDigestStyle(hash, ResolveStyleRules(rules, base, id_facts, state))
             for tone: cast(s32)0..4 {
                 for emphasis: cast(s32)0..4 {
                     facts: StyleFacts = StyleDefaultFacts(kind)

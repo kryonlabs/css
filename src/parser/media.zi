@@ -2,9 +2,9 @@
 // (prefers-color-scheme, prefers-contrast, pointer, any-pointer, hover and
 // the -kryon-density, -kryon-pointer, -kryon-platform and -kryon-theme
 // features) become bit masks every host tests the same way. Viewport
-// features (width, height, orientation, aspect-ratio and their ranges) and
-// the print type only apply on the web document host; native hosts treat
-// them as not matching.
+// features (width, height, orientation, aspect-ratio and their ranges),
+// prefers-reduced-motion and the print type only apply on the web document
+// host; native hosts treat them as not matching.
 
 CssSchemeBits :: 0x3
 CssContrastBits :: 0xc
@@ -125,6 +125,24 @@ CssReadFeature :: (p: *CssParser, branch: *CssBranch) {
         }
         if depth != 0 {
             CssFail(p, "expected ')' after the media feature")
+            return
+        }
+        CssAddViewport(p, branch, start, p.cursor.pos - start)
+        return
+    }
+    if CssNameEquals(feature, "prefers-reduced-motion") {
+        if !CssExpect(p, #char ":", "expected ':' in the media feature") { return }
+        CssSkipSpace(p)
+        if CssFailed(p) { return }
+        value: CssName = CssReadName(p)
+        if CssFailed(p) { return }
+        if value.length == 0 {
+            CssFail(p, "expected a media feature value")
+            return
+        }
+        if !CssExpect(p, #char ")", "expected ')' after the media feature") { return }
+        if !CssNameEquals(value, "reduce") && !CssNameEquals(value, "no-preference") {
+            CssFailName(p, "unknown value", value, " for this media feature")
             return
         }
         CssAddViewport(p, branch, start, p.cursor.pos - start)

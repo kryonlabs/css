@@ -1,6 +1,6 @@
 // Kryon CSS command line tool. Run it from the repository root:
 //
-//   css_tool migrate IN.kss OUT.css   convert a KSS sheet to Kryon CSS and
+//   css_tool export IN.css OUT.css    write browser CSS for the DOM host and
 //                                     check the result parses
 //   css_tool check FILE.css           parse a sheet; imports count as empty
 //   css_tool format FILE.css          rewrite a sheet in the standard layout
@@ -17,8 +17,8 @@
 #import "file_linux"
 #import "css_parser"
 #import "css_sheet"
-#import "css_migrate"
 #import "css_format"
+#import "css_export"
 #import "kryon/style"
 #import "kryon/style_sheet"
 
@@ -247,6 +247,7 @@ GeneratePack :: (pack: string, source: string) -> s32 {
         SignedWord(selector.kind)
         SignedWord(selector.name)
         SignedWord(selector.class_name)
+        SignedWord(selector.id)
         SignedWord(selector.role)
         SignedWord(selector.tone)
         SignedWord(selector.emphasis)
@@ -280,7 +281,19 @@ GeneratePack :: (pack: string, source: string) -> s32 {
         typeface: s32 = TypefaceIndex(style.typeface)
         if typeface < -1 { return Fail(path, "more than 16 typefaces") }
         SignedWord(typeface + 1)
-        Word(0)
+        Word(FloatBits(style.min_height))
+        Word(FloatBits(style.line_height))
+        SignedWord(cast(s32)style.font_role)
+        SignedWord(cast(s32)style.elevation)
+        Word(FloatBits(style.motion_duration))
+        Word(FloatBits(style.motion_multiplier))
+        SignedWord(cast(s32)style.motion_easing)
+        Word(ifx style.motion_reduced then cast(u32)1 else cast(u32)0)
+        Word(FloatBits(style.row_gap))
+        Word(FloatBits(style.column_gap))
+        SignedWord(style.font_weight)
+        SignedWord(cast(s32)style.font_style)
+        SignedWord(cast(s32)style.line_height_unit)
     }
     ok = ok && EmitWords("rules", pack, CssCompiledRuleWords)
     for index: cast(s32)0..sheet.ref_count - 1 {
@@ -319,7 +332,8 @@ GeneratePack :: (pack: string, source: string) -> s32 {
         EmitStrings("typefaces", pack, typefaces[:], typeface_count)
     ok = ok && Emit("// The ") && Emit(pack) && Emit(" pack, compiled: load it with CssSheetLoad.\n") &&
         Emit("#program_export\nStylePack") && Emit(title) && Emit(" :: () -> CssCompiledSheet {\n") &&
-        Emit("    compiled: CssCompiledSheet\n")
+        Emit("    compiled: CssCompiledSheet\n") &&
+        Emit("    compiled.rule_words = ") && EmitNumber(CssCompiledRuleWords) && Emit("\n")
     for part: css_tool_parts {
         ok = ok && Emit("    compiled.") && Emit(part) && Emit(" = style_pack_") && Emit(pack) && Emit("_") &&
             Emit(part) && Emit("[0:style_pack_") && Emit(pack) && Emit("_") && Emit(part) && Emit("_count")
@@ -359,7 +373,7 @@ Argument :: (argv: **s8, index: s32) -> string {
 #program_export
 main :: (argc: s32, argv: **s8) -> s32 {
     if argc < 3 {
-        WriteText(2, "usage: css_tool migrate IN.kss OUT.css | check FILE.css | format FILE.css | format-check FILE.css | pack NAME | pack-check NAME\n")
+        WriteText(2, "usage: css_tool export IN.css OUT.css | check FILE.css | format FILE.css | format-check FILE.css | pack NAME | pack-check NAME\n")
         return 2
     }
     mode: string = Argument(argv, 1)
@@ -384,32 +398,18 @@ main :: (argc: s32, argv: **s8) -> s32 {
         WriteText(1, "\n")
         return 0
     }
-    if mode == "migrate" {
-        if argc != 4 { return Fail("migrate", "usage: css_tool migrate IN.kss OUT.css") }
+    if mode == "export" {
+        if argc != 4 { return Fail("export", "usage: css_tool export IN.css OUT.css") }
         input: string = Argument(argv, 2)
         target: string = Argument(argv, 3)
         count: s32 = ReadFile(input)
         if count < 0 { return Fail(input, "cannot read") }
-        result: CssMigration = CssMigrateKss(TextView(source_bytes[:count]), output_bytes[:])
+        source: string = TextView(source_bytes[:count])
+        result: CSSExport = ExportCSS(source, input, CssDefaultEnvironment(), output_bytes[:])
         if !result.ok {
-            line: [16]u8
-            WriteText(2, "css_tool: ")
-            WriteText(2, input)
-            WriteText(2, ":")
-            output_length = 0
-            unused EmitNumber(result.line)
-            WriteText(2, TextView(output_bytes[:output_length]))
-            WriteText(2, ": ")
-            WriteText(2, TextView(result.error[:result.error_length]))
-            WriteText(2, "\n")
-            return 1
+            return Fail(input, TextView(result.error[:result.error_length]))
         }
-        converted: string = TextView(output_bytes[:result.count])
-        if CheckSheet(target, converted) != 0 { return 1 }
-        // Written in the layout `format` keeps.
-        tidy: CssFormatResult = CssFormat(converted, disk_bytes[:])
-        if !tidy.ok { return Fail(target, TextView(tidy.diagnostic[:tidy.diagnostic_length])) }
-        if !WriteFile(target, disk_bytes[:tidy.count]) { return Fail(target, "cannot write") }
+        if !WriteFile(target, output_bytes[:result.count]) { return Fail(target, "cannot write") }
         WriteText(1, target)
         WriteText(1, "\n")
         return 0

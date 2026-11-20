@@ -28,6 +28,9 @@ css_export_parser: CssParser;
 #program_export
 StyleClass :: (name: string) -> s32 { return CssClass(name) }
 
+#program_export
+StyleId :: (name: string) -> s32 { return CssClass(name) }
+
 CssExporter :: struct {
     output: []u8
     count: s32
@@ -87,6 +90,14 @@ CssExportCompound :: (e: *CssExporter, text: string) -> bool {
             CssExportWrite(e, "[data-kryon-class=\"")
             CssExportWrite(e, Number.FormatInteger(CssClass(text[start:at]), digits[:]))
             CssExportWrite(e, "\"]")
+        } else if byte == #char "#" {
+            at += 1
+            start: s32 = at
+            while at < count && CssNameChar(text[at]) { at += 1 }
+            digits: [32]u8
+            CssExportWrite(e, "[data-kryon-id=\"")
+            CssExportWrite(e, Number.FormatInteger(StyleId(text[start:at]), digits[:]))
+            CssExportWrite(e, "\"]")
         } else if byte == #char ":" {
             at += 1
             start: s32 = at
@@ -103,12 +114,12 @@ CssExportCompound :: (e: *CssExporter, text: string) -> bool {
                 CssExportWrite(e, ":hover:not(:active)")
                 CssExportWrite(e, idle)
             } else if state == "selected" || state == "checked" {
-                CssExportWrite(e, "[aria-selected=\"true\"]:not(:hover):not(:active)")
+                CssExportWrite(e, ":is([data-kryon-selected=\"true\"],[aria-selected=\"true\"]):not(:hover):not(:active)")
                 CssExportWrite(e, idle)
             } else if state == "focus" || state == "focus-visible" {
                 CssExportWrite(e, ":")
                 CssExportWrite(e, state)
-                CssExportWrite(e, ":not([aria-selected=\"true\"]):not(:hover):not(:active)")
+                CssExportWrite(e, ":not([data-kryon-selected=\"true\"],[aria-selected=\"true\"]):not(:hover):not(:active)")
                 CssExportWrite(e, idle)
             } else {
                 return CssExportFail(e, "a state the DOM host does not mark")

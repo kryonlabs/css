@@ -236,7 +236,7 @@ CssReadAtRule :: (p: *CssParser) -> bool {
     if CssNameEquals(keyword, "pack") || CssNameEquals(keyword, "theme") ||
         CssNameEquals(keyword, "env") || CssNameEquals(keyword, "variant") ||
         CssNameEquals(keyword, "version") {
-        CssFailName(p, "KSS directive", keyword, "; convert the sheet with css-migrate")
+        CssFailName(p, "KSS directive", keyword, "; convert the sheet before loading")
         return false
     }
     CssFailName(p, "at-rule", keyword, " is outside Kryon CSS")

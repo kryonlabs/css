@@ -10,6 +10,9 @@
 using StyleField;
 using ButtonTone;
 using MaterialKind;
+using ElevationRole;
+using FontRole;
+using MotionEasing;
 using CssTokenKind;
 using CssScheme;
 
@@ -54,6 +57,16 @@ Values :: () {
     if Builds("Text { font-family: \"Inter Display\", sans-serif; }", "font family") {
         Check(test_rules.items[0].style.typeface == "Inter Display", "first family")
     }
+    if Builds("Card { min-height: 44px; line-height: 1.25; -kryon-font-role: body; -kryon-elevation: floating; -kryon-motion-duration: 120ms; -kryon-motion-multiplier: 1.5; -kryon-motion-easing: linear; -kryon-motion-reduced: reduce; }",
+        "typed customization") {
+        style: StyleData = Rule(0).style
+        Check(style.min_height == 44.0 && style.line_height == 1.25, "geometry")
+        Check(cast(s32)style.font_role == cast(s32)FontRoleBody &&
+            cast(s32)style.elevation == cast(s32)ElevationRoleFloating, "font and elevation")
+        Check(style.motion_duration == 120.0 && style.motion_multiplier == 1.5 &&
+            cast(s32)style.motion_easing == cast(s32)MotionEasingLinear && style.motion_reduced,
+            "motion")
+    }
     // Document properties are for the web export; natively they are skipped.
     if Builds("Button { width: 20px; margin-inline: 4px; color: red; }", "web properties") {
         Check(Rule(0).style.foreground == cast(u32)0xff0000ff, "web properties skipped")
@@ -63,11 +76,63 @@ Values :: () {
     }
 }
 
+native_authoring_css :: #string CSS
+:root { --ink: hwb(.5turn 20% 20% / 50%); --fade: 180%; --control: 2.75rem; }
+Button { min-height: 32px; background: hwb(45 40% 80%); opacity: var(--fade); }
+Button.primary { min-block-size: var(--control, -1px); color: var(--ink); }
+Button.primary:hover { min-height: 48px; opacity: var(--missing, 75%); }
+CSS;
+
+native_authoring_angles_css :: #string CSS
+Button {
+  min-block-size: var(--missing);
+  min-height: 16px;
+  opacity: -25%;
+  border: 1px solid hwb(-.5turn 0% 0%);
+  background: linear-gradient(hsl(200grad 100% 50%), hsla(3.141592653589793rad, 100%, 50%, .5));
+}
+CSS;
+
+NativeAuthoring :: () {
+    if Builds(native_authoring_css, "native authoring") {
+        facts: StyleFacts = Facts(StyleKindButton(), CssClass("primary"))
+        normal: StyleData = Resolve(facts, 1)
+        Check(normal.min_height == 44.0 && Has(normal, cast(u32)StyleMinHeight),
+            "logical size resolves through the minimum-height cascade")
+        Check(normal.background == cast(u32)0x555555ff &&
+            normal.foreground == cast(u32)0x33cccc80, "HWB normalization and alpha token")
+        Check(normal.opacity == 1.0 && Has(normal, cast(u32)StyleOpacity),
+            "opacity token clamps on the typed field")
+        hover: StyleData = Resolve(facts, 2)
+        Check(hover.min_height == 48.0 && hover.opacity == 0.75,
+            "physical size and opacity fallback win on hover")
+        Check(Resolve(Facts(StyleKindButton(), 0), 2).min_height == 32.0,
+            "hover rule stays scoped to the class")
+    }
+    if Builds(native_authoring_angles_css, "aliases and angles") {
+        style: StyleData = Rule(0).style
+        Check(style.min_height == 16.0 && style.opacity == 0.0, "later alias clears reference and opacity clamps")
+        Check(style.border == cast(u32)0x00ffffff && style.background == cast(u32)0x00ffffff &&
+            style.background_end == cast(u32)0x00ffff80, "negative turn, grad and rad in border and gradient")
+    }
+    ParseFails("Button { min-block-size: -1px; }", "cannot be negative", "negative logical size")
+    BuildFails(":root { --size: -1px; } Button { min-block-size: var(--size); }",
+        "has an invalid value", "negative logical size from token")
+    BuildFails("Button { min-block-size: var(--size, -1px); }",
+        "has an invalid value", "negative logical size from used fallback")
+    ParseFails("Button { min-block-size: 50%; }", "percentages are not lengths", "relative logical size")
+    ParseFails("Button { color: hwb(0, 10%, 20%); }", "hwb() uses spaces", "HWB comma syntax")
+    ParseFails("Button { color: hwb(0 10 20%); }", "expected a percentage", "HWB percentage subset")
+    ParseFails("Button { color: hsl(10% 50% 50%); }", "a hue needs an angle", "invalid hue percentage")
+    ParseFails("Button { color: hwb(5px 10% 20%); }", "not an angle unit", "invalid hue unit")
+}
+
 Selectors :: () {
-    if Builds("Button.hero:hover, Text:disabled, *[tone=Accent]:active, Toggle:checked, Button:focus, Button:selected {color: red}",
+    if Builds("Button.hero#save:hover, Text:disabled, *[tone=Accent]:active, Toggle:checked, Button:focus, Button:selected {color: red}",
         "selector list") {
         Check(test_rules.count == 6, "one rule per selector")
-        Check(Rule(0).selector.class_name == CssClass("hero") && Rule(0).state == 2, "class and hover")
+        Check(Rule(0).selector.class_name == CssClass("hero") && Rule(0).selector.id == CssClass("save") &&
+            Rule(0).state == 2, "class, id and hover")
         Check(Rule(1).selector.kind == StyleKindText() && Rule(1).state == 5, "disabled")
         Check(Rule(2).selector.kind == StyleKindAny() && Rule(2).selector.tone == cast(s32)ButtonToneAccent &&
             Rule(2).state == 3, "universal, attribute, active")
@@ -76,7 +141,7 @@ Selectors :: () {
     }
     ParseFails("Button > Text { color: red; }", "combinators are outside Kryon CSS", "combinator")
     ParseFails("Button Text { color: red; }", "combinators are outside Kryon CSS", "descendant")
-    ParseFails("#save { color: red; }", "id selectors are outside Kryon CSS", "id")
+    ParseFails("Button#save#other { color: red; }", "one id per selector", "two ids")
     ParseFails("Button::before { color: red; }", "pseudo-elements are outside Kryon CSS", "pseudo-element")
     ParseFails("Button:nth-child(2) { color: red; }", "selector function", "selector function")
     ParseFails("Butt0n { color: red; }", "unknown widget type", "widget name")
@@ -112,8 +177,18 @@ Diagnostics :: () {
     ParseFails("@font-face { src: x; }", "at-rule 'font-face' is outside Kryon CSS", "unknown at-rule")
     ParseFails("@media not print { Button { color: red; } }", "'not' media queries", "not")
     ParseFails("@media (colour: dark) { Button { color: red; } }", "unknown media feature", "media feature")
+    ParseFails("@media (prefers-reduced-motion: maybe) { Button { color: red; } }",
+        "unknown value 'maybe' for this media feature", "reduced-motion value")
     ParseFails("Button { gap: 1e3px; }", "exponents are outside Kryon CSS", "exponent")
     ParseFails("Button { font-family: \"a\\\"b\"; }", "escapes in strings", "string escape")
+    ParseFails("Button { line-height: -1; }", "cannot be negative", "negative line height")
+    ParseFails("Row { gap: 3px -2px; }", "cannot be negative", "negative column gap")
+    ParseFails("Row { gap: 1px 2px 3px; }", "too many values", "gap takes two values")
+    ParseFails("Text { font-weight: 1001; }", "from 1 to 1000", "weight range")
+    ParseFails("Text { font-weight: bolder; }", "from 1 to 1000", "relative weight")
+    ParseFails("Text { font-style: oblique 20deg; }", "too many values", "oblique angle")
+    ParseFails("Button { -kryon-font-role: title; }", "unknown value 'title'", "unknown font role")
+    ParseFails("Button { -kryon-motion-easing: fast; }", "unknown value 'fast'", "unknown easing")
 }
 
 Layers :: () {
@@ -131,6 +206,13 @@ Layers :: () {
         Check(Resolve(Facts(StyleKindButton(), CssClass("hero")), 1).foreground == cast(u32)0x000004ff,
             "class beats type")
         Check(Resolve(Facts(StyleKindButton(), 0), 1).foreground == cast(u32)0x000005ff, "type alone")
+    }
+    if Builds("Button.hero { color: #000008; }\n#save { color: #000009; }", "id specificity") {
+        facts: StyleFacts = Facts(StyleKindButton(), CssClass("hero"))
+        facts.id = CssClass("save")
+        Check(Resolve(facts, 1).foreground == cast(u32)0x000009ff, "id beats type and class")
+        facts.id = CssClass("other")
+        Check(Resolve(facts, 1).foreground == cast(u32)0x000008ff, "a different id does not match")
     }
     if Builds("Button { color: #000006; }\nButton:hover { color: #000007; }", "state rules") {
         Check(Resolve(Facts(StyleKindButton(), 0), 2).foreground == cast(u32)0x000007ff, "hover state")
@@ -191,7 +273,7 @@ Variables :: () {
 }
 
 Media :: () {
-    source: string = "@media (-kryon-platform: android) { Button { gap: 3px; } }\n@media (pointer: coarse) { Button { gap: 5px; } }\n@media (max-width: 600px) { Button { gap: 7px; } }\n@media (prefers-contrast: more), (-kryon-density: compact) { Text { gap: 9px; } }"
+    source: string = "@media (-kryon-platform: android) { Button { gap: 3px; } }\n@media (pointer: coarse) { Button { gap: 5px; } }\n@media (max-width: 600px) { Button { gap: 7px; } }\n@media (prefers-contrast: more), (-kryon-density: compact) { Text { gap: 9px; } }\n@media (prefers-reduced-motion: reduce) { Text { gap: 11px; } }"
     if Builds(source, "media") {
         Check(test_rules.count == 0, "desktop mouse skips every block; viewport queries are for the web")
     }
@@ -211,11 +293,15 @@ Media :: () {
     web_dark: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(), "dark", "", "", "", "web")
     Check(BuildIn(nested, web_dark) && test_rules.count == 1, "nested media combine")
     Check(BuildIn(nested, Env("dark")) && test_rules.count == 0, "nested media need both")
+    reduced: string = "@media (prefers-reduced-motion: no-preference) { Text { gap: 13px; } }"
+    Check(BuildIn(reduced, CssDefaultEnvironment()) && test_rules.count == 0,
+        "the browser evaluates reduced motion")
 }
 
 #program_export
 main :: () -> s32 {
     Values()
+    NativeAuthoring()
     Selectors()
     Diagnostics()
     Layers()

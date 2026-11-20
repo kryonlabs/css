@@ -151,8 +151,18 @@ CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
             }
             pending.state = state
         } else if byte == #char "#" {
-            CssFail(p, "id selectors are outside Kryon CSS; use a class")
-            return false
+            CssAdvance(p, 1)
+            name: CssName = CssReadName(p)
+            if CssFailed(p) { return false }
+            if name.length == 0 {
+                CssFail(p, "expected an id name after '#'")
+                return false
+            }
+            if pending.selector.id != 0 {
+                CssFail(p, "one id per selector in Kryon CSS")
+                return false
+            }
+            pending.selector.id = CssClassId(name)
         } else {
             break
         }

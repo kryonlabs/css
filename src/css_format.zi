@@ -46,6 +46,7 @@ CssFormatParse :: (source: string, result: *CssFormatResult) -> CssFormatCounts 
             rule: StyleRule = p.rule
             hash = CssFormatMix(hash, cast(u32)rule.selector.kind)
             hash = CssFormatMix(hash, cast(u32)rule.selector.class_name)
+            hash = CssFormatMix(hash, cast(u32)rule.selector.id)
             hash = CssFormatMix(hash, cast(u32)rule.selector.role)
             hash = CssFormatMix(hash, cast(u32)rule.selector.tone)
             hash = CssFormatMix(hash, cast(u32)rule.state)
@@ -55,13 +56,30 @@ CssFormatParse :: (source: string, result: *CssFormatResult) -> CssFormatCounts 
             hash = CssFormatMix(hash, rule.style.foreground)
             hash = CssFormatMix(hash, rule.style.border)
             hash = CssFormatMixFloat(hash, rule.style.padding_x)
+            hash = CssFormatMixFloat(hash, rule.style.padding_y)
+            hash = CssFormatMixFloat(hash, rule.style.gap)
+            hash = CssFormatMixFloat(hash, rule.style.row_gap)
+            hash = CssFormatMixFloat(hash, rule.style.column_gap)
             hash = CssFormatMixFloat(hash, rule.style.font_size)
+            hash = CssFormatMix(hash, cast(u32)rule.style.font_weight)
+            hash = CssFormatMix(hash, cast(u32)cast(s32)rule.style.font_style)
+            hash = CssFormatMixFloat(hash, rule.style.letter_spacing)
+            hash = CssFormatMixFloat(hash, rule.style.min_height)
+            hash = CssFormatMixFloat(hash, rule.style.line_height)
+            hash = CssFormatMix(hash, cast(u32)cast(s32)rule.style.line_height_unit)
+            hash = CssFormatMix(hash, cast(u32)cast(s32)rule.style.font_role)
+            hash = CssFormatMix(hash, cast(u32)cast(s32)rule.style.elevation)
+            hash = CssFormatMixFloat(hash, rule.style.motion_duration)
+            hash = CssFormatMixFloat(hash, rule.style.motion_multiplier)
+            hash = CssFormatMix(hash, cast(u32)cast(s32)rule.style.motion_easing)
+            hash = CssFormatMix(hash, ifx rule.style.motion_reduced then cast(u32)1 else cast(u32)0)
             hash = CssFormatMix(hash, cast(u32)p.rule_ref_count)
         } else if status == cast(s32)CssStatusProperty {
             counts.properties += 1
             hash = CssFormatMix(hash, cast(u32)p.definition.kind)
             hash = CssFormatMix(hash, p.definition.color)
             hash = CssFormatMixFloat(hash, p.definition.number)
+            hash = CssFormatMix(hash, cast(u32)p.definition.material)
         } else if status == cast(s32)CssStatusKeyframes {
             counts.keyframes += 1
         } else if status == cast(s32)CssStatusNeedImport {

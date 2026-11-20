@@ -10,6 +10,7 @@ using CssTokenKind;
 using CssValueKind;
 using CssField;
 using StyleField;
+using LineHeightUnit;
 
 // A sheet is what every host installs: the rules of one or more parsed or
 // compiled sources, each with its media condition, their var() references,
@@ -487,6 +488,15 @@ CssKindName :: (kind: s32) -> string {
     if kind == cast(s32)CssTokenDuration { return "a duration" }
     if kind == cast(s32)CssTokenMaterial { return "a material" }
     if kind == cast(s32)CssTokenNumber { return "a number" }
+    if kind == cast(s32)CssTokenPercentage { return "a percentage" }
+    if kind == cast(s32)CssTokenNormal { return "normal" }
+    if kind == cast(s32)CssTokenBold { return "bold" }
+    if kind == cast(s32)CssTokenFontStyle { return "a font style" }
+    if kind == cast(s32)CssTokenFontRole { return "a font role" }
+    if kind == cast(s32)CssTokenElevation { return "an elevation" }
+    if kind == cast(s32)CssTokenEasing { return "a motion easing" }
+    if kind == cast(s32)CssTokenMotionReduced { return "a reduced-motion value" }
+    if kind == cast(s32)CssTokenInherit { return "inherit" }
     return "undefined"
 }
 
@@ -495,9 +505,48 @@ CssTokenFits :: (token: CssToken, field: s32) -> bool {
     expected: s32 = CssFieldKind(field)
     if expected == cast(s32)CssValueColor { return token.kind == cast(s32)CssTokenColor }
     if expected == cast(s32)CssValueMaterial { return token.kind == cast(s32)CssTokenMaterial }
-    if expected == cast(s32)CssValueNumber { return token.kind == cast(s32)CssTokenNumber }
-    return token.kind == cast(s32)CssTokenLength ||
+    if expected == cast(s32)CssValueNumber {
+        return token.kind == cast(s32)CssTokenNumber || token.kind == cast(s32)CssTokenPercentage
+    }
+    if expected == cast(s32)CssValueFontWeight {
+        return token.kind == cast(s32)CssTokenNumber || token.kind == cast(s32)CssTokenNormal ||
+            token.kind == cast(s32)CssTokenBold
+    }
+    if expected == cast(s32)CssValueFontStyle {
+        return token.kind == cast(s32)CssTokenFontStyle || token.kind == cast(s32)CssTokenNormal
+    }
+    if expected == cast(s32)CssValueLineHeight {
+        return token.kind == cast(s32)CssTokenNumber || token.kind == cast(s32)CssTokenLength ||
+            token.kind == cast(s32)CssTokenPercentage || token.kind == cast(s32)CssTokenNormal
+    }
+    if expected == cast(s32)CssValueDuration { return token.kind == cast(s32)CssTokenDuration }
+    if expected == cast(s32)CssValueFontRole {
+        return token.kind == cast(s32)CssTokenFontRole || token.kind == cast(s32)CssTokenInherit
+    }
+    if expected == cast(s32)CssValueElevation { return token.kind == cast(s32)CssTokenElevation }
+    if expected == cast(s32)CssValueEasing {
+        return token.kind == cast(s32)CssTokenEasing || token.kind == cast(s32)CssTokenInherit
+    }
+    if expected == cast(s32)CssValueMotionReduced {
+        return token.kind == cast(s32)CssTokenMotionReduced
+    }
+    return ((expected == cast(s32)CssValueGap || expected == cast(s32)CssValueLetterSpacing) &&
+        token.kind == cast(s32)CssTokenNormal) || token.kind == cast(s32)CssTokenLength ||
         (token.kind == cast(s32)CssTokenNumber && token.number == 0.0)
+}
+
+CssStyleSetToken :: (style: *StyleData, field: s32, token: CssToken) {
+    number: float32 = token.number
+    material: s32 = token.material
+    if field == cast(s32)CssFieldLineHeight {
+        if token.kind == cast(s32)CssTokenNormal { material = cast(s32)LineHeightNormal }
+        else if token.kind == cast(s32)CssTokenLength { material = cast(s32)LineHeightLength }
+        else { material = cast(s32)LineHeightFactor }
+    } else if field == cast(s32)CssFieldFontWeight {
+        if token.kind == cast(s32)CssTokenNormal { number = 400.0 }
+        else if token.kind == cast(s32)CssTokenBold { number = 700.0 }
+    }
+    CssStyleSet(style, field, token.color, number, material)
 }
 
 css_install_rules: StyleRules;
@@ -543,8 +592,31 @@ CssSheetBuild :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverride
                         return false
                     }
                 } else {
-                    CssStyleSet(*rules.items[rules.count].style, entry.field, token.color, token.number,
-                        token.material)
+                    CssStyleSetToken(*rules.items[rules.count].style, entry.field, token)
+                }
+                // The template already holds the fallback when the token is absent
+                // or has the wrong kind. Validate whichever value will be used.
+                style: *StyleData = *rules.items[rules.count].style
+                invalid: bool = (entry.field == cast(s32)CssFieldMinHeight && style.min_height < 0.0) ||
+                    (entry.field == cast(s32)CssFieldLineHeight && style.line_height < 0.0) ||
+                    (entry.field == cast(s32)CssFieldGap && style.gap < 0.0) ||
+                    (entry.field == cast(s32)CssFieldRowGap && style.row_gap < 0.0) ||
+                    (entry.field == cast(s32)CssFieldColumnGap && style.column_gap < 0.0) ||
+                    (entry.field == cast(s32)CssFieldFontWeight && style.font_weight == 0) ||
+                    (entry.field == cast(s32)CssFieldMotionDuration && style.motion_duration < 0.0) ||
+                    (entry.field == cast(s32)CssFieldMotionMultiplier && style.motion_multiplier < 0.0)
+                if invalid {
+                    sheet.failed = true
+                    sheet.diagnostic_length = 0
+                    CssSheetAppend(sheet, "custom property '--")
+                    CssSheetAppend(sheet, TextView(sheet.names[entry.name].bytes[:sheet.names[entry.name].length]))
+                    CssSheetAppend(sheet, "' has an invalid value at ")
+                    if entry.file >= 0 && entry.file < sheet.file_count {
+                        CssSheetAppend(sheet, TextView(sheet.files[entry.file].name[:sheet.files[entry.file].length]))
+                        CssSheetAppend(sheet, ":")
+                    }
+                    CssSheetAppendInt(sheet, entry.line)
+                    return false
                 }
             }
             ref += 1
@@ -620,7 +692,8 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // Compiled sheets ---------------------------------------------------------
 // The pack compiler writes these arrays; loading them skips parsing.
 
-CssCompiledRuleWords :: 34
+CssPreviousRuleWords :: 42
+CssCompiledRuleWords :: 47
 CssCompiledRefWords :: 4
 CssCompiledDefinitionWords :: 8
 CssCompiledConditionWords :: 10
@@ -635,6 +708,7 @@ CssCompiledSheet :: struct {
     layers: []string
     typefaces: []string
     file: string
+    rule_words: s32
 }
 
 CssWordFloat :: (word: u32) -> float32 {
@@ -645,7 +719,14 @@ CssWordFloat :: (word: u32) -> float32 {
 #program_export
 CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
     if sheet.failed { return false }
-    rule_count: s32 = cast(s32)compiled.rules.count / CssCompiledRuleWords
+    rule_words: s32 = compiled.rule_words
+    if rule_words == 0 { rule_words = CssPreviousRuleWords }
+    if (rule_words != CssCompiledRuleWords && rule_words != CssPreviousRuleWords) ||
+        cast(s32)compiled.rules.count % rule_words != 0 {
+        CssSheetFail(sheet, "unsupported compiled CSS rule format")
+        return false
+    }
+    rule_count: s32 = cast(s32)compiled.rules.count / rule_words
     ref_count: s32 = cast(s32)compiled.refs.count / CssCompiledRefWords
     definition_count: s32 = cast(s32)compiled.definitions.count / CssCompiledDefinitionWords
     condition_count: s32 = cast(s32)compiled.conditions.count / CssCompiledConditionWords
@@ -688,46 +769,64 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
     }
     rule_base: s32 = sheet.rule_count
     for index: cast(s32)0..rule_count - 1 {
-        w: []u32 = compiled.rules[index * CssCompiledRuleWords:(index + 1) * CssCompiledRuleWords]
+        w: []u32 = compiled.rules[index * rule_words:(index + 1) * rule_words]
         entry: CssSheetRule
         entry.rule.selector.kind = cast(s32)w[0]
         entry.rule.selector.name = cast(s32)w[1]
         entry.rule.selector.class_name = cast(s32)w[2]
-        entry.rule.selector.role = cast(s32)w[3]
-        entry.rule.selector.tone = cast(s32)w[4]
-        entry.rule.selector.emphasis = cast(s32)w[5]
-        entry.rule.selector.size = cast(s32)w[6]
-        entry.rule.selector.state = cast(s32)w[7]
-        entry.rule.selector.validation = cast(s32)w[8]
-        entry.rule.selector.orientation = cast(s32)w[9]
-        entry.rule.selector.placement = cast(s32)w[10]
-        entry.rule.state = cast(s32)w[11]
-        layer: s32 = cast(s32)w[12]
+        entry.rule.selector.id = cast(s32)w[3]
+        entry.rule.selector.role = cast(s32)w[4]
+        entry.rule.selector.tone = cast(s32)w[5]
+        entry.rule.selector.emphasis = cast(s32)w[6]
+        entry.rule.selector.size = cast(s32)w[7]
+        entry.rule.selector.state = cast(s32)w[8]
+        entry.rule.selector.validation = cast(s32)w[9]
+        entry.rule.selector.orientation = cast(s32)w[10]
+        entry.rule.selector.placement = cast(s32)w[11]
+        entry.rule.state = cast(s32)w[12]
+        layer: s32 = cast(s32)w[13]
         entry.rule.layer = ifx layer == CssLayerUnlayered then layer else layers[layer]
         entry.rule.order = sheet.rule_count
-        condition: s32 = cast(s32)w[13] - 1
+        condition: s32 = cast(s32)w[14] - 1
         entry.condition = ifx condition >= 0 then conditions[condition] else -1
         style: *StyleData = *entry.rule.style
-        style.fields = w[14]
-        style.background = w[15]
-        style.foreground = w[16]
-        style.border = w[17]
-        style.focus = w[18]
-        style.background_end = w[19]
-        style.radius = CssWordFloat(w[20])
-        style.border_width = CssWordFloat(w[21])
-        style.opacity = CssWordFloat(w[22])
-        style.padding_x = CssWordFloat(w[23])
-        style.padding_y = CssWordFloat(w[24])
-        style.gap = CssWordFloat(w[25])
-        style.font_size = CssWordFloat(w[26])
-        style.icon_size = CssWordFloat(w[27])
-        style.offset_x = CssWordFloat(w[28])
-        style.offset_y = CssWordFloat(w[29])
-        style.letter_spacing = CssWordFloat(w[30])
-        style.material = cast(MaterialKind)cast(s32)w[31]
-        typeface: s32 = cast(s32)w[32] - 1
+        style.fields = w[15]
+        style.background = w[16]
+        style.foreground = w[17]
+        style.border = w[18]
+        style.focus = w[19]
+        style.background_end = w[20]
+        style.radius = CssWordFloat(w[21])
+        style.border_width = CssWordFloat(w[22])
+        style.opacity = CssWordFloat(w[23])
+        style.padding_x = CssWordFloat(w[24])
+        style.padding_y = CssWordFloat(w[25])
+        style.gap = CssWordFloat(w[26])
+        style.font_size = CssWordFloat(w[27])
+        style.icon_size = CssWordFloat(w[28])
+        style.offset_x = CssWordFloat(w[29])
+        style.offset_y = CssWordFloat(w[30])
+        style.letter_spacing = CssWordFloat(w[31])
+        style.material = cast(MaterialKind)cast(s32)w[32]
+        typeface: s32 = cast(s32)w[33] - 1
         if typeface >= 0 { style.typeface = compiled.typefaces[typeface] }
+        style.min_height = CssWordFloat(w[34])
+        style.line_height = CssWordFloat(w[35])
+        style.font_role = cast(FontRole)cast(s32)w[36]
+        style.elevation = cast(ElevationRole)cast(s32)w[37]
+        style.motion_duration = CssWordFloat(w[38])
+        style.motion_multiplier = CssWordFloat(w[39])
+        style.motion_easing = cast(MotionEasing)cast(s32)w[40]
+        style.motion_reduced = w[41] != cast(u32)0
+        if rule_words == CssCompiledRuleWords {
+            style.row_gap = CssWordFloat(w[42])
+            style.column_gap = CssWordFloat(w[43])
+            style.font_weight = cast(s32)w[44]
+            style.font_style = cast(FontStyle)cast(s32)w[45]
+            style.line_height_unit = cast(LineHeightUnit)cast(s32)w[46]
+        } else if (style.fields & cast(u32)StyleLineHeight) != cast(u32)0 {
+            style.line_height_unit = cast(LineHeightUnit)LineHeightFactor
+        }
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

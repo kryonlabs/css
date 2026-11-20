@@ -9,9 +9,9 @@ STYLE_PACKS := classic material lightfield
 CSS_TOOL := $(BUILD)/tools/css_tool
 INCLUDE = -I$$($(ZIRAN) pkg path ziran)/include
 
-.PHONY: check test conformance style-packs style-pack-check format migrate fuzz clean
+.PHONY: check test conformance style-packs style-pack-check format export css-dom-test fuzz clean
 
-check: test conformance style-pack-check fuzz
+check: test conformance style-pack-check css-dom-test fuzz
 
 # A behavior test: build one Ziran entry to C and run it.
 define native_test
@@ -27,9 +27,8 @@ test:
 	$(call native_test,css_parse_behavior)
 	$(call native_test,css_sheet_behavior)
 	$(call native_test,css_format_behavior)
-	$(call native_test,css_migrate_behavior)
 	$(call native_test,css_export_behavior)
-	$(call native_test,system_style_behavior)
+	$(call native_test,css_integration_behavior)
 
 # The same sheets resolved on every code generation target, plus the
 # browser export; see tests/css_conformance.sh.
@@ -57,9 +56,13 @@ style-pack-check: $(CSS_TOOL)
 format: $(CSS_TOOL)
 	@for file in $(FILES); do $(CSS_TOOL) format $$file || exit 1; done
 
-# Convert a KSS sheet: make migrate IN=old.kss OUT=new.css
-migrate: $(CSS_TOOL)
-	$(CSS_TOOL) migrate $(IN) $(OUT)
+# Export browser CSS: make export IN=app.css OUT=browser.css
+export: $(CSS_TOOL)
+	$(CSS_TOOL) export $(IN) $(OUT)
+
+# A real Kryon web project, its production DOM writer and private Chromium.
+css-dom-test: $(CSS_TOOL)
+	ZIRAN="$(ZIRAN)" python3 tests/css_dom_browser.py
 
 # Generated and damaged sheets through the parser, the sheet, the formatter
 # and the exporter, built with AddressSanitizer and UndefinedBehaviorSanitizer.

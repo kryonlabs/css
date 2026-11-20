@@ -1,0 +1,183 @@
+#import "css_export"
+#import "css_parser"
+#import "css_sheet"
+#import "css_test_support"
+using RasterHost :: #import "css_button_raster_host";
+ButtonWidget :: #import "kryon/button";
+Layout :: #import "kryon/layout";
+#import "kryon/control_props"
+#import "kryon/drawing_props"
+#import "kryon/geometry"
+#import "kryon/input_protocol"
+#import "kryon/session"
+#import "kryon/style"
+#import "kryon/style_sheet"
+#import "kryon/Theme"
+#import "kryon/tree"
+#import "kryon/tree_draw"
+
+using ButtonState;
+using ElevationRole;
+using FontRole;
+using FrameStatus;
+using MotionEasing;
+using StyleField;
+
+integration_sheet: CssSheet;
+integration_session: Session;
+
+integration_css :: #string CSS
+Button.primary {
+  background: #010203;
+  color: #ffffff;
+  min-height: 32px;
+}
+
+#save {
+  background: hwb(.5turn 20% 20%);
+  color: #f0e0d0;
+  border-radius: 9px;
+  min-block-size: 44px;
+  line-height: 1.4;
+  font-size: 15px;
+  font-family: "Integration Sans";
+  -kryon-font-role: body;
+  -kryon-elevation: floating;
+  -kryon-motion-duration: 177ms;
+  -kryon-motion-multiplier: 1.25;
+  -kryon-motion-easing: standard;
+  -kryon-motion-reduced: no-preference;
+}
+
+#save:hover {
+  color: #00ff00;
+  -kryon-motion-duration: 200ms;
+}
+
+#other:hover {
+  color: #ff0000;
+}
+
+Button#leading {
+  line-height: 54px;
+  padding-block: 0;
+}
+
+Row.actions, Column.actions {
+  gap: 4px 12px;
+  padding: 3px 7px;
+}
+
+Row.actions {
+  column-gap: 0;
+}
+CSS;
+
+PropsFor :: (id: s32, state: s32) -> ButtonWidget.Props {
+    props: ButtonWidget.Props
+    props.key = cast(u64)id
+    props.id = id
+    props.class_name = StyleClass("primary")
+    props.label = "Save"
+    props.bounds = Rectangle.{10.0, 20.0, 80.0, 0.0}
+    props.state = cast(ButtonState)state
+    return props
+}
+
+Draw :: (props: ButtonWidget.Props) -> bool {
+    BeginFrame(integration_session, cast(u64)props.id,
+        Rectangle.{0.0, 0.0, 200.0, 100.0})
+    if ButtonWidget.Draw(integration_session, props) != 0 { return false }
+    return EndFrame(integration_session) == cast(FrameStatus)FrameOk
+}
+
+ColorIs :: (color: Color, value: u32) -> bool {
+    return color.r == cast(u8)(value >> cast(u32)24) &&
+        color.g == cast(u8)(value >> cast(u32)16) &&
+        color.b == cast(u8)(value >> cast(u32)8) && color.a == cast(u8)value
+}
+
+Install :: () -> bool {
+    CssSheetReset(*integration_sheet)
+    if !CssSheetParse(*integration_sheet, integration_css, "integration.css", CssNoImports) {
+        TestSay("  diagnostic: ")
+        TestSay(CssSheetDiagnostic(*integration_sheet, test_diagnostic[:]))
+        TestSay("\n")
+        return false
+    }
+    return CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null)
+}
+
+Integration :: () {
+    Check(InstallDefaultTheme(false), "theme installs")
+    Check(Install(), "integration sheet installs")
+    save: ButtonWidget.Props = PropsFor(StyleId("save"), ButtonStateNormal)
+    face: StyleData = ButtonWidget.ButtonInstalledFaceFor(save, ButtonStateNormal)
+    Check(face.background == cast(u32)0x33ccccff && face.radius == 9.0,
+        "id wins type and class")
+    Check(face.min_height == 44.0 && face.line_height == 1.4, "typed geometry")
+    Check(face.typeface == "Integration Sans" && cast(s32)face.font_role == cast(s32)FontRoleBody,
+        "typed font")
+    Check(cast(s32)face.elevation == cast(s32)ElevationRoleFloating &&
+        face.motion_duration == 177.0 && face.motion_multiplier == 1.25 &&
+        cast(s32)face.motion_easing == cast(s32)MotionEasingStandard && !face.motion_reduced,
+        "typed elevation and motion")
+
+    CssButtonRasterReset()
+    Check(Draw(save), "button tree and raster frame")
+    raster: CssButtonRasterState = CssButtonRasterSample()
+    Check(!raster.failed && raster.fill_count == 1 && raster.text_count == 1 &&
+        raster.outline_count == 0, "one button surface and label")
+    Check(ColorIs(raster.fill_color, cast(u32)0x33ccccff) &&
+        ColorIs(raster.text_color, cast(u32)0xf0e0d0ff), "raster colors")
+    Check(raster.fill_bounds.x == 10.0 && raster.fill_bounds.y == 20.0 &&
+        raster.fill_bounds.width == 80.0 && raster.fill_bounds.height == 44.0 &&
+        raster.radius == 9.0 && raster.font == 15, "raster geometry, font and type")
+
+    CssButtonRasterReset()
+    other_hover: ButtonWidget.Props = PropsFor(StyleId("other"), ButtonStateHover)
+    Check(Draw(other_hover), "another button tree and raster frame")
+    other_raster: CssButtonRasterState = CssButtonRasterSample()
+    Check(!other_raster.failed && other_raster.fill_count == 1 &&
+        other_raster.text_count == 1 && ColorIs(other_raster.fill_color, cast(u32)0x010203ff) &&
+        ColorIs(other_raster.text_color, cast(u32)0xff0000ff),
+        "another id resolves without stale id styling")
+
+    hover: StyleData = ButtonWidget.ButtonInstalledFaceFor(save, ButtonStateHover)
+    Check(hover.foreground == cast(u32)0x00ff00ff && hover.motion_duration == 200.0,
+        "state matches the intended id")
+    other: StyleData = ButtonWidget.ButtonInstalledFaceFor(PropsFor(StyleId("other"), ButtonStateHover), ButtonStateHover)
+    Check(other.foreground == cast(u32)0xff0000ff &&
+        ButtonWidget.ButtonInstalledFaceFor(PropsFor(StyleId("third"), ButtonStateNormal), ButtonStateNormal).background ==
+            cast(u32)0x010203ff,
+        "different ids do not share id results")
+
+    CssButtonRasterReset()
+    Check(Draw(PropsFor(StyleId("leading"), ButtonStateNormal)), "absolute leading button frame")
+    Check(CssButtonRasterSample().fill_bounds.height == 54.0, "absolute leading drives native button height")
+}
+
+LayoutIntegration :: () {
+    viewport: Rectangle = .{0.0, 0.0, 200.0, 100.0}
+    BeginFrame(integration_session, cast(u64)500, viewport)
+    row := Layout.Row(integration_session,
+        .{.key = 201, .class_name = StyleClass("actions"), .bounds = .{0.0, 0.0, 100.0, 40.0}})
+    Check(row.opened && row.gap == 0 && row.content.x == 7.0 && row.content.y == 3.0,
+        "native row uses zero column gap and separate padding axes")
+    Check(End(integration_session), "close row")
+    column := Layout.Draw(integration_session,
+        .{.key = 202, .class_name = StyleClass("actions"), .bounds = .{0.0, 50.0, 100.0, 40.0}})
+    Check(column.opened && column.gap == 4 && column.content.x == 7.0 && column.content.y == 53.0,
+        "native column uses row gap and separate padding axes")
+    Check(End(integration_session), "close column")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "native layout frame")
+}
+
+main :: () -> s32 {
+    if !SessionValid(integration_session) { integration_session = SessionOpen() }
+    Integration()
+    LayoutIntegration()
+    if SessionValid(integration_session) { unused SessionClose(integration_session) }
+    if test_failures == 0 { TestSay("css integration behavior: PASS\n") }
+    return test_failures
+}

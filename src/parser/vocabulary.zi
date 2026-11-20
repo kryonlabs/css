@@ -218,6 +218,8 @@ CssKindValueMore :: (name: CssName) -> s32 {
     if CssNameEquals(name, "Reorder") {
         return StyleKindReorder()
     }
+    if CssNameEquals(name, "Row") { return StyleKindRow() }
+    if CssNameEquals(name, "Column") { return StyleKindColumn() }
     return -999999
 }
 

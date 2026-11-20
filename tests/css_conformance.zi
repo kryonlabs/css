@@ -5,6 +5,7 @@
 // compares each with tests/css_conformance.expected; css_conformance_main
 // is the C program and writes the browser pages.
 #import "css_parser"
+#import "css_export"
 #import "css_sheet"
 #import "css_digest"
 #import "style_pack_classic"
@@ -15,6 +16,7 @@
 
 conformance_sheet: CssSheet;
 conformance_rules: StyleRules;
+conformance_id: s32 = StyleId("conformance");
 
 // Everything the subset has that a browser can show, without attribute
 // selectors, so the same sheet also goes through the DOM export.
@@ -27,6 +29,7 @@ conformance_app :: #string CSS
   --brand: rgb(40 90 160);
   --pad: 6px;
   --round: 0.5rem;
+  --leading: 125%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -65,7 +68,7 @@ conformance_app :: #string CSS
 }
 
 Button:disabled {
-  opacity: 0.5;
+  opacity: 50%;
 }
 
 Button:selected {
@@ -74,6 +77,25 @@ Button:selected {
 
 Button.primary:loading {
   background: hsl(210 40% 50%);
+}
+
+#conformance {
+  color: #234567;
+  min-block-size: 41px;
+  line-height: var(--leading);
+  font-weight: 650;
+  font-style: italic;
+  letter-spacing: -0.5px;
+  -kryon-font-role: body;
+  -kryon-elevation: floating;
+  -kryon-motion-duration: 123ms;
+  -kryon-motion-multiplier: 1.5;
+  -kryon-motion-easing: linear;
+  -kryon-motion-reduced: reduce;
+}
+
+Button#conformance:selected {
+  color: #654321;
 }
 
 .quiet {
@@ -85,9 +107,14 @@ Text.quiet {
   font-size: 13px;
 }
 
+Row.quiet, Column {
+  gap: 4px 0.75rem;
+  row-gap: 0;
+}
+
 Card, TextField {
   background: var(--paper);
-  border-color: rgba(0, 0, 0, 0.25);
+  border-color: hwb(.5turn 0% 100% / 25%);
   padding: 4px 8px;
 }
 
@@ -119,7 +146,8 @@ CssConformanceDigest :: (pack: s32, theme: s32) -> u32 {
     if !CssSheetLoad(*conformance_sheet, Pack(pack)) { return 1 }
     if !CssSheetParse(*conformance_sheet, conformance_app, "conformance.css", CssNoImports) { return 2 }
     if !CssSheetBuild(*conformance_sheet, ThemeEnv(theme), null, *conformance_rules) { return 3 }
-    return CssDigestMix(CssDigestTable(conformance_rules), CssDigestResolved(conformance_rules))
+    return CssDigestMix(CssDigestTable(conformance_rules),
+        CssDigestResolved(conformance_rules, conformance_id))
 }
 
 // All six digests in one number, for hosts that only return an integer.

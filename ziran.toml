@@ -8,8 +8,7 @@ ref = "9432a110709c4a4f72c4f732fcfc368e15213a54"
 
 [dependencies.kryon]
 git = "https://github.com/kryonlabs/kryon.git"
-ref = "452813114e40e2385485bf5f6bc555cb90371d16"
+ref = "35fc05cbb776ed17fecf760fe8ae85127e01f5a3"
 
 [exports]
 Css = "src/Css/module.zi"
-SystemStyle = "src/system_style.zi"

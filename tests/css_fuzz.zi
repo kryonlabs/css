@@ -1,11 +1,10 @@
 // CSS fuzz: generated and damaged sheets through the parser, the sheet, the
-// formatter, the DOM export and the KSS migrator.
+// formatter and the DOM export.
 //
 //   css_fuzz CURRENT SEED COUNT FILE...   COUNT cases from SEED; each FILE
-//                                         (.css or .kss) seeds damaged cases
+//                                         (.css) seeds damaged cases
 //   css_fuzz CURRENT corpus FILE...       the checks on each file; one named
-//                                         *.ok.css must parse and *.ok.kss
-//                                         must convert
+//                                         *.ok.css must parse
 //   css_fuzz CURRENT check FILE           the checks on one file
 //
 // Every case is checked for:
@@ -16,7 +15,6 @@
 //   - formatting that keeps meaning (CssFormat re-parses its own output), only
 //     moves whitespace and line ends, and is stable when run again;
 //   - an export that is whole or refused with a reason;
-//   - a KSS migration that parses as Kryon CSS, or an error with a line.
 //
 // Before each case the input is written to CURRENT, so when a check fails or
 // the program is killed, CURRENT holds the sheet that did it.
@@ -27,7 +25,6 @@
 #import "css_sheet"
 #import "css_format"
 #import "css_export"
-#import "css_migrate"
 #import "kryon/style"
 #import "kryon/style_sheet"
 
@@ -41,11 +38,9 @@ fuzz_length: s32 = 0;
 fuzz_formatted: [262144]u8;
 fuzz_again: [262144]u8;
 fuzz_exported: [262144]u8;
-fuzz_migrated: [262144]u8;
 fuzz_file: [65536]u8;
 fuzz_seeds: [8][65536]u8;
 fuzz_seed_lengths: [8]s32;
-fuzz_seed_kss: [8]bool;
 fuzz_seed_count: s32 = 0;
 fuzz_current: string;
 fuzz_random: u64 = 1;
@@ -135,8 +130,9 @@ css_declarations: [26]string = .["color: #102030", "color: red", "color: var(--i
 css_definitions: [7]string = .["--ink: #123456", "--pad: 4px", "--fast: 150ms", "--alias: var(--ink)",
     "--glass: glass", "--n: 0.5", "--ink: rgba(0, 0, 0, 0.5)"];
 
-css_media: [5]string = .["(prefers-color-scheme: dark)", "(min-width: 600px)",
-    "(-kryon-density: compact), (pointer: coarse)", "(prefers-contrast: more)", "(-kryon-theme: ocean)"];
+css_media: [6]string = .["(prefers-color-scheme: dark)", "(min-width: 600px)",
+    "(-kryon-density: compact), (pointer: coarse)", "(prefers-contrast: more)", "(-kryon-theme: ocean)",
+    "(prefers-reduced-motion: reduce)"];
 
 Rule :: () {
     Add(Pick(css_selectors[:]))
@@ -189,18 +185,12 @@ Item :: (depth: s32) {
     }
 }
 
-kss_items: [10]string = .["tokens { color { ink: #102030; paper: #ffffff; } length { pad: 4; } }\n",
-    "Button { foreground: ink; padding-x: pad; radius: 4; }\n", "@theme dark { ink: #eeeeee; }\n",
-    "@env density(compact) { Text { font-size: 12; } }\n", "Button:pressed { background: ink; background-end: paper; }\n",
-    "@layer components;\n", "@import \"base\";\n", "@pack sample;\n",
-    "Button[class=primary] { offset-x: 1; offset-y: 2; }\n", "@variant big \"Big\" { Button { gap: 2; } }\n"];
-
-// One random sheet, CSS or KSS.
-Generate :: (kss: bool) {
+// One random CSS sheet.
+Generate :: () {
     fuzz_length = 0
     count: s32 = 1 + Below(10)
     for index: cast(s32)0..count - 1 {
-        if kss { Add(Pick(kss_items[:])) } else { Item(0) }
+        Item(0)
     }
 }
 
@@ -394,26 +384,6 @@ CheckCss :: (source: string, must_parse: bool) {
     }
 }
 
-CheckKss :: (source: string, must_convert: bool) {
-    result: CssMigration = CssMigrateKss(source, fuzz_migrated[:])
-    if !result.ok {
-        if result.error_length == 0 { Fail("a migration failed without a reason") }
-        if result.line <= 0 { Fail("a migration error has no line") }
-        if must_convert { Fail("a corpus sheet marked .ok did not convert") }
-        return
-    }
-    converted: string = TextView(fuzz_migrated[:result.count])
-    CssSheetReset(*fuzz_sheet)
-    if !CssSheetParse(*fuzz_sheet, converted, "migrated.css", EmptyImports) {
-        Say(2, "  parser: ")
-        Say(2, CssSheetDiagnostic(*fuzz_sheet, fuzz_diagnostic[:]))
-        Say(2, "\n")
-        Fail("a migrated sheet does not parse")
-        return
-    }
-    CheckCss(converted, true)
-}
-
 SaveCurrent :: (source: string) {
     file: FileHandle = OpenReplace(fuzz_current)
     if !file.valid { return }
@@ -425,9 +395,9 @@ SaveCurrent :: (source: string) {
     CloseFile(file)
 }
 
-Case :: (source: string, kss: bool, must_convert: bool) -> bool {
+Case :: (source: string, must_parse: bool) -> bool {
     SaveCurrent(source)
-    if kss { CheckKss(source, must_convert) } else { CheckCss(source, must_convert) }
+    CheckCss(source, must_parse)
     return !fuzz_failed
 }
 
@@ -476,9 +446,8 @@ main :: (argc: s32, argv: **s8) -> s32 {
                 Say(2, "\n")
                 return 1
             }
-            kss: bool = EndsWith(path, ".kss")
-            ok: bool = EndsWith(path, ".ok.kss") || EndsWith(path, ".ok.css")
-            if !Case(TextView(fuzz_file[:count]), kss, ok) {
+            ok: bool = EndsWith(path, ".ok.css")
+            if !Case(TextView(fuzz_file[:count]), ok) {
                 Say(2, "  in ")
                 Say(2, path)
                 Say(2, "\n")
@@ -500,19 +469,15 @@ main :: (argc: s32, argv: **s8) -> s32 {
         count: s32 = ReadInto(path, fuzz_seeds[fuzz_seed_count][:])
         if count < 0 { continue }
         fuzz_seed_lengths[fuzz_seed_count] = count
-        fuzz_seed_kss[fuzz_seed_count] = EndsWith(path, ".kss")
         fuzz_seed_count += 1
     }
     for case_index: cast(s64)0..total - 1 {
         kind: s32 = Below(8)
-        kss: bool = false
         if kind < 3 || fuzz_seed_count == 0 {
-            kss = kind == 2
-            Generate(kss)
+            Generate()
             if Below(2) == 0 { Damage() }
         } else {
             seed_index: s32 = Below(fuzz_seed_count)
-            kss = fuzz_seed_kss[seed_index]
             // A slice of a seed file, damaged.
             length: s32 = fuzz_seed_lengths[seed_index]
             start: s32 = ifx Below(2) == 0 then 0 else Below(length)
@@ -527,8 +492,8 @@ main :: (argc: s32, argv: **s8) -> s32 {
             }
             Damage()
         }
-        if !Case(TextView(fuzz_source[:fuzz_length]), kss, false) {
-            Say(2, ifx kss then "  KSS case " else "  CSS case ")
+        if !Case(TextView(fuzz_source[:fuzz_length]), false) {
+            Say(2, "  CSS case ")
             SayNumber(2, case_index)
             Say(2, " of seed ")
             SayNumber(2, seed)

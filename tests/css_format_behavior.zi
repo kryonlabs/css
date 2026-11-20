@@ -17,6 +17,8 @@ Button,Text{color:var(--ink);padding-inline:var(--pad)}
 
 @media (prefers-color-scheme: dark){:root{--ink:#eeeeee}}
 Text { font-family: "Inter   Display" , sans-serif ; }
+Row{gap:4px  12px;column-gap:0}
+Heading{font-weight:650;font-style:oblique;letter-spacing:-0.5px;line-height:125%}
 CSS;
 
 tidy :: #string CSS
@@ -39,6 +41,18 @@ Button, Text {
 
 Text {
   font-family: "Inter   Display" , sans-serif;
+}
+
+Row {
+  gap: 4px 12px;
+  column-gap: 0;
+}
+
+Heading {
+  font-weight: 650;
+  font-style: oblique;
+  letter-spacing: -0.5px;
+  line-height: 125%;
 }
 CSS;
 

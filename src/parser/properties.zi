@@ -16,6 +16,18 @@ CssFieldKind :: (field: s32) -> s32 {
     }
     if field == cast(s32)CssFieldOpacity { return cast(s32)CssValueNumber }
     if field == cast(s32)CssFieldMaterial { return cast(s32)CssValueMaterial }
+    if field == cast(s32)CssFieldMotionMultiplier { return cast(s32)CssValueNumber }
+    if field == cast(s32)CssFieldLineHeight { return cast(s32)CssValueLineHeight }
+    if field == cast(s32)CssFieldLetterSpacing { return cast(s32)CssValueLetterSpacing }
+    if field == cast(s32)CssFieldFontWeight { return cast(s32)CssValueFontWeight }
+    if field == cast(s32)CssFieldFontStyle { return cast(s32)CssValueFontStyle }
+    if field == cast(s32)CssFieldGap || field == cast(s32)CssFieldRowGap ||
+        field == cast(s32)CssFieldColumnGap { return cast(s32)CssValueGap }
+    if field == cast(s32)CssFieldMotionDuration { return cast(s32)CssValueDuration }
+    if field == cast(s32)CssFieldFontRole { return cast(s32)CssValueFontRole }
+    if field == cast(s32)CssFieldElevation { return cast(s32)CssValueElevation }
+    if field == cast(s32)CssFieldMotionEasing { return cast(s32)CssValueEasing }
+    if field == cast(s32)CssFieldMotionReduced { return cast(s32)CssValueMotionReduced }
     return cast(s32)CssValueLength
 }
 
@@ -31,6 +43,10 @@ CssFieldBit :: (field: s32) -> u32 {
     if field == cast(s32)CssFieldPaddingX { return cast(u32)StylePaddingX }
     if field == cast(s32)CssFieldPaddingY { return cast(u32)StylePaddingY }
     if field == cast(s32)CssFieldGap { return cast(u32)StyleGap }
+    if field == cast(s32)CssFieldRowGap { return cast(u32)StyleRowGap }
+    if field == cast(s32)CssFieldColumnGap { return cast(u32)StyleColumnGap }
+    if field == cast(s32)CssFieldFontWeight { return cast(u32)StyleFontWeight }
+    if field == cast(s32)CssFieldFontStyle { return cast(u32)StyleFontStyle }
     if field == cast(s32)CssFieldFontSize { return cast(u32)StyleFontSize }
     if field == cast(s32)CssFieldIconSize { return cast(u32)StyleIconSize }
     if field == cast(s32)CssFieldOffsetX || field == cast(s32)CssFieldOffsetY {
@@ -38,6 +54,14 @@ CssFieldBit :: (field: s32) -> u32 {
     }
     if field == cast(s32)CssFieldMaterial { return cast(u32)StyleMaterial }
     if field == cast(s32)CssFieldLetterSpacing { return cast(u32)StyleLetterSpacing }
+    if field == cast(s32)CssFieldMinHeight { return cast(u32)StyleMinHeight }
+    if field == cast(s32)CssFieldLineHeight { return cast(u32)StyleLineHeight }
+    if field == cast(s32)CssFieldFontRole { return cast(u32)StyleFontRole }
+    if field == cast(s32)CssFieldElevation { return cast(u32)StyleElevation }
+    if field == cast(s32)CssFieldMotionDuration { return cast(u32)StyleMotionDuration }
+    if field == cast(s32)CssFieldMotionMultiplier { return cast(u32)StyleMotionMultiplier }
+    if field == cast(s32)CssFieldMotionEasing { return cast(u32)StyleMotionEasing }
+    if field == cast(s32)CssFieldMotionReduced { return cast(u32)StyleMotionReduced }
     return 0
 }
 
@@ -51,16 +75,36 @@ CssStyleSet :: (style: *StyleData, field: s32, color: u32, number: float32, mate
     else if field == cast(s32)CssFieldFocus { style.focus = color }
     else if field == cast(s32)CssFieldRadius { style.radius = number }
     else if field == cast(s32)CssFieldBorderWidth { style.border_width = number }
-    else if field == cast(s32)CssFieldOpacity { style.opacity = number }
+    else if field == cast(s32)CssFieldOpacity {
+        style.opacity = StyleOpacityValue(style.fields, number)
+    }
     else if field == cast(s32)CssFieldPaddingX { style.padding_x = number }
     else if field == cast(s32)CssFieldPaddingY { style.padding_y = number }
     else if field == cast(s32)CssFieldGap { style.gap = number }
+    else if field == cast(s32)CssFieldRowGap { style.row_gap = number }
+    else if field == cast(s32)CssFieldColumnGap { style.column_gap = number }
+    else if field == cast(s32)CssFieldFontWeight {
+        if number >= 1.0 && number <= 1000.0 { style.font_weight = cast(s32)(number + 0.5) }
+        else { style.font_weight = 0 }
+    }
+    else if field == cast(s32)CssFieldFontStyle { style.font_style = cast(FontStyle)material }
     else if field == cast(s32)CssFieldFontSize { style.font_size = number }
     else if field == cast(s32)CssFieldIconSize { style.icon_size = number }
     else if field == cast(s32)CssFieldOffsetX { style.offset_x = number }
     else if field == cast(s32)CssFieldOffsetY { style.offset_y = number }
     else if field == cast(s32)CssFieldMaterial { style.material = cast(MaterialKind)material }
     else if field == cast(s32)CssFieldLetterSpacing { style.letter_spacing = number }
+    else if field == cast(s32)CssFieldMinHeight { style.min_height = number }
+    else if field == cast(s32)CssFieldLineHeight {
+        style.line_height = number
+        style.line_height_unit = cast(LineHeightUnit)material
+    }
+    else if field == cast(s32)CssFieldFontRole { style.font_role = cast(FontRole)material }
+    else if field == cast(s32)CssFieldElevation { style.elevation = cast(ElevationRole)material }
+    else if field == cast(s32)CssFieldMotionDuration { style.motion_duration = number }
+    else if field == cast(s32)CssFieldMotionMultiplier { style.motion_multiplier = number }
+    else if field == cast(s32)CssFieldMotionEasing { style.motion_easing = cast(MotionEasing)material }
+    else if field == cast(s32)CssFieldMotionReduced { style.motion_reduced = material != 0 }
 }
 
 CssSetValue :: (p: *CssParser, field: s32, value: CssValue) {
@@ -104,6 +148,15 @@ CssReadField :: (p: *CssParser, field: s32) -> CssValue {
 
 CssSameValue :: (a: CssValue, b: CssValue) -> bool {
     return a.ref == b.ref && a.color == b.color && a.number == b.number && a.fallback == b.fallback
+}
+
+CssSetNonnegative :: (p: *CssParser, field: s32, value: CssValue, property: CssName) -> bool {
+    if value.ok && value.ref < 0 && value.number < 0.0 {
+        CssFailName(p, "cannot be negative:", property, "")
+        return false
+    }
+    CssSetValue(p, field, value)
+    return !CssFailed(p)
 }
 
 CssEndValue :: (p: *CssParser, end: s32, property: CssName) -> bool {
@@ -343,10 +396,10 @@ CssReadTypeface :: (p: *CssParser, end: s32) {
     p.cursor.pos = end
 }
 
-css_web_properties: [38]string = .[
-    "width", "height", "min-width", "min-height", "max-width", "max-height",
+css_web_properties: [34]string = .[
+    "width", "height", "min-width", "max-width", "max-height",
     "margin", "margin-top", "margin-right", "margin-bottom", "margin-left", "margin-inline",
-    "margin-block", "line-height", "font-weight", "font-style", "text-align", "text-decoration",
+    "margin-block", "text-align", "text-decoration",
     "text-transform", "white-space", "cursor", "box-shadow", "transition", "animation",
     "display", "flex", "flex-direction", "flex-wrap", "justify-content", "align-items",
     "align-self", "grid-template-columns", "grid-template-rows", "grid-column", "grid-row", "overflow",
@@ -440,27 +493,49 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         CssFail(p, "Kryon pads top and bottom equally; use padding-block")
         return -1
     } else if CssNameEquals(name, "gap") {
-        CssReadSymmetric(p, end, cast(s32)CssFieldGap, name, 2)
-        return ifx CssFailed(p) then -1 else CssScopeNative
+        values: CssLengths = CssReadLengths(p, end, cast(s32)CssFieldGap, 2, name)
+        if CssFailed(p) { return -1 }
+        if values.count == 0 {
+            CssFail(p, "gap takes one or two lengths or normal")
+            return -1
+        }
+        row: CssValue = values.values[0]
+        column: CssValue = row
+        if values.count == 2 { column = values.values[1] }
+        if !CssSetNonnegative(p, cast(s32)CssFieldGap, row, name) ||
+            !CssSetNonnegative(p, cast(s32)CssFieldRowGap, row, name) ||
+            !CssSetNonnegative(p, cast(s32)CssFieldColumnGap, column, name) { return -1 }
+    } else if CssNameEquals(name, "row-gap") || CssNameEquals(name, "column-gap") {
+        field: s32 = ifx CssNameEquals(name, "row-gap") then cast(s32)CssFieldRowGap else cast(s32)CssFieldColumnGap
+        value: CssValue = CssReadField(p, field)
+        if !value.ok || !CssSetNonnegative(p, field, value, name) { return -1 }
     } else if CssNameEquals(name, "font-size") {
         value: CssValue = CssReadField(p, cast(s32)CssFieldFontSize)
         if !value.ok { return -1 }
         CssSetValue(p, cast(s32)CssFieldFontSize, value)
+    } else if CssNameEquals(name, "font-weight") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldFontWeight)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldFontWeight, value)
+    } else if CssNameEquals(name, "font-style") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldFontStyle)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldFontStyle, value)
     } else if CssNameEquals(name, "letter-spacing") {
-        saved: CssCursor = p.cursor
-        word: CssName = CssReadName(p)
-        if CssFailed(p) { return -1 }
-        value: CssValue
-        value.ref = -1
-        if !CssNameEquals(word, "normal") {
-            p.cursor = saved
-            value = CssReadField(p, cast(s32)CssFieldLetterSpacing)
-            if !value.ok { return -1 }
-        }
+        value: CssValue = CssReadField(p, cast(s32)CssFieldLetterSpacing)
+        if !value.ok { return -1 }
         CssSetValue(p, cast(s32)CssFieldLetterSpacing, value)
     } else if CssNameEquals(name, "font-family") {
         CssReadTypeface(p, end)
         return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "min-height") || CssNameEquals(name, "min-block-size") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldMinHeight)
+        if !value.ok { return -1 }
+        if !CssSetNonnegative(p, cast(s32)CssFieldMinHeight, value, name) { return -1 }
+    } else if CssNameEquals(name, "line-height") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldLineHeight)
+        if !value.ok { return -1 }
+        if !CssSetNonnegative(p, cast(s32)CssFieldLineHeight, value, name) { return -1 }
     } else if CssNameEquals(name, "translate") {
         CssReadTranslate(p, end, name)
         return ifx CssFailed(p) then -1 else CssScopeNative
@@ -474,6 +549,42 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         value: CssValue = CssReadField(p, cast(s32)CssFieldMaterial)
         if !value.ok { return -1 }
         CssSetValue(p, cast(s32)CssFieldMaterial, value)
+        if !CssEndValue(p, end, name) { return -1 }
+        return CssScopeKryon
+    } else if CssNameEquals(name, "-kryon-font-role") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldFontRole)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldFontRole, value)
+        if !CssEndValue(p, end, name) { return -1 }
+        return CssScopeKryon
+    } else if CssNameEquals(name, "-kryon-elevation") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldElevation)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldElevation, value)
+        if !CssEndValue(p, end, name) { return -1 }
+        return CssScopeKryon
+    } else if CssNameEquals(name, "-kryon-motion-duration") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldMotionDuration)
+        if !value.ok { return -1 }
+        if !CssSetNonnegative(p, cast(s32)CssFieldMotionDuration, value, name) { return -1 }
+        if !CssEndValue(p, end, name) { return -1 }
+        return CssScopeKryon
+    } else if CssNameEquals(name, "-kryon-motion-multiplier") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldMotionMultiplier)
+        if !value.ok { return -1 }
+        if !CssSetNonnegative(p, cast(s32)CssFieldMotionMultiplier, value, name) { return -1 }
+        if !CssEndValue(p, end, name) { return -1 }
+        return CssScopeKryon
+    } else if CssNameEquals(name, "-kryon-motion-easing") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldMotionEasing)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldMotionEasing, value)
+        if !CssEndValue(p, end, name) { return -1 }
+        return CssScopeKryon
+    } else if CssNameEquals(name, "-kryon-motion-reduced") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldMotionReduced)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldMotionReduced, value)
         if !CssEndValue(p, end, name) { return -1 }
         return CssScopeKryon
     } else if CssWebProperty(name) {

@@ -1,0 +1,104 @@
+// Optional append-only tables. Older packs leave all three slices empty.
+CssCompiledMotionWords :: 24
+CssCompiledKeyframesWords :: 7
+CssCompiledFrameWords :: 10
+
+CssWordPair :: (low: u32, high: u32) -> u64 {
+    return cast(u64)low | (cast(u64)high << cast(u64)32)
+}
+
+CssReadPackedDouble :: (words: []u32, at: s32) -> float64 {
+    return Binary.Float64FromBits(CssWordPair(words[at], words[at + 1]))
+}
+
+CssReadPackedCurve :: (words: []u32, at: s32) -> CssCurve {
+    return .{CssWordFloat(words[at]), CssWordFloat(words[at + 1]), CssWordFloat(words[at + 2]), CssWordFloat(words[at + 3])}
+}
+
+CssReadPackedMotion :: (w: []u32) -> CssRuleMotion {
+    motion: CssRuleMotion
+    motion.transition.set = (w[1] & 1) != 0
+    motion.transition.unsupported = (w[1] & 2) != 0
+    motion.animation.set = (w[1] & 4) != 0
+    motion.animation.unsupported = (w[1] & 8) != 0
+    motion.transition.fields = w[2]
+    motion.transition.seconds = CssReadPackedDouble(w, 3)
+    motion.transition.delay = CssReadPackedDouble(w, 5)
+    motion.transition.curve = CssReadPackedCurve(w, 7)
+    motion.animation.key = CssWordPair(w[11], w[12])
+    motion.animation.seconds = CssReadPackedDouble(w, 13)
+    motion.animation.delay = CssReadPackedDouble(w, 15)
+    motion.animation.iterations = CssReadPackedDouble(w, 17)
+    motion.animation.curve = CssReadPackedCurve(w, 19)
+    motion.animation.flags = w[23]
+    return motion
+}
+
+CssReadPackedFrame :: (w: []u32) -> CssKeyframe {
+    frame: CssKeyframe
+    frame.offset = CssWordFloat(w[0])
+    frame.style.fields = w[1]
+    frame.style.background = w[2]
+    frame.style.foreground = w[3]
+    frame.style.border = w[4]
+    frame.style.radius = CssWordFloat(w[5])
+    frame.style.border_width = CssWordFloat(w[6])
+    frame.style.opacity = CssWordFloat(w[7])
+    frame.style.offset_x = CssWordFloat(w[8])
+    frame.style.offset_y = CssWordFloat(w[9])
+    return frame
+}
+
+CssSheetLoadMotion :: (sheet: *CssSheet, compiled: CssCompiledSheet, rule_base: s32, rule_count: s32,
+    conditions: []s32, layers: []s32) -> bool {
+    motion_count: s32 = cast(s32)compiled.motion.count / CssCompiledMotionWords
+    keyframes_count: s32 = cast(s32)compiled.keyframes.count / CssCompiledKeyframesWords
+    frame_count: s32 = cast(s32)compiled.frames.count / CssCompiledFrameWords
+    if compiled.motion.count % CssCompiledMotionWords != 0 ||
+        compiled.keyframes.count % CssCompiledKeyframesWords != 0 || compiled.frames.count % CssCompiledFrameWords != 0 ||
+        motion_count > rule_count || keyframes_count > CssSheetKeyframesCapacity - sheet.keyframes_count ||
+        frame_count > CssSheetFrameCapacity - sheet.frame_count {
+        CssSheetFail(sheet, "invalid compiled CSS motion table size")
+        return false
+    }
+    previous_rule: s32 = -1
+    for index: cast(s32)0..motion_count - 1 {
+        w: []u32 = compiled.motion[index * CssCompiledMotionWords:(index + 1) * CssCompiledMotionWords]
+        rule: s32 = cast(s32)w[0]
+        if rule <= previous_rule || rule >= rule_count {
+            CssSheetFail(sheet, "invalid compiled CSS motion rule index")
+            return false
+        }
+        previous_rule = rule
+        motion: CssRuleMotion = CssReadPackedMotion(w)
+        sheet.rules[rule_base + rule].motion = motion
+        if motion.transition.unsupported || motion.animation.unsupported { sheet.motion_unsupported += 1 }
+    }
+    for index: cast(s32)0..keyframes_count - 1 {
+        at: s32 = index * CssCompiledKeyframesWords
+        entry: CssSheetKeyframes
+        entry.key = CssWordPair(compiled.keyframes[at], compiled.keyframes[at + 1])
+        layer: s32 = cast(s32)compiled.keyframes[at + 2]
+        condition: s32 = cast(s32)compiled.keyframes[at + 3] - 1
+        first: s32 = cast(s32)compiled.keyframes[at + 4]
+        entry.count = cast(s32)compiled.keyframes[at + 5]
+        entry.unsupported = compiled.keyframes[at + 6] != 0
+        if entry.key == 0 || (layer != CssLayerUnlayered && (layer < 0 || layer >= layers.count)) ||
+            condition < -1 || condition >= conditions.count || first < 0 || first > frame_count ||
+            entry.count < 0 || entry.count > CssKeyframeCapacity || entry.count > frame_count - first {
+            CssSheetFail(sheet, "invalid compiled CSS keyframes index")
+            return false
+        }
+        entry.layer = ifx layer == CssLayerUnlayered then layer else layers[layer]
+        entry.condition = ifx condition < 0 then -1 else conditions[condition]
+        entry.first = sheet.frame_count + first
+        sheet.keyframes[sheet.keyframes_count] = entry
+        sheet.keyframes_count += 1
+        if entry.unsupported { sheet.motion_unsupported += 1 }
+    }
+    for index: cast(s32)0..frame_count - 1 {
+        sheet.frames[sheet.frame_count] = CssReadPackedFrame(compiled.frames[index * CssCompiledFrameWords:(index + 1) * CssCompiledFrameWords])
+        sheet.frame_count += 1
+    }
+    return true
+}

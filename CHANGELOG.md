@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added opt-in native CSS transitions and keyframes for parsed and compiled
+  stylesheets, with browser motion declarations preserved in CSS export.
+
 - Added native `color-mix(in srgb, ...)` for two literal color stops with
   browser-compatible percentages and premultiplied alpha.
 - Added native `prefers-reduced-motion` queries through `CssEnvironment`,

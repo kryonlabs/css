@@ -1,0 +1,86 @@
+#import "css_parser"
+#import "css_sheet"
+#import "kryon/style_sheet"
+#import "kryon/style"
+Motion :: #import "kryon/motion";
+StyleMotion :: #import "kryon/style_motion";
+
+#scope_file
+
+motion_frames: [CssSheetFrameCapacity]StyleMotion.Keyframe;
+
+Timing :: (curve: CssCurve) -> Motion.Timing {
+    return Motion.CubicBezier(curve.x1, curve.y1, curve.x2, curve.y2)
+}
+
+KeyframesFor :: (sheet: *CssSheet, key: u64, env: CssEnvironment) -> s32 {
+    if key == 0 { return -1 }
+    winner: s32 = -1
+    for index: cast(s32)0..sheet.keyframes_count - 1 {
+        entry: *CssSheetKeyframes = *sheet.keyframes[index]
+        if entry.key == key && CssSheetConditionHolds(sheet, entry.condition, env) &&
+            (winner < 0 || entry.layer >= sheet.keyframes[winner].layer) {
+            winner = index
+        }
+    }
+    return winner
+}
+
+AnimationFor :: (source: CssAnimation, sheet: *CssSheet, env: CssEnvironment) -> StyleMotion.Animation {
+    index: s32 = KeyframesFor(sheet, source.key, env)
+    if source.unsupported || index < 0 { return StyleMotion.Animation.{} }
+    entry: CssSheetKeyframes = sheet.keyframes[index]
+    if entry.count == 0 { return StyleMotion.Animation.{} }
+    return .{.key = source.key, .frames = motion_frames[entry.first:entry.first + entry.count],
+        .seconds = source.seconds, .delay = source.delay, .timing = Timing(source.curve),
+        .iterations = source.iterations, .alternate = (source.flags & CssAnimationAlternate) != 0,
+        .reverse = (source.flags & CssAnimationReverse) != 0,
+        .backwards = (source.flags & CssAnimationBackwards) != 0,
+        .forwards = (source.flags & CssAnimationForwards) != 0}
+}
+
+Clear :: () -> bool {
+    empty: []StyleMotion.Rule
+    if !StyleMotion.Install(empty, false) { return false }
+    css_sheet_has_motion = false
+    return true
+}
+
+#scope_export
+
+// Opt in to retained motion when installing the ordinary widget style table.
+// CssSheetInstall remains usable without importing this module.
+#program_export
+Install :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides = null) -> bool {
+    if !CssSheetPrepareInstall(sheet, env, overrides) { return false }
+    for index: cast(s32)0..sheet.frame_count - 1 {
+        frame: *CssKeyframe = *sheet.frames[index]
+        style: *StyleData = *frame.style
+        motion_frames[index] = .{frame.offset, StyleData.{.fields = style.fields,
+            .background = style.background, .foreground = style.foreground, .border = style.border,
+            .radius = style.radius, .border_width = style.border_width, .opacity = style.opacity,
+            .offset_x = style.offset_x, .offset_y = style.offset_y}}
+    }
+    rules: [StyleRuleCapacity]StyleMotion.Rule
+    count: s32 = 0
+    for index: cast(s32)0..sheet.rule_count - 1 {
+        entry: *CssSheetRule = *sheet.rules[index]
+        if !CssSheetConditionHolds(sheet, entry.condition, env) { continue }
+        transition: CssTransition = entry.motion.transition
+        animation: CssAnimation = entry.motion.animation
+        if !transition.set && !animation.set { continue }
+        rule: *StyleRule = *entry.rule
+        rules[count] = .{.selector = rule.selector, .state = rule.state, .layer = rule.layer,
+            .order = rule.order, .transition_set = transition.set, .transition_fields = ifx transition.unsupported then cast(u32)0 else transition.fields,
+            .transition_seconds = transition.seconds, .transition_delay = transition.delay,
+            .transition_timing = Timing(transition.curve), .animation_set = animation.set,
+            .animation = AnimationFor(animation, sheet, env)}
+        count += 1
+    }
+    previous: StyleRules = ActiveStyleRules()
+    if !CssSheetInstallRules(sheet) { return false }
+    if !StyleMotion.Install(rules[:count], env.reduced_motion) { return CssSheetRejectMotion(sheet, previous) }
+    css_sheet_clear_motion = Clear
+    css_sheet_has_motion = count > 0
+    return CssSheetInstallColors(sheet)
+}

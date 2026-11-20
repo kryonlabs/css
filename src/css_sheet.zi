@@ -24,9 +24,12 @@ CssSheetRefCapacity :: 4096
 CssSheetDefinitionCapacity :: 768
 CssSheetConditionCapacity :: 64
 CssSheetTypefaceCapacity :: 16
+CssSheetKeyframesCapacity :: 128
+CssSheetFrameCapacity :: 2048
 
 CssSheetRule :: struct {
     rule: StyleRule
+    motion: CssRuleMotion
     // Index into conditions, or -1 for always.
     condition: s32
 }
@@ -50,6 +53,15 @@ CssSheetDefinition :: struct {
     alias: s32
     file: s32
     line: s32
+}
+
+CssSheetKeyframes :: struct {
+    key: u64
+    layer: s32
+    condition: s32
+    first: s32
+    count: s32
+    unsupported: bool
 }
 
 // Host values that replace custom properties whatever the sheet says, such
@@ -78,6 +90,12 @@ CssSheet :: struct {
     file_count: s32
     // Final custom property values of the last resolve, by name index.
     final: [CssNameCapacity]CssToken
+    keyframes: [CssSheetKeyframesCapacity]CssSheetKeyframes
+    keyframes_count: s32
+    frames: [CssSheetFrameCapacity]CssKeyframe
+    frame_count: s32
+    // Count of rules or keyframes blocks containing browser-only motion.
+    motion_unsupported: s32
     web_declarations: s32
     diagnostic: [256]u8
     diagnostic_length: s32
@@ -99,6 +117,9 @@ CssSheetReset :: (sheet: *CssSheet) {
     sheet.theme_count = 0
     sheet.layer_count = 0
     sheet.file_count = 0
+    sheet.keyframes_count = 0
+    sheet.frame_count = 0
+    sheet.motion_unsupported = 0
     sheet.web_declarations = 0
     sheet.diagnostic_length = 0
     sheet.failed = false
@@ -259,7 +280,7 @@ CssSheetCondition :: (sheet: *CssSheet, p: *CssParser, condition: CssCondition) 
     return sheet.condition_count - 1
 }
 
-// Take the item the parser just yielded (a rule or a custom property).
+// Take the rule, custom property or keyframes block the parser just yielded.
 #program_export
 CssSheetTake :: (sheet: *CssSheet, p: *CssParser) {
     if sheet.failed { return }
@@ -289,6 +310,32 @@ CssSheetTake :: (sheet: *CssSheet, p: *CssParser) {
         sheet.definition_count += 1
         return
     }
+    if p.status == cast(s32)CssStatusKeyframes {
+        if sheet.keyframes_count >= CssSheetKeyframesCapacity ||
+            sheet.frame_count + p.keyframes.count > CssSheetFrameCapacity {
+            CssSheetFail(sheet, "the CSS keyframes table is full")
+            return
+        }
+        entry: CssSheetKeyframes
+        entry.key = p.keyframes.key
+        entry.layer = p.layer_of_rule
+        if entry.layer != CssLayerUnlayered {
+            entry.layer = CssSheetLayer(sheet, p.layer_names[entry.layer])
+        }
+        entry.condition = CssSheetCondition(sheet, p, p.rule_condition)
+        entry.first = sheet.frame_count
+        entry.count = p.keyframes.count
+        entry.unsupported = p.keyframes.unsupported
+        if sheet.failed { return }
+        for index: cast(s32)0..entry.count - 1 {
+            sheet.frames[sheet.frame_count] = p.keyframes.frames[index]
+            sheet.frame_count += 1
+        }
+        sheet.keyframes[sheet.keyframes_count] = entry
+        sheet.keyframes_count += 1
+        if entry.unsupported { sheet.motion_unsupported += 1 }
+        return
+    }
     if p.status != cast(s32)CssStatusRule { return }
     if sheet.rule_count >= CssSheetRuleCapacity {
         CssSheetFail(sheet, "more than 1024 rules in one sheet")
@@ -300,6 +347,7 @@ CssSheetTake :: (sheet: *CssSheet, p: *CssParser) {
     }
     entry: CssSheetRule
     entry.rule = p.rule
+    entry.motion = p.motion
     entry.rule.order = sheet.rule_count
     if p.rule.layer != CssLayerUnlayered {
         entry.rule.layer = CssSheetLayer(sheet, p.layer_names[p.rule.layer])
@@ -318,6 +366,7 @@ CssSheetTake :: (sheet: *CssSheet, p: *CssParser) {
         sheet.ref_count += 1
     }
     sheet.web_declarations += p.web_declarations
+    if p.motion.transition.unsupported || p.motion.animation.unsupported { sheet.motion_unsupported += 1 }
     sheet.rules[sheet.rule_count] = entry
     sheet.rule_count += 1
 }
@@ -346,7 +395,8 @@ CssSheetParse :: (sheet: *CssSheet, source: string, path: string, resolve: CssIm
     CssBegin(p, source, path)
     while true {
         status: s32 = CssStep(p)
-        if status == cast(s32)CssStatusRule || status == cast(s32)CssStatusProperty {
+        if status == cast(s32)CssStatusRule || status == cast(s32)CssStatusProperty ||
+            status == cast(s32)CssStatusKeyframes {
             CssSheetTake(sheet, p)
             if sheet.failed { return false }
         } else if status == cast(s32)CssStatusNeedImport {
@@ -626,10 +676,7 @@ CssSheetBuild :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverride
     return true
 }
 
-// Install for `env`: rules and the color custom properties Kryon widgets
-// read by name, together. On failure the previous style stays.
-#program_export
-CssSheetInstall :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides) -> bool {
+CssSheetPrepareInstall :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides) -> bool {
     if !CssSheetBuild(sheet, env, overrides, *css_install_rules) { return false }
     // Check the color table fits before anything changes.
     colors: s32 = 0
@@ -645,10 +692,31 @@ CssSheetInstall :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverri
         CssSheetFail(sheet, "more than 128 color custom properties")
         return false
     }
+    return true
+}
+
+CssSheetMotionInstall :: #type () -> bool;
+css_sheet_clear_motion: CssSheetMotionInstall;
+css_sheet_has_motion: bool;
+
+CssSheetInstallRules :: (sheet: *CssSheet) -> bool {
     if !InstallStyleRules(css_install_rules) {
         CssSheetFail(sheet, "Kryon rejected the style table (typeface storage)")
         return false
     }
+    return true
+}
+
+CssSheetRejectMotion :: (sheet: *CssSheet, previous: StyleRules) -> bool {
+    if !InstallStyleRules(previous) {
+        CssSheetFail(sheet, "Kryon rejected CSS motion and could not restore the previous styles")
+    } else {
+        CssSheetFail(sheet, "Kryon rejected the CSS motion table")
+    }
+    return false
+}
+
+CssSheetInstallColors :: (sheet: *CssSheet) -> bool {
     ClearStyleTokenColors()
     for index: cast(s32)0..sheet.name_count - 1 {
         token: CssToken = sheet.final[index]
@@ -659,6 +727,17 @@ CssSheetInstall :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverri
         }
     }
     return true
+}
+
+// Install resolved widget styles and color custom properties.
+#program_export
+CssSheetInstall :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides) -> bool {
+    if !CssSheetPrepareInstall(sheet, env, overrides) { return false }
+    previous: StyleRules
+    if css_sheet_has_motion { previous = ActiveStyleRules() }
+    if !CssSheetInstallRules(sheet) { return false }
+    if css_sheet_has_motion && !css_sheet_clear_motion() { return CssSheetRejectMotion(sheet, previous) }
+    return CssSheetInstallColors(sheet)
 }
 
 CssTokenResult :: struct {
@@ -709,6 +788,9 @@ CssCompiledSheet :: struct {
     typefaces: []string
     file: string
     rule_words: s32
+    motion: []u32
+    keyframes: []u32
+    frames: []u32
 }
 
 CssWordFloat :: (word: u32) -> float32 {
@@ -862,5 +944,8 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         sheet.definitions[sheet.definition_count] = definition
         sheet.definition_count += 1
     }
-    return true
+    return CssSheetLoadMotion(sheet, compiled, rule_base, rule_count, conditions[:condition_count],
+        layers[:compiled.layers.count])
 }
+
+#load "sheet_motion_pack.zi";

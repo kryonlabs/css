@@ -1,0 +1,68 @@
+Button.transit {
+  background-color: #000;
+  transition-property: background-color, border-radius;
+  transition-duration: 400ms;
+  transition-delay: 0.1s;
+  transition-timing-function: linear;
+}
+
+Button.transit:hover {
+  background-color: #fff;
+}
+
+Button.transit:disabled {
+  background-color: red;
+  transition: none;
+}
+
+Button.enter {
+  background-color: #000;
+}
+
+Button.enter:hover {
+  background-color: #fff;
+  transition: background-color 500ms linear;
+}
+
+Button.delayed {
+  background-color: #000;
+  transition: background-color 0s linear 250ms;
+}
+
+Button.delayed:hover {
+  background-color: #fff;
+}
+
+Button.pulse {
+  background-color: #000;
+  border-radius: 4px;
+  animation: Blink 200ms linear 100ms 1.5 alternate-reverse both;
+}
+
+@keyframes Blink {
+  to { border-radius: 20px; }
+  50%, from { border-radius: 4px; }
+  50% { border-radius: 12px; }
+}
+
+@layer earlier {
+  @keyframes Blink { from, to { border-radius: 99px; } }
+}
+
+Button.pulse:disabled {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  Button.pulse { animation: none; }
+}
+
+Button.browser {
+  transition: transform 300ms steps(2);
+  animation: drift 100ms ease infinite;
+  animation-delay: -250ms;
+}
+
+@keyframes drift {
+  25% { opacity: 0.25; transform: rotate(15deg); }
+}

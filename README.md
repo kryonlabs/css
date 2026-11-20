@@ -71,7 +71,7 @@ must match),
 `-kryon-motion-duration`, `-kryon-motion-multiplier`,
 `-kryon-motion-easing` (`inherit`, `standard`, `linear`, `instant`) and
 `-kryon-motion-reduced` (`reduce`, `no-preference`). Document layout properties
-(`width`, `margin`, `display`, `transition` and the like) are kept for the web
+(`width`, `margin`, `display` and the like) are kept for the web
 document host and skipped by native hosts. Each native widget uses the fields
 its paint and layout implement:
 
@@ -145,6 +145,71 @@ source order. Kryon's specificity counts a widget type 1, each attribute 10,
 a class 20 and an ID 200; states add nothing, because a widget is in one
 state at a time (disabled, loading, pressed, hovered, selected, focused, in
 that order of precedence).
+
+## Native stylesheet motion
+
+Use a Kryon checkout that exports `kryon/style_motion` and opt in where you
+install the sheet. `CssSheetParse` and `CssSheetLoad` both feed this entry point.
+The regular `css/Css` import and `CssSheetInstall` also work for static styles.
+
+```zi
+CssMotion :: #import "css/motion";
+
+// After parsing or loading the sheet:
+CssMotion.Install(*sheet, env, null)
+```
+
+```css
+Button.save {
+  background-color: #284b90;
+  transition: background-color 160ms ease-out 50ms, border-radius 160ms ease-out 50ms;
+}
+
+Button.save:hover {
+  background-color: #185fbd;
+  border-radius: 12px;
+}
+
+Button.notice {
+  animation: appear 250ms ease-out both;
+}
+
+@keyframes appear {
+  from { opacity: 0; translate: 0 4px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  Button.notice { animation: none; }
+}
+```
+
+Kryon's retained widgets sample motion during drawing. Pass the app's motion
+preference in `env.reduced_motion` when installing. `transition: none` and
+`animation: none` clear a matching declaration lower in the cascade.
+
+Native transitions share one duration, delay and timing function per
+selector. A comma list can combine properties with identical timing. For
+animations, use one named track per selector. Put motion longhands together
+in the same rule, where they can also override shorthand values. Both forms
+accept `ms` and `s`, signed delays, `linear`, `ease`, `ease-in`, `ease-out`,
+`ease-in-out` and `cubic-bezier()`. Animations also support fractional or
+infinite repeats, all four directions and all four fill modes.
+
+The native fields are solid background color, text color, border color,
+border width, corner radius, opacity and two-axis `translate`. Keyframes
+accept `from`, `to` and percentages, including comma lists and repeated
+offsets. Repeated offsets merge in order. Unspecified fields and missing
+endpoints use the widget's underlying style. Definitions follow the active
+media conditions, layer priority and source order.
+
+`sheet.motion_unsupported` counts rule entries and keyframes blocks containing
+browser-only motion in parsed and packed sheets. This includes properties
+such as `transform`, `steps()` timing, unequal transition timings, multiple
+animations and `var()` in keyframes. Supported declarations in a mixed
+keyframe still animate. The browser exporter preserves the original motion
+declarations and `@keyframes` source. `css_tool pack-file NAME IN.css OUT.zi`
+compiles a standalone native pack.
 
 ## Port HTML styles to native widgets
 
@@ -232,7 +297,9 @@ OUT=browser.css` runs the same exporter from the command line.
 ## Develop
 
 `make check` runs the behavior tests, the conformance test, the style pack
-check, the production Kryon DOM test and the fuzzer. The DOM test uses
+check, the production Kryon DOM test and the fuzzer. `make motion-test` uses
+the current Kryon checkout to draw the same stylesheet from source and from
+a generated pack through the retained Button renderer. The DOM test uses
 Python 3.11 or newer and headless Chromium. It resolves Kryon and Ziran
 through the configured `ZIRAN` executable. Set `CSS_DOM_SOURCE` to the CSS
 checkout when testing its working sources from a separate dependency graph.

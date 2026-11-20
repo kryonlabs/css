@@ -1,0 +1,407 @@
+// Unsupported native motion still yields its browser source spans.
+CssAnimatedFields :: () -> u32 {
+    return cast(u32)StyleBackground | cast(u32)StyleForeground | cast(u32)StyleBorder |
+        cast(u32)StyleRadius | cast(u32)StyleBorderWidth | cast(u32)StyleOpacity | cast(u32)StyleContentOffset
+}
+
+CssAnimatedProperty :: (name: CssName) -> u32 {
+    if CssNameEquals(name, "background") || CssNameEquals(name, "background-color") { return cast(u32)StyleBackground }
+    if CssNameEquals(name, "color") { return cast(u32)StyleForeground }
+    if CssNameEquals(name, "border") { return cast(u32)StyleBorder | cast(u32)StyleBorderWidth }
+    if CssNameEquals(name, "border-color") { return cast(u32)StyleBorder }
+    if CssNameEquals(name, "border-width") { return cast(u32)StyleBorderWidth }
+    if CssNameEquals(name, "border-radius") { return cast(u32)StyleRadius }
+    if CssNameEquals(name, "opacity") { return cast(u32)StyleOpacity }
+    if CssNameEquals(name, "translate") { return cast(u32)StyleContentOffset }
+    return 0
+}
+
+CssAnimationKey :: (name: CssName) -> u64 {
+    key: u64 = 14695981039346656037
+    for index: cast(s32)0..name.length - 1 {
+        key = (key ^ cast(u64)name.bytes[index]) * cast(u64)1099511628211
+    }
+    return ifx key == 0 then cast(u64)1 else key
+}
+
+CssEase :: () -> CssCurve { return .{0.25, 0.1, 0.25, 1.0} }
+
+CssTimingWord :: (word: CssName, curve: *CssCurve) -> bool {
+    if CssNameEquals(word, "linear") { curve.* = CssCurve.{} }
+    else if CssNameEquals(word, "ease") { curve.* = CssEase() }
+    else if CssNameEquals(word, "ease-in") { curve.* = CssCurve.{0.42, 0.0, 1.0, 1.0} }
+    else if CssNameEquals(word, "ease-out") { curve.* = CssCurve.{0.0, 0.0, 0.58, 1.0} }
+    else if CssNameEquals(word, "ease-in-out") { curve.* = CssCurve.{0.42, 0.0, 0.58, 1.0} }
+    else { return false }
+    return true
+}
+
+CssReadBezier :: (p: *CssParser, curve: *CssCurve) -> bool {
+    points: [4]float32
+    for index: cast(s32)0..3 {
+        CssSkipSpace(p)
+        number: CssNumber = CssReadNumber(p)
+        if !number.ok || number.unit.length > 0 || number.percent { return false }
+        if index % 2 == 0 && (number.value < 0.0 || number.value > 1.0) { return false }
+        points[index] = cast(float32)number.value
+        delimiter: u8 = ifx index == 3 then #char ")" else #char ","
+        if !CssExpect(p, delimiter, "expected cubic-bezier control point delimiter") { return false }
+    }
+    curve.* = CssCurve.{points[0], points[1], points[2], points[3]}
+    return true
+}
+
+CssTime :: (number: CssNumber, seconds: *float64) -> bool {
+    if !number.ok { return false }
+    if CssNameEquals(number.unit, "s") { seconds.* = number.value }
+    else if CssNameEquals(number.unit, "ms") { seconds.* = number.value / 1000.0 }
+    else { return false }
+    return true
+}
+
+CssTransitionProperty :: (word: CssName, fields: *u32) -> bool {
+    if CssNameEquals(word, "none") { fields.* = 0 }
+    else if CssNameEquals(word, "all") { fields.* = CssAnimatedFields() }
+    else {
+        fields.* = CssAnimatedProperty(word)
+        if fields.* == 0 { return false }
+    }
+    return true
+}
+
+CssReadTransitionItem :: (p: *CssParser, end: s32, value: *CssTransition) -> bool {
+    value.* = CssTransition.{.fields = CssAnimatedFields(), .curve = CssEase(), .set = true}
+    times: s32 = 0
+    timing: bool = false
+    property: bool = false
+    any: bool = false
+    while CssMoreValue(p, end) && !CssAtByte(p, #char ",") {
+        any = true
+        number: CssNumber = CssReadNumber(p)
+        if number.ok {
+            seconds: float64 = 0.0
+            if !CssTime(number, *seconds) || times >= 2 || (times == 0 && seconds < 0.0) { return false }
+            if times == 0 { value.seconds = seconds }
+            else { value.delay = seconds }
+            times += 1
+            continue
+        }
+        if CssAtFunction(p, "cubic-bezier") {
+            if timing || !CssReadBezier(p, *value.curve) { return false }
+            timing = true
+            continue
+        }
+        word: CssName = CssReadName(p)
+        if CssTimingWord(word, *value.curve) {
+            if timing { return false }
+            timing = true
+            continue
+        }
+        if property || !CssTransitionProperty(word, *value.fields) { return false }
+        property = true
+    }
+    return any
+}
+
+CssSameCurve :: (a: CssCurve, b: CssCurve) -> bool {
+    return a.x1 == b.x1 && a.y1 == b.y1 && a.x2 == b.x2 && a.y2 == b.y2
+}
+
+CssReadTransition :: (p: *CssParser, end: s32, value: *CssTransition) -> bool {
+    if !CssReadTransitionItem(p, end, value) { return false }
+    if value.fields == 0 && CssMoreValue(p, end) { return false }
+    while CssMoreValue(p, end) {
+        if !CssExpect(p, #char ",", "expected ',' between transitions") { return false }
+        next: CssTransition
+        if !CssReadTransitionItem(p, end, *next) || next.fields == 0 || next.seconds != value.seconds ||
+            next.delay != value.delay || !CssSameCurve(next.curve, value.curve) { return false }
+        value.fields |= next.fields
+    }
+    return true
+}
+
+CssAnimationDirection :: (word: CssName) -> s32 {
+    if CssNameEquals(word, "normal") { return 0 }
+    if CssNameEquals(word, "alternate") { return cast(s32)CssAnimationAlternate }
+    if CssNameEquals(word, "reverse") { return cast(s32)CssAnimationReverse }
+    if CssNameEquals(word, "alternate-reverse") { return cast(s32)(CssAnimationAlternate | CssAnimationReverse) }
+    return -1
+}
+
+CssAnimationFill :: (word: CssName) -> s32 {
+    if CssNameEquals(word, "none") { return 0 }
+    if CssNameEquals(word, "backwards") { return cast(s32)CssAnimationBackwards }
+    if CssNameEquals(word, "forwards") { return cast(s32)CssAnimationForwards }
+    if CssNameEquals(word, "both") { return cast(s32)(CssAnimationBackwards | CssAnimationForwards) }
+    return -1
+}
+
+CssMotionReservedName :: (word: CssName) -> bool {
+    return CssNameEquals(word, "inherit") || CssNameEquals(word, "initial") || CssNameEquals(word, "unset") ||
+        CssNameEquals(word, "revert") || CssNameEquals(word, "revert-layer") ||
+        CssNameEquals(word, "running") || CssNameEquals(word, "paused") || CssNameEquals(word, "auto")
+}
+
+CssReadAnimation :: (p: *CssParser, end: s32, value: *CssAnimation) -> bool {
+    value.* = CssAnimation.{.iterations = 1.0, .curve = CssEase(), .set = true}
+    times: s32 = 0
+    timing: bool = false
+    repeat: bool = false
+    direction: bool = false
+    fill: bool = false
+    named: bool = false
+    while CssMoreValue(p, end) {
+        number: CssNumber = CssReadNumber(p)
+        if number.ok {
+            seconds: float64 = 0.0
+            if CssTime(number, *seconds) {
+                if times >= 2 || (times == 0 && seconds < 0.0) { return false }
+                if times == 0 { value.seconds = seconds }
+                else { value.delay = seconds }
+                times += 1
+            } else {
+                if repeat || number.percent || number.unit.length > 0 || number.value < 0.0 { return false }
+                value.iterations = number.value
+                repeat = true
+            }
+            continue
+        }
+        if CssAtFunction(p, "cubic-bezier") {
+            if timing || !CssReadBezier(p, *value.curve) { return false }
+            timing = true
+            continue
+        }
+        word: CssName = CssReadName(p)
+        if word.length == 0 || CssAtByte(p, #char "(") { return false }
+        parsed_curve: CssCurve
+        if !timing && CssTimingWord(word, *parsed_curve) {
+            value.curve = parsed_curve
+            timing = true
+            continue
+        }
+        if !repeat && CssNameEquals(word, "infinite") {
+            value.iterations = -1.0
+            repeat = true
+            continue
+        }
+        parsed_direction: s32 = CssAnimationDirection(word)
+        parsed_fill: s32 = CssAnimationFill(word)
+        if !direction && parsed_direction >= 0 {
+            value.flags |= cast(u32)parsed_direction
+            direction = true
+        } else if !fill && parsed_fill >= 0 {
+            value.flags |= cast(u32)parsed_fill
+            fill = true
+        } else if !named && !CssMotionReservedName(word) {
+            value.key = ifx CssNameEquals(word, "none") then cast(u64)0 else CssAnimationKey(word)
+            named = true
+        } else { return false }
+    }
+    return true
+}
+
+CssReadMotionTiming :: (p: *CssParser, curve: *CssCurve) -> bool {
+    if CssAtFunction(p, "cubic-bezier") { return CssReadBezier(p, curve) }
+    return CssTimingWord(CssReadName(p), curve)
+}
+
+CssTransitionLonghand :: (p: *CssParser, name: CssName, end: s32, value: *CssTransition) -> bool {
+    if !value.set { value.* = CssTransition.{.fields = CssAnimatedFields(), .curve = CssEase(), .set = true} }
+    if CssNameEquals(name, "transition-property") {
+        if !CssTransitionProperty(CssReadName(p), *value.fields) { return false }
+        while CssMoreValue(p, end) {
+            if value.fields == 0 || !CssExpect(p, #char ",", "expected ',' between transition properties") { return false }
+            CssSkipSpace(p)
+            fields: u32
+            if !CssTransitionProperty(CssReadName(p), *fields) || fields == 0 { return false }
+            value.fields |= fields
+        }
+    } else if CssNameEquals(name, "transition-duration") {
+        if !CssTime(CssReadNumber(p), *value.seconds) || value.seconds < 0.0 { return false }
+    } else if CssNameEquals(name, "transition-delay") {
+        if !CssTime(CssReadNumber(p), *value.delay) { return false }
+    } else if CssNameEquals(name, "transition-timing-function") {
+        if !CssReadMotionTiming(p, *value.curve) { return false }
+    } else if !(CssNameEquals(name, "transition-behavior") && CssNameEquals(CssReadName(p), "normal")) {
+        return false
+    }
+    return !CssMoreValue(p, end)
+}
+
+CssAnimationLonghand :: (p: *CssParser, name: CssName, end: s32, value: *CssAnimation) -> bool {
+    if !value.set { value.* = CssAnimation.{.iterations = 1.0, .curve = CssEase(), .set = true} }
+    if CssNameEquals(name, "animation-name") {
+        word: CssName = CssReadName(p)
+        if word.length == 0 || CssMotionReservedName(word) { return false }
+        value.key = ifx CssNameEquals(word, "none") then cast(u64)0 else CssAnimationKey(word)
+    } else if CssNameEquals(name, "animation-duration") {
+        if !CssTime(CssReadNumber(p), *value.seconds) || value.seconds < 0.0 { return false }
+    } else if CssNameEquals(name, "animation-delay") {
+        if !CssTime(CssReadNumber(p), *value.delay) { return false }
+    } else if CssNameEquals(name, "animation-timing-function") {
+        if !CssReadMotionTiming(p, *value.curve) { return false }
+    } else if CssNameEquals(name, "animation-iteration-count") {
+        number: CssNumber = CssReadNumber(p)
+        if number.ok {
+            if number.percent || number.unit.length > 0 || number.value < 0.0 { return false }
+            value.iterations = number.value
+        } else {
+            if !CssNameEquals(CssReadName(p), "infinite") { return false }
+            value.iterations = -1.0
+        }
+    } else if CssNameEquals(name, "animation-direction") {
+        flags: s32 = CssAnimationDirection(CssReadName(p))
+        if flags < 0 { return false }
+        value.flags = (value.flags & ~cast(u32)(CssAnimationAlternate | CssAnimationReverse)) | cast(u32)flags
+    } else if CssNameEquals(name, "animation-fill-mode") {
+        flags: s32 = CssAnimationFill(CssReadName(p))
+        if flags < 0 { return false }
+        value.flags = (value.flags & ~cast(u32)(CssAnimationBackwards | CssAnimationForwards)) | cast(u32)flags
+    } else if !(CssNameEquals(name, "animation-play-state") && CssNameEquals(CssReadName(p), "running")) {
+        return false
+    }
+    return !CssMoreValue(p, end)
+}
+
+CssReadMotionProperty :: (p: *CssParser, name: CssName, end: s32) -> bool {
+    text: string = TextView(name.bytes[:name.length])
+    transition: bool = CssNameEquals(name, "transition")
+    animation: bool = CssNameEquals(name, "animation")
+    if !transition && !animation {
+        transition = text.count > 11 && CssNameEquals(CssMakeName(text[:11]), "transition-")
+        animation = text.count > 10 && CssNameEquals(CssMakeName(text[:10]), "animation-")
+    }
+    if !transition && !animation { return false }
+    if transition {
+        value: CssTransition = p.motion.transition
+        ok: bool
+        if CssNameEquals(name, "transition") { ok = CssReadTransition(p, end, *value) }
+        else { ok = CssTransitionLonghand(p, name, end, *value) }
+        if !ok || CssFailed(p) { value = CssTransition.{.set = true, .unsupported = true} }
+        p.motion.transition = value
+    } else {
+        value: CssAnimation = p.motion.animation
+        ok: bool
+        if CssNameEquals(name, "animation") { ok = CssReadAnimation(p, end, *value) }
+        else { ok = CssAnimationLonghand(p, name, end, *value) }
+        if !ok || CssFailed(p) { value = CssAnimation.{.set = true, .unsupported = true} }
+        p.motion.animation = value
+    }
+    p.status = cast(s32)CssStatusContinue
+    p.diagnostic_length = 0
+    return true
+}
+
+CssReadKeyframeStyle :: (p: *CssParser, track: *CssParsedKeyframes) -> StyleData {
+    p.template = StyleData.{}
+    p.rule_ref_count = 0
+    while true {
+        CssSkipSpace(p)
+        if CssFailed(p) || CssAtEnd(p) { break }
+        if CssAtByte(p, #char "}") {
+            CssAdvance(p, 1)
+            return p.template
+        }
+        if CssAtByte(p, #char ";") {
+            CssAdvance(p, 1)
+            continue
+        }
+        head: CssDeclarationResult = CssReadDeclarationHead(p)
+        if !head.ok { break }
+        if CssAnimatedProperty(head.name) == 0 {
+            track.unsupported = true
+        } else {
+            previous: StyleData = p.template
+            names: s32 = p.name_count
+            p.template = StyleData.{}
+            scope: s32 = CssApplyProperty(p, head.name, head.end)
+            if scope == CssScopeNative && p.rule_ref_count == 0 &&
+                (p.template.fields & ~CssAnimatedFields()) == 0 {
+                p.template = MergeValues(previous, p.template)
+            } else {
+                p.template = previous
+                track.unsupported = true
+                p.rule_ref_count = 0
+                p.name_count = names
+                p.status = cast(s32)CssStatusContinue
+                p.diagnostic_length = 0
+            }
+        }
+        CssFinishDeclaration(p)
+    }
+    track.count = 0
+    track.unsupported = true
+    return StyleData.{}
+}
+
+CssKeyframeOffset :: (p: *CssParser) -> float32 {
+    number: CssNumber = CssReadNumber(p)
+    if number.ok {
+        if number.percent && number.value >= 0.0 && number.value <= 100.0 { return cast(float32)(number.value / 100.0) }
+        return -1.0
+    }
+    word: CssName = CssReadName(p)
+    if CssNameEquals(word, "from") { return 0.0 }
+    if CssNameEquals(word, "to") { return 1.0 }
+    return -1.0
+}
+
+CssInsertKeyframe :: (track: *CssParsedKeyframes, offset: float32, style: StyleData) -> bool {
+    index: s32 = 0
+    while index < track.count && track.frames[index].offset < offset { index += 1 }
+    if index < track.count && track.frames[index].offset == offset {
+        track.frames[index].style = MergeValues(track.frames[index].style, style)
+        return true
+    }
+    if track.count >= CssKeyframeCapacity { return false }
+    at: s32 = track.count
+    while at > index {
+        track.frames[at] = track.frames[at - 1]
+        at -= 1
+    }
+    track.frames[index] = CssKeyframe.{offset, style}
+    track.count += 1
+    return true
+}
+
+CssReadKeyframes :: (p: *CssParser, name: CssName) -> CssParsedKeyframes {
+    track: CssParsedKeyframes
+    track.key = CssAnimationKey(name)
+    // Implicit endpoints take their values from the widget's underlying style.
+    unused CssInsertKeyframe(*track, 0.0, StyleData.{})
+    unused CssInsertKeyframe(*track, 1.0, StyleData.{})
+    any: bool = false
+    while CssMoreValue(p, cast(s32)p.cursor.source.count) {
+        if CssAtByte(p, #char "}") {
+            if !any { track.count = 0 }
+            return track
+        }
+        offsets: [CssKeyframeCapacity]float32
+        count: s32 = 0
+        while count < CssKeyframeCapacity {
+            CssSkipSpace(p)
+            offset: float32 = CssKeyframeOffset(p)
+            if offset < 0.0 { break }
+            offsets[count] = offset
+            count += 1
+            CssSkipSpace(p)
+            if !CssAtByte(p, #char ",") { break }
+            CssAdvance(p, 1)
+        }
+        if count == 0 || !CssExpect(p, #char "{", "expected a keyframe block") { break }
+        style: StyleData = CssReadKeyframeStyle(p, *track)
+        if track.count == 0 { break }
+        if style.fields == 0 { continue }
+        any = true
+        for index: cast(s32)0..count - 1 {
+            if !CssInsertKeyframe(*track, offsets[index], style) {
+                track.count = 0
+                track.unsupported = true
+                return track
+            }
+        }
+    }
+    track.count = 0
+    track.unsupported = true
+    return track
+}

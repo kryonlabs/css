@@ -43,7 +43,7 @@ CssStatus :: enum {
     CssStatusError :: 4
     // p.definition holds a :root custom property.
     CssStatusProperty :: 5
-    // p.raw_start/raw_length span an @keyframes block (web hosts only).
+    // p.keyframes holds the native track and raw_start/raw_length span the browser block.
     CssStatusKeyframes :: 6
 }
 
@@ -265,6 +265,56 @@ CssPendingSelector :: struct {
     length: s32
 }
 
+CssKeyframeCapacity :: 64
+CssAnimationAlternate :: 1
+CssAnimationReverse :: 2
+CssAnimationBackwards :: 4
+CssAnimationForwards :: 8
+
+CssCurve :: struct {
+    x1: float32
+    y1: float32
+    x2: float32
+    y2: float32
+}
+
+CssTransition :: struct {
+    fields: u32
+    seconds: float64
+    delay: float64
+    curve: CssCurve
+    set: bool
+    unsupported: bool
+}
+
+CssAnimation :: struct {
+    key: u64
+    seconds: float64
+    delay: float64
+    iterations: float64
+    curve: CssCurve
+    flags: u32
+    set: bool
+    unsupported: bool
+}
+
+CssRuleMotion :: struct {
+    transition: CssTransition
+    animation: CssAnimation
+}
+
+CssKeyframe :: struct {
+    offset: float32
+    style: StyleData
+}
+
+CssParsedKeyframes :: struct {
+    key: u64
+    frames: [CssKeyframeCapacity]CssKeyframe
+    count: s32
+    unsupported: bool
+}
+
 CssParser :: struct {
     cursor: CssCursor
     files: [8]CssSourceFile
@@ -297,6 +347,8 @@ CssParser :: struct {
     // The yielded custom property and its name index.
     definition: CssToken
     definition_index: s32
+    motion: CssRuleMotion
+    keyframes: CssParsedKeyframes
     raw_start: s32
     raw_length: s32
     pending_import: CssName
@@ -425,4 +477,5 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
 #load "parser/selectors.zi";
 #load "parser/properties.zi";
 #load "parser/media.zi";
+#load "parser/motion.zi";
 #load "parser/statements.zi";

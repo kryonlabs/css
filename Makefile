@@ -9,26 +9,34 @@ STYLE_PACKS := classic material lightfield
 CSS_TOOL := $(BUILD)/tools/css_tool
 INCLUDE = -I$$($(ZIRAN) pkg path ziran)/include
 
-.PHONY: check test conformance style-packs style-pack-check format export css-dom-test fuzz clean
+.PHONY: check test conformance style-packs style-pack-check format export css-dom-test motion-test fuzz clean
 
-check: test conformance style-pack-check css-dom-test fuzz
+check: test conformance style-pack-check css-dom-test motion-test fuzz
 
 # A behavior test: build one Ziran entry to C and run it.
 define native_test
 	rm -rf $(BUILD)/$(1)-c
-	$(ZIRAN) build --project --target=c --exe --entry $(1):main -o $(BUILD)/$(1)-c tests/$(1).zi
+	$(ZIRAN) build --project $(2) --target=c --exe --entry $(1):main -o $(BUILD)/$(1)-c tests/$(1).zi
 	$(CC) -std=c11 -O1 $(INCLUDE) -I$(BUILD)/$(1)-c $(BUILD)/$(1)-c/*.c -o $(BUILD)/$(1) -lm
 	$(BUILD)/$(1)
 endef
 
 test:
-	$(ZIRAN) check --project
+	$(ZIRAN) check --project src/Css/module.zi
 	$(ZIRAN) check --project src/css_lexer_laws.zi
 	$(call native_test,css_parse_behavior)
 	$(call native_test,css_sheet_behavior)
 	$(call native_test,css_format_behavior)
 	$(call native_test,css_export_behavior)
 	$(call native_test,css_integration_behavior)
+
+# Production retained widgets on a Kryon checkout with declarative motion.
+$(BUILD)/motion-pack/style_pack_motion.zi: tests/css_motion.css $(CSS_TOOL)
+	mkdir -p $(dir $@)
+	$(CSS_TOOL) pack-file motion $< $@
+
+motion-test: $(BUILD)/motion-pack/style_pack_motion.zi
+	$(call native_test,css_motion_behavior,--module-path $(BUILD)/motion-pack)
 
 # The same sheets resolved on every code generation target, plus the
 # browser export; see tests/css_conformance.sh.

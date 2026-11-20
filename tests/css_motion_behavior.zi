@@ -1,0 +1,150 @@
+#import "css_parser"
+#import "css_sheet"
+#import "css_export"
+#import "css_test_support"
+#import "file_linux"
+#import "style_pack_motion"
+using RasterHost :: #import "css_button_raster_host";
+CssMotion :: #import "css_motion";
+Button :: #import "kryon/button";
+#import "kryon/control_props"
+#import "kryon/frame_motion"
+#import "kryon/geometry"
+#import "kryon/session"
+#import "kryon/style"
+#import "kryon/Theme"
+#import "kryon/tree"
+#import "kryon/tree_draw"
+
+using ButtonState;
+using FrameStatus;
+using StyleField;
+
+parsed: CssSheet;
+packed: CssSheet;
+source_bytes: [8192]u8;
+export_bytes: [8192]u8;
+
+Draw :: (session: Session, seconds: float64, class_name: string, state: s32) -> CssButtonRasterState {
+    SetFrameMotionTime(session, seconds)
+    CssButtonRasterReset()
+    Check(BeginFrame(session, 1, Rectangle.{0.0, 0.0, 200.0, 100.0}) == cast(FrameStatus)FrameOk, "begin retained frame")
+    unused Button.Draw(session, Button.Props.{.key = 1, .class_name = StyleClass(class_name),
+        .label = "Save", .state = cast(ButtonState)state, .bounds = Rectangle.{10.0, 20.0, 100.0, 48.0}})
+    Check(EndFrame(session) == cast(FrameStatus)FrameOk, "commit retained frame")
+    raster: CssButtonRasterState = CssButtonRasterSample()
+    Check(!raster.failed && raster.fill_count == 1, "production Button emits its fill")
+    return raster
+}
+
+Gray :: (raster: CssButtonRasterState, value: s32) -> bool {
+    red: s32 = cast(s32)raster.fill_color.r
+    return red >= value - 1 && red <= value + 1 && raster.fill_color.r == raster.fill_color.g &&
+        raster.fill_color.r == raster.fill_color.b
+}
+
+Radius :: (raster: CssButtonRasterState, value: float32) -> bool {
+    return raster.radius > value - 0.01 && raster.radius < value + 0.01
+}
+
+TransitionEdges :: () {
+    session: Session = SessionOpen()
+    Check(Gray(Draw(session, 1.0, "enter", ButtonStateNormal), 0) && !FrameMotionMoving(session),
+        "the resting style paints without an active transition")
+    Check(Gray(Draw(session, 2.0, "enter", ButtonStateHover), 0) && FrameMotionMoving(session),
+        "a transition declared only on hover starts at the resting fill")
+    Check(Gray(Draw(session, 2.25, "enter", ButtonStateHover), 128), "the hover-only transition interpolates")
+    Check(Gray(Draw(session, 2.375, "enter", ButtonStateNormal), 0) && !FrameMotionMoving(session),
+        "leaving hover restores the resting style immediately")
+    unused SessionClose(session)
+
+    session = SessionOpen()
+    Check(Gray(Draw(session, 3.0, "delayed", ButtonStateNormal), 0) && !FrameMotionMoving(session),
+        "a delayed zero-duration transition leaves the first frame settled")
+    Check(Gray(Draw(session, 4.0, "delayed", ButtonStateHover), 0) && FrameMotionMoving(session),
+        "a zero-duration transition schedules frames during its delay")
+    Check(Gray(Draw(session, 4.125, "delayed", ButtonStateHover), 0) && FrameMotionMoving(session),
+        "a zero-duration transition holds the old fill until its deadline")
+    Check(Gray(Draw(session, 4.25, "delayed", ButtonStateHover), 255) && !FrameMotionMoving(session),
+        "a zero-duration transition jumps to its target at the deadline")
+    unused SessionClose(session)
+}
+
+Exercise :: (sheet: *CssSheet) {
+    env: CssEnvironment = CssDefaultEnvironment()
+    Check(CssMotion.Install(sheet, env), "install native CSS motion")
+    TransitionEdges()
+    session: Session = SessionOpen()
+    Check(Gray(Draw(session, 1.0, "transit", ButtonStateNormal), 0), "initial target is immediate")
+    Check(Gray(Draw(session, 2.0, "transit", ButtonStateHover), 0) && FrameMotionMoving(session), "hover starts delay")
+    Check(Gray(Draw(session, 2.05, "transit", ButtonStateHover), 0), "positive delay holds the old fill")
+    Check(Gray(Draw(session, 2.3, "transit", ButtonStateHover), 128), "linear transition reaches its midpoint")
+    Check(Gray(Draw(session, 2.3, "transit", ButtonStateNormal), 128), "interrupted transition starts at the displayed fill")
+    Check(Gray(Draw(session, 2.6, "transit", ButtonStateNormal), 64), "the return transition advances from the interruption")
+    raster: CssButtonRasterState = Draw(session, 2.65, "transit", ButtonStateDisabled)
+    Check(raster.fill_color.r == 255 && raster.fill_color.g == 0 && !FrameMotionMoving(session), "transition none cancels motion")
+    unused SessionClose(session)
+
+    session = SessionOpen()
+    Check(Radius(Draw(session, 10.0, "pulse", ButtonStateNormal), 20.0) && FrameMotionMoving(session),
+        "backwards fill uses the reverse start during the delay")
+    Check(Radius(Draw(session, 10.15, "pulse", ButtonStateNormal), 16.0), "keyframe interpolation uses the unlayered track")
+    Check(Radius(Draw(session, 10.5, "pulse", ButtonStateNormal), 12.0) && !FrameMotionMoving(session),
+        "fractional alternate repeat holds its final sample")
+    Check(Radius(Draw(session, 10.6, "pulse", ButtonStateDisabled), 4.0), "animation none restores the underlying style")
+    unused SessionClose(session)
+
+    env.reduced_motion = true
+    Check(CssMotion.Install(sheet, env), "reinstall for reduced motion")
+    session = SessionOpen()
+    unused Draw(session, 20.0, "transit", ButtonStateNormal)
+    Check(Gray(Draw(session, 20.1, "transit", ButtonStateHover), 255) && !FrameMotionMoving(session),
+        "reduced motion settles transitions immediately")
+    Check(Radius(Draw(session, 20.2, "pulse", ButtonStateNormal), 4.0), "reduced motion condition disables the animation")
+    unused SessionClose(session)
+
+    env.reduced_motion = false
+    Check(CssSheetInstall(sheet, env, null), "install through the static entry point")
+    session = SessionOpen()
+    Check(Radius(Draw(session, 21.0, "pulse", ButtonStateNormal), 4.0) && !FrameMotionMoving(session),
+        "a static install clears a previously installed motion table")
+    unused SessionClose(session)
+}
+
+CheckTables :: (sheet: *CssSheet) {
+    Check(sheet.motion_unsupported == 2 && sheet.keyframes_count == 3, "web-only motion is counted in both forms")
+    transition: CssTransition = sheet.rules[0].motion.transition
+    Check(transition.seconds == 0.4 && transition.delay == 0.1 &&
+        transition.fields == (cast(u32)StyleBackground | cast(u32)StyleRadius), "transition fields and seconds round-trip")
+    animation: CssAnimation = sheet.rules[sheet.rule_count - 1].motion.animation
+    Check(animation.key != 0 && animation.delay == -0.25 && animation.iterations == -1.0,
+        "negative delay and infinite iterations round-trip")
+    drift: CssSheetKeyframes = sheet.keyframes[2]
+    Check(drift.key == animation.key && drift.count == 3 &&
+        sheet.frames[drift.first].style.fields == 0 && sheet.frames[drift.first + 1].offset == 0.25 &&
+        sheet.frames[drift.first + 1].style.fields == cast(u32)StyleOpacity &&
+        sheet.frames[drift.first + 2].style.fields == 0, "mixed keyframes retain supported sparse styles and implicit ends")
+}
+
+main :: () -> s32 {
+    file: FileHandle = OpenRead("tests/css_motion.css")
+    Check(file.valid, "open motion fixture")
+    read: s64 = ReadAt(file, source_bytes[:], 0)
+    CloseFile(file)
+    if read <= 0 || read >= source_bytes.count { return 1 }
+    source: string = TextView(source_bytes[:read])
+    Check(CssSheetParse(*parsed, source, "css_motion.css", CssNoImports), "parse native motion fixture")
+    Check(CssSheetLoad(*packed, StylePackMotion()), "load generated pack")
+    CheckTables(*parsed)
+    CheckTables(*packed)
+    exported: CSSExport = ExportCSS(source, "css_motion.css", CssDefaultEnvironment(), export_bytes[:])
+    text: string = TextView(export_bytes[:exported.count])
+    Check(exported.ok && Contains(text, "@keyframes drift {\n  25% { opacity: 0.25; transform: rotate(15deg); }\n}") &&
+        Contains(text, "transition: transform 300ms steps(2);") && Contains(text, "animation-delay: -250ms;"),
+        "browser output retains unsupported motion and raw keyframes")
+    Check(InstallDefaultTheme(false), "install the default theme")
+    Exercise(*parsed)
+    Exercise(*packed)
+    if test_failures == 0 { TestSay("css motion behavior: PASS\n") }
+    return test_failures
+}

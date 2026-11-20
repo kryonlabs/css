@@ -64,14 +64,14 @@ Properties: `color`, `background` (a color or a two-stop
 must match),
 `padding-inline`, `padding-block`, `gap`, `row-gap`, `column-gap`,
 `font-size`, `font-family`, `font-weight`, `font-style`,
-`letter-spacing`, `min-height`, `min-block-size`, `line-height`,
+`letter-spacing`, `width`, `height`, `min-height`, `min-block-size`, `line-height`,
 `translate`, `-kryon-material` (`lightfield`, `flat`, `glass`),
 `-kryon-icon-size`, `-kryon-font-role` (`inherit`, `control`, `body`,
 `heading`, `code`), `-kryon-elevation` (`none`, `rest`, `raised`, `floating`),
 `-kryon-motion-duration`, `-kryon-motion-multiplier`,
 `-kryon-motion-easing` (`inherit`, `standard`, `linear`, `instant`) and
 `-kryon-motion-reduced` (`reduce`, `no-preference`). Document layout properties
-(`width`, `margin`, `display` and the like) are kept for the web
+(`margin`, `display` and the like) are kept for the web
 document host and skipped by native hosts. Each native widget uses the fields
 its paint and layout implement:
 
@@ -80,6 +80,13 @@ its paint and layout implement:
   (zero in native layout) or a nonnegative `px` or `rem` length. A `Row`
   uses its column gap and a `Column` uses its row gap. Controls that use a
   uniform gap read the first `gap` value.
+- `Row` and `Column` read `width` and `height` as outer sizes, including
+  padding. They accept positive `px` or `rem` lengths and `auto`. A positive
+  axis in `props.bounds` takes precedence. Otherwise `auto` uses the ordinary
+  parent content size and can override an earlier size rule. Other sizing
+  values, including zero, percentages, intrinsic keywords, `var()` and
+  `calc()`, are browser-only and are skipped by native layout. Browser export
+  keeps both sets of values. Native packs accept the native subset.
 - Native `Text`, `Heading` and `ParagraphText` read `font-weight`,
   `font-style` and `letter-spacing`. Weight takes `normal` (400), `bold` (700)
   or a number from 1 to 1000, rounded to a whole number for native fonts.

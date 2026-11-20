@@ -1,0 +1,8 @@
+Row.packed, Column.packed {
+  width: 5.5rem;
+  height: 35px;
+}
+
+Row.packed#fluid {
+  width: auto;
+}

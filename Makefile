@@ -21,14 +21,18 @@ define native_test
 	$(BUILD)/$(1)
 endef
 
-test:
+test: $(BUILD)/layout-pack/style_pack_layout.zi
 	$(ZIRAN) check --project src/Css/module.zi
 	$(ZIRAN) check --project src/css_lexer_laws.zi
 	$(call native_test,css_parse_behavior)
 	$(call native_test,css_sheet_behavior)
 	$(call native_test,css_format_behavior)
 	$(call native_test,css_export_behavior)
-	$(call native_test,css_integration_behavior)
+	$(call native_test,css_integration_behavior,--module-path $(BUILD)/layout-pack)
+
+$(BUILD)/layout-pack/style_pack_layout.zi: tests/css_layout.css $(CSS_TOOL)
+	mkdir -p $(dir $@)
+	$(CSS_TOOL) pack-file layout $< $@
 
 # Production retained widgets on a Kryon checkout with declarative motion.
 $(BUILD)/motion-pack/style_pack_motion.zi: tests/css_motion.css $(CSS_TOOL)

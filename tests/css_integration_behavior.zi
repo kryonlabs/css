@@ -2,7 +2,9 @@
 #import "css_parser"
 #import "css_sheet"
 #import "css_test_support"
+#import "style_pack_layout"
 using RasterHost :: #import "css_button_raster_host";
+BoxWidget :: #import "kryon/box";
 ButtonWidget :: #import "kryon/button";
 Layout :: #import "kryon/layout";
 #import "kryon/control_props"
@@ -70,6 +72,17 @@ Row.actions, Column.actions {
 
 Row.actions {
   column-gap: 0;
+}
+
+.sized {
+  width: 7.5rem;
+  height: 40px;
+  padding: 4px;
+}
+
+Row.sized {
+  width: 132.5PX /* fractional logical pixels */;
+  width: calc(100% - 2rem);
 }
 CSS;
 
@@ -173,10 +186,55 @@ LayoutIntegration :: () {
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "native layout frame")
 }
 
+LayoutSizing :: () {
+    viewport: Rectangle = .{0.0, 0.0, 200.0, 100.0}
+    sized := StyleClass("sized")
+    BeginFrame(integration_session, cast(u64)501, viewport)
+    row := Layout.Row(integration_session, .{.key = 211, .class_name = sized})
+    Check(row.opened && row.bounds.width == 132.5 && row.bounds.height == 40.0 &&
+        row.content.width == 124.5 && row.content.height == 32.0,
+        "parsed sizing controls the outer bounds and content")
+    facts := StyleDefaultFacts(StyleKindRow())
+    facts.class_name = sized
+    direct := ResolveStyleRules(ActiveStyleRules(), StyleData.{}, facts, StyleStateAny())
+    Check(direct.width == row.bounds.width && direct.height == row.bounds.height,
+        "direct and indexed cascade resolve the same sizes")
+    facts.kind = StyleKindButton()
+    unrelated := ResolveInstalledStyleRules(StyleData.{}, facts, StyleStateAny())
+    Check(!StyleHasField(unrelated, cast(u32)StyleWidth | cast(u32)StyleHeight),
+        "container sizes do not enter the button cascade")
+    column := Layout.Draw(integration_session,
+        .{.key = 212, .class_name = sized, .bounds = .{0.0, 0.0, 44.0, 0.0}})
+    Check(column.opened && column.bounds.x == 4.0 && column.bounds.y == 4.0 &&
+        column.bounds.width == 44.0 && column.bounds.height == 40.0,
+        "nested column uses explicit width and styled height")
+    Check(End(integration_session), "close sized column")
+    sibling := BoxWidget.Draw(integration_session, .{.key = 213, .bounds = .{0.0, 0.0, 10.0, 8.0}})
+    Check(sibling >= 0 && TreeSubmittedBounds(integration_session, sibling).x == 48.0,
+        "retained siblings advance by the allocated column width")
+    Check(End(integration_session), "close sized row")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "parsed size frame")
+
+    CssSheetReset(*integration_sheet)
+    Check(CssSheetLoad(*integration_sheet, StylePackLayout()) &&
+        CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "sizing pack installs")
+    packed := StyleClass("packed")
+    BeginFrame(integration_session, cast(u64)502, viewport)
+    fixed := Layout.Draw(integration_session, .{.key = 214, .class_name = packed})
+    Check(fixed.bounds.width == 88.0 && fixed.bounds.height == 35.0, "pack keeps both sizes")
+    Check(End(integration_session), "close packed column")
+    fluid := Layout.Row(integration_session, .{.key = 215, .class_name = packed, .id = StyleId("fluid")})
+    Check(fluid.bounds.width == 200.0 && fluid.bounds.height == 35.0,
+        "packed auto wins the width cascade and leaves the height intact")
+    Check(End(integration_session), "close packed row")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "packed size frame")
+}
+
 main :: () -> s32 {
     if !SessionValid(integration_session) { integration_session = SessionOpen() }
     Integration()
     LayoutIntegration()
+    LayoutSizing()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }
     return test_failures

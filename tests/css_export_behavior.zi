@@ -113,6 +113,10 @@ Declarations :: () {
     Check(Contains(output, "#kryon-dom-root { --ink: #102030; }"), "custom properties on the root")
     Check(Contains(output, "  color: var(--ink);\n"), "declarations copied")
     Check(Contains(output, "  width: 40px;\n"), "document properties kept for the web")
+    sizing: string = Export("Row { width: 132.5px; height: auto; width: calc(100% - 2rem); height: 1e2px; }",
+        CssDefaultEnvironment())
+    Check(Contains(sizing, "width: 132.5px;\n  height: auto;\n  width: calc(100% - 2rem);\n  height: 1e2px;"),
+        "browser export keeps sizing declarations in source order")
     Check(!Contains(output, "-kryon-material") && !Contains(output, "-kryon-icon-size"), "-kryon-* declarations dropped")
     authoring: string = Export("Button { min-block-size: 44px; color: hwb(.5turn 20% 20% / 50%); opacity: 75%; }",
         CssDefaultEnvironment())

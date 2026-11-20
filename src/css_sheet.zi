@@ -773,6 +773,7 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 
 CssPreviousRuleWords :: 42
 CssCompiledRuleWords :: 47
+CssSizedRuleWords :: 49
 CssCompiledRefWords :: 4
 CssCompiledDefinitionWords :: 8
 CssCompiledConditionWords :: 10
@@ -803,7 +804,8 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
     if sheet.failed { return false }
     rule_words: s32 = compiled.rule_words
     if rule_words == 0 { rule_words = CssPreviousRuleWords }
-    if (rule_words != CssCompiledRuleWords && rule_words != CssPreviousRuleWords) ||
+    if (rule_words != CssSizedRuleWords && rule_words != CssCompiledRuleWords &&
+        rule_words != CssPreviousRuleWords) ||
         cast(s32)compiled.rules.count % rule_words != 0 {
         CssSheetFail(sheet, "unsupported compiled CSS rule format")
         return false
@@ -903,7 +905,7 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         style.motion_multiplier = CssWordFloat(w[39])
         style.motion_easing = cast(MotionEasing)cast(s32)w[40]
         style.motion_reduced = w[41] != cast(u32)0
-        if rule_words == CssCompiledRuleWords {
+        if rule_words >= CssCompiledRuleWords {
             style.row_gap = CssWordFloat(w[42])
             style.column_gap = CssWordFloat(w[43])
             style.font_weight = cast(s32)w[44]
@@ -911,6 +913,10 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
             style.line_height_unit = cast(LineHeightUnit)cast(s32)w[46]
         } else if (style.fields & cast(u32)StyleLineHeight) != cast(u32)0 {
             style.line_height_unit = cast(LineHeightUnit)LineHeightFactor
+        }
+        if rule_words == CssSizedRuleWords {
+            style.width = CssWordFloat(w[47])
+            style.height = CssWordFloat(w[48])
         }
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1

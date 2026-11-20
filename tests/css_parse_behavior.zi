@@ -68,8 +68,10 @@ Values :: () {
             "motion")
     }
     // Document properties are for the web export; natively they are skipped.
-    if Builds("Button { width: 20px; margin-inline: 4px; color: red; }", "web properties") {
+    if Builds("Button { width: 20%; height: 1e2px; margin-inline: 4px; color: red; }", "web properties") {
         Check(Rule(0).style.foreground == cast(u32)0xff0000ff, "web properties skipped")
+        Check(!Has(Rule(0).style, cast(u32)StyleWidth) && !Has(Rule(0).style, cast(u32)StyleHeight),
+            "browser-only size values leave native fields unset")
     }
     if Builds("Button { padding: 4px 8px; }", "padding pair") {
         Check(Rule(0).style.padding_y == 4.0 && Rule(0).style.padding_x == 8.0, "padding block inline")

@@ -210,6 +210,45 @@ CssClampByte :: (value: float64) -> u32 {
     return cast(u32)(value + 0.5)
 }
 
+CssClampColorChannel :: (value: float64, high: float64) -> float64 {
+    if value < 0.0 { return 0.0 }
+    if value > high { return high }
+    return value
+}
+
+CssColorChannels :: struct {
+    rgb: [3]float64
+    alpha: float64
+}
+
+// Keep fractional channels for interpolation, then store the finished color
+// through the same RGBA8 path used by other declarations and compiled packs.
+CssColorValue :: (channels: [4]float64, mix_channels: *CssColorChannels) -> CssValue {
+    result: CssValue
+    result.kind = cast(s32)CssValueColor
+    result.ref = -1
+    result.ok = true
+    if mix_channels != null {
+        for index: cast(s32)0..2 { mix_channels.rgb[index] = CssClampColorChannel(channels[index], 255.0) }
+        mix_channels.alpha = CssClampColorChannel(channels[3], 1.0)
+        return result
+    }
+    result.color = (CssClampByte(channels[0]) << cast(u32)24) |
+        (CssClampByte(channels[1]) << cast(u32)16) | (CssClampByte(channels[2]) << cast(u32)8) |
+        CssClampByte(channels[3] * 255.0)
+    return result
+}
+
+CssReadPackedColorChannels :: (value: CssValue, channels: *CssColorChannels) -> CssValue {
+    if value.ok && channels != null {
+        channels.rgb[0] = cast(float64)((value.color >> cast(u32)24) & cast(u32)255)
+        channels.rgb[1] = cast(float64)((value.color >> cast(u32)16) & cast(u32)255)
+        channels.rgb[2] = cast(float64)((value.color >> cast(u32)8) & cast(u32)255)
+        channels.alpha = cast(float64)(value.color & cast(u32)255) / 255.0
+    }
+    return value
+}
+
 // One numeric color channel. Percentages scale to the channel's full value.
 CssChannel :: struct {
     value: float64
@@ -279,7 +318,7 @@ CssHwbChannel :: (n: float64, hue: float64, white: float64, black: float64) -> f
 }
 
 // The numeric forms of rgb(), hsl(), their alpha aliases, and hwb().
-CssReadColorFunction :: (p: *CssParser, name: string) -> CssValue {
+CssReadColorFunction :: (p: *CssParser, name: string, mix_channels: *CssColorChannels) -> CssValue {
     result: CssValue
     result.kind = cast(s32)CssValueColor
     result.ref = -1
@@ -322,41 +361,124 @@ CssReadColorFunction :: (p: *CssParser, name: string) -> CssValue {
         return result
     }
     if !CssCloseFunction(p, name) { return result }
-    red: float64 = channels[0]
-    green: float64 = channels[1]
-    blue: float64 = channels[2]
     if hwb {
-        red = CssHwbChannel(0.0, channels[0], channels[1], channels[2]) * 255.0
-        green = CssHwbChannel(8.0, channels[0], channels[1], channels[2]) * 255.0
-        blue = CssHwbChannel(4.0, channels[0], channels[1], channels[2]) * 255.0
+        hue: float64 = channels[0]
+        white: float64 = channels[1]
+        black: float64 = channels[2]
+        channels[0] = CssHwbChannel(0.0, hue, white, black) * 255.0
+        channels[1] = CssHwbChannel(8.0, hue, white, black) * 255.0
+        channels[2] = CssHwbChannel(4.0, hue, white, black) * 255.0
     } else if hsl {
         hue: float64 = channels[0]
-        saturation: float64 = channels[1]
-        lightness: float64 = channels[2]
-        if saturation < 0.0 { saturation = 0.0 }
-        if saturation > 1.0 { saturation = 1.0 }
-        if lightness < 0.0 { lightness = 0.0 }
-        if lightness > 1.0 { lightness = 1.0 }
-        red = CssHslChannel(0.0, hue, saturation, lightness) * 255.0
-        green = CssHslChannel(8.0, hue, saturation, lightness) * 255.0
-        blue = CssHslChannel(4.0, hue, saturation, lightness) * 255.0
+        saturation: float64 = CssClampColorChannel(channels[1], 1.0)
+        lightness: float64 = CssClampColorChannel(channels[2], 1.0)
+        channels[0] = CssHslChannel(0.0, hue, saturation, lightness) * 255.0
+        channels[1] = CssHslChannel(8.0, hue, saturation, lightness) * 255.0
+        channels[2] = CssHslChannel(4.0, hue, saturation, lightness) * 255.0
     }
-    alpha: float64 = channels[3] * 255.0
-    result.color = (CssClampByte(red) << cast(u32)24) | (CssClampByte(green) << cast(u32)16) |
-        (CssClampByte(blue) << cast(u32)8) | CssClampByte(alpha)
+    return CssColorValue(channels, mix_channels)
+}
+
+CssReadMixWeight :: (p: *CssParser) -> CssNumber {
+    weight: CssNumber
+    CssSkipSpace(p)
+    if CssFailed(p) { return weight }
+    weight = CssReadNumber(p)
+    if weight.ok && (!weight.percent || weight.value < 0.0 || weight.value > 100.0) {
+        CssFail(p, "color-mix() weights must be percentages from 0% to 100%")
+        weight.ok = false
+    }
+    return weight
+}
+
+CssMixStop :: struct {
+    channels: CssColorChannels
+    weight: CssNumber
+    ok: bool
+}
+
+CssReadMixStop :: (p: *CssParser, depth: s32) -> CssMixStop {
+    result: CssMixStop
+    result.weight = CssReadMixWeight(p)
+    if CssFailed(p) { return result }
+    color: CssValue = CssReadColor(p, false, depth, *result.channels)
+    if !color.ok { return result }
+    if !result.weight.ok { result.weight = CssReadMixWeight(p) }
+    if CssFailed(p) { return result }
     result.ok = true
     return result
 }
 
-// A color: hex, a named color, rgb()/hsl()/hwb(), or var().
-CssReadColor :: (p: *CssParser, allow_var: bool) -> CssValue {
+CssReadColorMix :: (p: *CssParser, depth: s32, mix_channels: *CssColorChannels) -> CssValue {
+    result: CssValue
+    if depth >= 16 {
+        CssFail(p, "color-mix() can nest at most 16 levels")
+        return result
+    }
+    CssSkipSpace(p)
+    prefix: CssName = CssReadName(p)
+    if !CssNameEquals(prefix, "in") {
+        CssFail(p, "color-mix() requires 'in srgb'")
+        return result
+    }
+    CssSkipSpace(p)
+    space: CssName = CssReadName(p)
+    if !CssNameEquals(space, "srgb") {
+        CssFail(p, "color-mix() supports only the srgb color space")
+        return result
+    }
+    if !CssExpect(p, #char ",", "expected ',' after 'in srgb'") { return result }
+    first: CssMixStop = CssReadMixStop(p, depth + 1)
+    if !first.ok || !CssExpect(p, #char ",", "color-mix() requires two color stops") { return result }
+    second: CssMixStop = CssReadMixStop(p, depth + 1)
+    if !second.ok { return result }
+    CssSkipSpace(p)
+    if CssAtByte(p, #char ",") {
+        CssFail(p, "color-mix() supports exactly two color stops")
+        return result
+    }
+    if !CssCloseFunction(p, "color-mix") { return result }
+
+    first_weight: float64 = 50.0
+    second_weight: float64 = 50.0
+    if first.weight.ok { first_weight = first.weight.value }
+    if second.weight.ok { second_weight = second.weight.value }
+    if !first.weight.ok { first_weight = 100.0 - second_weight }
+    if !second.weight.ok { second_weight = 100.0 - first_weight }
+    total: float64 = first_weight + second_weight
+    if total == 0.0 {
+        CssFail(p, "color-mix() weights cannot both be 0%")
+        return result
+    }
+
+    first_alpha: float64 = first.channels.alpha * first_weight
+    second_alpha: float64 = second.channels.alpha * second_weight
+    weighted_alpha: float64 = first_alpha + second_alpha
+    channels: [4]float64
+    if weighted_alpha > 0.0 {
+        for index: cast(s32)0..2 {
+            channels[index] = (first.channels.rgb[index] * first_alpha + second.channels.rgb[index] * second_alpha) /
+                weighted_alpha
+        }
+        // Normalization above 100% is equivalent to scaling alpha below 100%.
+        channels[3] = weighted_alpha / (ifx total > 100.0 then total else 100.0)
+    }
+    return CssColorValue(channels, mix_channels)
+}
+
+// A color literal, interpolated color, or whole-value var().
+CssReadColor :: (p: *CssParser, allow_var: bool, mix_depth: s32 = 0, mix_channels: *CssColorChannels = null) -> CssValue {
     result: CssValue
     result.kind = cast(s32)CssValueColor
     result.ref = -1
     CssSkipSpace(p)
     if CssFailed(p) { return result }
-    if CssAtByte(p, #char "#") { return CssReadHex(p) }
+    if CssAtByte(p, #char "#") { return CssReadPackedColorChannels(CssReadHex(p), mix_channels) }
     if CssAtFunction(p, "var") {
+        if mix_depth > 0 {
+            CssFail(p, "color-mix() stops must be literal colors; use var() for the whole color")
+            return result
+        }
         if !allow_var {
             CssFail(p, "nested var() in a fallback is outside Kryon CSS")
             return result
@@ -375,7 +497,10 @@ CssReadColor :: (p: *CssParser, allow_var: bool) -> CssValue {
         return result
     }
     for name: css_color_functions {
-        if CssAtFunction(p, name) { return CssReadColorFunction(p, name) }
+        if CssAtFunction(p, name) {
+            if name == "color-mix" { return CssReadColorMix(p, mix_depth, mix_channels) }
+            return CssReadColorFunction(p, name, mix_channels)
+        }
     }
     name: CssName = CssReadName(p)
     if CssFailed(p) { return result }
@@ -388,7 +513,7 @@ CssReadColor :: (p: *CssParser, allow_var: bool) -> CssValue {
         CssFailName(p, "unknown color", name, "")
         return result
     }
-    return named
+    return CssReadPackedColorChannels(named, mix_channels)
 }
 
 // Lengths, numbers, durations and materials -------------------------------
@@ -703,8 +828,8 @@ CssReadDefinition :: (p: *CssParser, end: s32) -> CssToken {
     return token
 }
 
-css_color_functions: [5]string = .[
-    "rgb", "rgba", "hsl", "hsla", "hwb"];
+css_color_functions: [6]string = .[
+    "rgb", "rgba", "hsl", "hsla", "hwb", "color-mix"];
 
 CssAtColorFunction :: (p: *CssParser) -> bool {
     for name: css_color_functions {

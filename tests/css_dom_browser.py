@@ -204,6 +204,7 @@ STYLE_SNAPSHOT = r"""
     saveTracking: style.letterSpacing,
     saveLineRatio: Number(style.lineHeight.replace('px', '')) / Number(style.fontSize.replace('px', '')),
     saveFamily: style.fontFamily,
+    saveColor: style.color.match(/^color\(srgb ([^/]+)\)$/)?.[1].trim().split(/\s+/).map(value => Math.round(Number(value) * 255)),
     saveBackground: style.backgroundColor,
     saveTransitionDuration: style.transitionDuration,
     saveTransitionTiming: style.transitionTimingFunction,
@@ -212,7 +213,8 @@ STYLE_SNAPSHOT = r"""
     statePressed: state.getAttribute('aria-pressed'),
     stateBackground: getComputedStyle(state).backgroundColor,
     plainBackground: getComputedStyle(plain).backgroundColor,
-    typed: {minHeight: globalThis.__cssDomMinHeight, lineHeight: globalThis.__cssDomLineHeight,
+    typed: {ink: globalThis.__cssDomInk,
+             minHeight: globalThis.__cssDomMinHeight, lineHeight: globalThis.__cssDomLineHeight,
              lineUnit: globalThis.__cssDomLineUnit, weight: globalThis.__cssDomWeight,
              style: globalThis.__cssDomFontStyle, tracking: globalThis.__cssDomTracking,
              typeface: globalThis.__cssDomTypeface, duration: globalThis.__cssDomMotionDuration,
@@ -258,6 +260,7 @@ def verify(output):
                 raise AssertionError(f"exported CSS lacks {name} selector {selector}")
         expected = {
             "saveMinHeight": "64px", "saveFontSize": "17px", "saveBackground": "rgb(16, 32, 48)",
+            "saveColor": [232, 216, 200],
             "saveWeight": "650", "saveFontStyle": "italic", "saveTracking": "-0.5px",
             "saveTransitionDuration": "0.123s", "saveTransitionTiming": "linear",
             "otherSelectedBackground": "rgb(48, 32, 16)", "stateSelected": "true", "statePressed": "true",
@@ -271,7 +274,8 @@ def verify(output):
         if "Kryon Css Test" not in values["saveFamily"]:
             raise AssertionError("font family: " + repr(values["saveFamily"]))
         typed = values["typed"]
-        if (typed["minHeight"] != 64 or abs(typed["lineHeight"] - 1.4) > 0.001 or
+        if (typed["ink"] != 0xE8D8C8FF or
+                typed["minHeight"] != 64 or abs(typed["lineHeight"] - 1.4) > 0.001 or
                 typed["typeface"] != "Kryon Css Test" or typed["duration"] != 123 or
                 typed["multiplier"] != 1.25 or typed["lineUnit"] != 1 or
                 typed["weight"] != 650 or typed["style"] != 2 or typed["tracking"] != -0.5):

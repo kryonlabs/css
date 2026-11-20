@@ -127,6 +127,58 @@ NativeAuthoring :: () {
     ParseFails("Button { color: hwb(5px 10% 20%); }", "not an angle unit", "invalid hue unit")
 }
 
+color_mix_css :: #string CSS
+:root {
+  --hover: COLOR-MIX(IN SRGB, red, 25% blue);
+  --alias: var(--hover);
+}
+Button {
+  color: color-mix(in srgb, red, blue);
+  background: color-mix(in srgb, red 90%, blue 60%);
+  border: 1px solid color-mix(in srgb, #ff0000 20%, #0000ff 30%);
+  outline-color: color-mix(in srgb, transparent, #2468ac 25%);
+}
+Button:hover {
+  color: var(--alias);
+  background: var(--missing, color-mix(in srgb, #00ff00 20%, black));
+}
+Text {
+  color: color-mix(in srgb, rgb(230 20 40 / 24%) 40%, #1464dc 60%);
+  background: color-mix(in srgb, rgb(10.4 30.4 50.4 / .499) 80%, rgb(11.4 31.4 51.4 / .501) 20%);
+  border-color: color-mix(in srgb, #ff000000, rgba(0, 0, 255, 0));
+  outline-color: color-mix(in srgb, color-mix(in srgb, #000 70%, white) 60%, #000);
+}
+CSS;
+
+ColorMix :: () {
+    if Builds(color_mix_css, "sRGB color mixes") {
+        facts: StyleFacts = Facts(StyleKindButton(), 0)
+        button: StyleData = Resolve(facts, 1)
+        Check(button.foreground == cast(u32)0x800080ff, "missing weights default to equal shares")
+        Check(button.background == cast(u32)0x990066ff, "weights above 100% normalize")
+        Check(button.border == cast(u32)0x66009980 && button.border_width == 1.0, "weights below 100% scale alpha")
+        Check(button.focus == cast(u32)0x2468ac40, "transparent stop preserves the other stop's hue")
+        hover: StyleData = Resolve(facts, 2)
+        Check(hover.foreground == cast(u32)0xbf0040ff, "prefix weight, inferred first share and custom property alias")
+        Check(hover.background == cast(u32)0x003300ff, "inferred second share in a var() fallback")
+        text: StyleData = Resolve(Facts(StyleKindText(), 0), 1)
+        Check(text.foreground == cast(u32)0x3159c3b1, "translucent stops mix with premultiplied alpha")
+        Check(text.background == cast(u32)0x0b1f337f, "channels and alpha keep precision until the final mix")
+        Check(text.border == 0 && Has(text, cast(u32)StyleBorder), "all-transparent mix resolves to transparent black")
+        Check(text.focus == cast(u32)0x2e2e2eff, "nested literal mix")
+    }
+    ParseFails("Button { color: color-mix(in oklab, red, blue); }", "only the srgb color space", "unsupported mix space")
+    ParseFails("Button { color: color-mix(red, blue); }", "requires 'in srgb'", "missing mix space")
+    ParseFails("Button { color: color-mix(in srgb, red, blue, green); }", "exactly two color stops", "extra mix stop")
+    ParseFails("Button { color: color-mix(in srgb, red); }", "requires two color stops", "missing mix stop")
+    ParseFails("Button { color: color-mix(in srgb, red 0%, blue 0%); }", "cannot both be 0%", "zero total mix weight")
+    ParseFails("Button { color: color-mix(in srgb, -1% red, blue); }", "percentages from 0% to 100%", "negative mix weight")
+    ParseFails("Button { color: color-mix(in srgb, red, blue 101%); }", "percentages from 0% to 100%", "excess mix weight")
+    ParseFails("Button { color: color-mix(in srgb, red 10px, blue); }", "percentages from 0% to 100%", "invalid mix weight unit")
+    ParseFails("Button { color: color-mix(in srgb, red 20%, 30% blue 40%); }", "expected ')' to close", "duplicate mix weight")
+    ParseFails("Button { color: color-mix(in srgb, var(--a, red), blue); }", "stops must be literal colors", "variable mix stop")
+}
+
 Selectors :: () {
     if Builds("Button.hero#save:hover, Text:disabled, *[tone=Accent]:active, Toggle:checked, Button:focus, Button:selected {color: red}",
         "selector list") {
@@ -293,21 +345,65 @@ Media :: () {
     web_dark: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(), "dark", "", "", "", "web")
     Check(BuildIn(nested, web_dark) && test_rules.count == 1, "nested media combine")
     Check(BuildIn(nested, Env("dark")) && test_rules.count == 0, "nested media need both")
-    reduced: string = "@media (prefers-reduced-motion: no-preference) { Text { gap: 13px; } }"
-    Check(BuildIn(reduced, CssDefaultEnvironment()) && test_rules.count == 0,
-        "the browser evaluates reduced motion")
+}
+
+motion_media_css :: #string CSS
+:root { --duration: 180ms; }
+Button { -kryon-motion-duration: var(--duration); }
+@media (prefers-reduced-motion: no-preference) {
+  Button { -kryon-motion-easing: linear; }
+}
+@media (prefers-reduced-motion) {
+  @media (prefers-color-scheme: dark), (-kryon-density: compact) {
+    :root { --duration: 0ms; }
+    Button { -kryon-motion-reduced: reduce; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    Button { color: red; }
+  }
+}
+@media (prefers-reduced-motion: reduce) and (min-width: 1px) {
+  Button { opacity: 0; }
+}
+CSS;
+
+MotionMedia :: () {
+    env: CssEnvironment = CssDefaultEnvironment()
+    if !BuildIn(motion_media_css, env) {
+        Check(false, "parse and build reduced-motion sheet")
+        return
+    }
+    facts: StyleFacts = Facts(StyleKindButton(), 0)
+    normal: StyleData = Resolve(facts, 1)
+    Check(normal.motion_duration == 180.0 && cast(s32)normal.motion_easing == cast(s32)MotionEasingLinear &&
+        !normal.motion_reduced, "native default matches no-preference")
+    env.reduced_motion = true
+    Check(CssSheetBuild(*test_sheet, env, null, *test_rules), "rebuild same sheet with reduce")
+    light: StyleData = Resolve(facts, 1)
+    Check(light.motion_duration == 180.0 && !light.motion_reduced && !Has(light, cast(u32)StyleMotionEasing),
+        "native reduce skips no-preference and still requires the other nested feature")
+    env = CssEnvironmentWithNames(env, "dark", "", "", "", "")
+    Check(CssSheetBuild(*test_sheet, env, null, *test_rules), "rebuild same sheet with dark and reduce")
+    dark: StyleData = Resolve(facts, 1)
+    Check(dark.motion_duration == 0.0 && dark.motion_reduced && !Has(dark, cast(u32)StyleForeground) &&
+        !Has(dark, cast(u32)StyleOpacity), "native nested boolean reduce cascades duration and policy")
+    env.reduced_motion = false
+    Check(CssSheetBuild(*test_sheet, env, null, *test_rules) && Resolve(facts, 1).motion_duration == 180.0,
+        "switching back re-resolves conditional custom properties")
 }
 
 #program_export
 main :: () -> s32 {
     Values()
     NativeAuthoring()
+    ColorMix()
     Selectors()
     Diagnostics()
     Layers()
     Imports()
     Variables()
     Media()
+    MotionMedia()
     if test_failures == 0 { TestSay("css parse behavior: PASS\n") }
     return test_failures
 }

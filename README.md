@@ -11,13 +11,13 @@ apps built through the C, C++ and Go targets.
 ## Use it
 
 ```sh
-ziran add https://github.com/kryonlabs/css.git
+ziran add https://git.waozi.xyz/kryonlabs/css.git
 ```
 
 The Kryon and Ziran revisions for this package are pinned in
 [ziran.toml](ziran.toml) and [ziran.lock](ziran.lock). Use the same Kryon
-source URL and revision in the app so the stylesheet and widgets share
-one Kryon instance.
+source URL and revision from the manifest in the app so the stylesheet,
+widgets, and `kryon/motion` share one Kryon instance.
 
 ```zi
 using Styles :: #import "css/Css";
@@ -95,7 +95,7 @@ declaration breaking ties at equal priority. Use a nonnegative `px` or `rem`
 length, or zero, for either property. A zero value lets Button use its
 default minimum. Opacity clamps to `0`–`1` after resolving custom properties.
 
-Values: hex, named, `rgb()`, `rgba()`, `hsl()`, `hsla()` and `hwb()` colors;
+Values: hex, named, `rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()` and `color-mix()` colors;
 `px` and `rem` (16px) lengths; `s` and `ms` durations; `var(--name, fallback)`.
 Hue accepts a number in degrees or `deg`, `grad`, `rad` or `turn`. Write
 `hwb(hue white% black% / alpha)` with spaces between channels and optional
@@ -104,12 +104,41 @@ alpha as a number or percentage. Colors are stored as 8-bit RGBA.
 or containing block. Custom properties are declared in `:root`, keep the type
 of their declared value, and cannot be used where another kind is required.
 
+`color-mix(in srgb, <color> [<percentage>], <color> [<percentage>])` mixes
+two supported color literals with premultiplied alpha. Write a weight before
+or after its stop. Each weight ranges from `0%` to `100%`. Two omitted
+weights default to `50%` each, and one omitted weight fills the remainder
+to `100%`. Explicit weights are normalized, with a total below `100%`
+reducing the resulting alpha. Two zero weights are an error. Literal mixes
+can nest up to 16 levels and round to 8-bit RGBA at the end.
+Declare the whole mix in `:root` and read it with `var(--name)`, or use a
+literal mix as the fallback in `var(--name, color-mix(...))`. Stops and
+weights cannot refer to custom properties. Other color spaces, additional
+stops, `currentColor` and calculated weights are unsupported.
+
+```css
+:root {
+  --button-glow: color-mix(in srgb, #2076c0 35%, transparent);
+}
+
+Button.primary:hover {
+  background-color: var(--button-glow);
+}
+```
+
 At-rules: `@import` (before other rules), `@layer` statements and blocks,
 `@media` with `prefers-color-scheme`, `prefers-contrast`, `pointer`,
 `prefers-reduced-motion`, `min-width` and `max-width`, plus Kryon's
 `-kryon-theme`, `-kryon-density`, `-kryon-pointer` and `-kryon-platform`
 features, and `@keyframes`.
 `!important`, escapes and `//` comments are errors.
+
+Native `prefers-reduced-motion` uses `CssEnvironment.reduced_motion`,
+which defaults to `false`. `(prefers-reduced-motion)` and
+`(prefers-reduced-motion: reduce)` match `true` and
+`(prefers-reduced-motion: no-preference)` matches `false`. Set the field
+from your app's motion preference and reinstall the sheet when it changes.
+Browser export keeps the media query for the browser to evaluate.
 
 Rules rank by layer (unlayered rules last), then Kryon's specificity, then
 source order. Kryon's specificity counts a widget type 1, each attribute 10,

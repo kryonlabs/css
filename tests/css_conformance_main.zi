@@ -208,10 +208,12 @@ for (const element of document.querySelectorAll("[data-expect]")) {
     const actual = style.getPropertyValue(property);
     let same = false;
     if (kind === "color") {
-      const parts = (actual.match(/[\d.]+/g) || []).map(Number);
+      const srgb = actual.startsWith("color(srgb ");
+      const parts = (actual.match(/-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi) || []).map(Number);
+      const rgb = parts.slice(0, 3).map(value => srgb ? Math.round(value * 255) : value);
       const alpha = parts.length > 3 ? Math.round(parts[3] * 255) : 255;
-      same = parts.length >= 3 && parts[0] === expected[0] && parts[1] === expected[1] &&
-        parts[2] === expected[2] && Math.abs(alpha - expected[3]) <= 1;
+      same = rgb.length === 3 && rgb.every((value, i) => value === expected[i]) &&
+        Math.abs(alpha - expected[3]) <= (srgb ? 0 : 1);
     } else {
       same = Math.abs(parseFloat(actual) * 1000 - expected) <= 5;
     }

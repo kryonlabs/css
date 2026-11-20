@@ -107,6 +107,37 @@ PackedFields :: () {
         "current pack preserves new typed fields")
 }
 
+PackedMotion :: () {
+    words: [47]u32
+    words[0] = cast(u32)StyleKindText()
+    words[13] = CssLayerUnlayered
+    words[14] = 1
+    words[15] = cast(u32)StyleForeground
+    words[17] = 0x2076c059
+    condition: [10]u32 = u32.[1, 0, 0x17fff, 0, 0, 0, 0, 0, 0, 0]
+    pack: CssCompiledSheet
+    pack.file = "compiled-motion.css"
+    pack.rule_words = 47
+    pack.rules = words[:]
+    pack.conditions = condition[:]
+    CssSheetReset(*compiled_sheet)
+    Check(CssSheetLoad(*compiled_sheet, pack), "pack with a motion mask loads")
+    env: CssEnvironment = CssDefaultEnvironment()
+    Check(CssSheetBuild(*compiled_sheet, env, null, *compiled_rules) && compiled_rules.count == 0,
+        "compiled reduce-only rule skips no-preference")
+    env.reduced_motion = true
+    Check(CssSheetBuild(*compiled_sheet, env, null, *compiled_rules) && compiled_rules.count == 1 &&
+        compiled_rules.items[0].style.foreground == cast(u32)0x2076c059, "compiled reduce-only rule keeps color")
+    condition[2] = 0x7fff
+    CssSheetReset(*compiled_sheet)
+    Check(CssSheetLoad(*compiled_sheet, pack), "pack without motion bits loads")
+    Check(CssSheetBuild(*compiled_sheet, env, null, *compiled_rules) && compiled_rules.count == 1,
+        "old compiled mask matches reduce")
+    env.reduced_motion = false
+    Check(CssSheetBuild(*compiled_sheet, env, null, *compiled_rules) && compiled_rules.count == 1,
+        "old compiled mask matches no-preference")
+}
+
 Resolved :: (kind: s32) -> StyleData {
     base: StyleData
     return ResolveInstalledStyleRules(base, StyleDefaultFacts(kind), 1)
@@ -286,6 +317,7 @@ Capacity :: () {
 main :: () -> s32 {
     Packs()
     PackedFields()
+    PackedMotion()
     AppOverPack()
     AtomicInstall()
     Themes()

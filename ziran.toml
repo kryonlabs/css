@@ -7,8 +7,8 @@ git = "https://github.com/ziranlang/ziran.git"
 ref = "9432a110709c4a4f72c4f732fcfc368e15213a54"
 
 [dependencies.kryon]
-git = "https://github.com/kryonlabs/kryon.git"
-ref = "43e6ea3d76ded207e2be93ff82b2a609c3cfeb91"
+git = "https://git.waozi.xyz/kryonlabs/kryon.git"
+ref = "da94e6ad6dcfdd862405c9fd6f42bdc73f9477ef"
 
 [exports]
 Css = "src/Css/module.zi"

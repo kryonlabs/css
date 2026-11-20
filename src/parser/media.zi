@@ -1,17 +1,20 @@
 // Part of the css_parser module: media queries. Environment features
-// (prefers-color-scheme, prefers-contrast, pointer, any-pointer, hover and
-// the -kryon-density, -kryon-pointer, -kryon-platform and -kryon-theme
+// (prefers-color-scheme, prefers-contrast, pointer, any-pointer, hover,
+// prefers-reduced-motion, -kryon-density, -kryon-pointer, -kryon-platform
+// and -kryon-theme
 // features) become bit masks every host tests the same way. Viewport
-// features (width, height, orientation, aspect-ratio and their ranges),
-// prefers-reduced-motion and the print type only apply on the web document
-// host; native hosts treat them as not matching.
+// features (width, height, orientation, aspect-ratio and their ranges) and
+// the print type only apply on the web document host.
 
 CssSchemeBits :: 0x3
 CssContrastBits :: 0xc
 CssDensityBits :: 0x70
 CssPointerBits :: 0x380
 CssPlatformBits :: 0x7c00
-CssAllBits :: 0x7fff
+CssMotionNoPreferenceBit :: 0x8000
+CssMotionReduceBit :: 0x10000
+CssMotionBits :: 0x18000
+CssAllBits :: 0x1ffff
 
 CssBit :: (index: s32) -> u32 {
     return cast(u32)1 << cast(u32)index
@@ -20,7 +23,8 @@ CssBit :: (index: s32) -> u32 {
 #program_export
 CssEnvironmentBits :: (env: CssEnvironment) -> u32 {
     return CssBit(env.scheme) | CssBit(2 + env.contrast) | CssBit(4 + env.density) |
-        CssBit(7 + env.pointer) | CssBit(10 + env.platform)
+        CssBit(7 + env.pointer) | CssBit(10 + env.platform) |
+        (ifx env.reduced_motion then CssMotionReduceBit else CssMotionNoPreferenceBit)
 }
 
 css_viewport_features: [13]string = .[
@@ -86,6 +90,9 @@ CssFeatureBits :: (p: *CssParser, feature: CssName, value: CssName) -> u32 {
     } else if CssNameEquals(feature, "-kryon-platform") {
         platform: s32 = CssPlatformValue(value)
         if platform >= 0 { return CssBit(10 + platform) }
+    } else if CssNameEquals(feature, "prefers-reduced-motion") {
+        if CssNameEquals(value, "no-preference") { return CssMotionNoPreferenceBit }
+        if CssNameEquals(value, "reduce") { return CssMotionReduceBit }
     }
     return 0
 }
@@ -99,6 +106,7 @@ CssFeatureAxis :: (feature: CssName) -> u32 {
         return CssPointerBits
     }
     if CssNameEquals(feature, "-kryon-platform") { return CssPlatformBits }
+    if CssNameEquals(feature, "prefers-reduced-motion") { return CssMotionBits }
     return 0
 }
 
@@ -131,22 +139,13 @@ CssReadFeature :: (p: *CssParser, branch: *CssBranch) {
         return
     }
     if CssNameEquals(feature, "prefers-reduced-motion") {
-        if !CssExpect(p, #char ":", "expected ':' in the media feature") { return }
         CssSkipSpace(p)
         if CssFailed(p) { return }
-        value: CssName = CssReadName(p)
-        if CssFailed(p) { return }
-        if value.length == 0 {
-            CssFail(p, "expected a media feature value")
+        if CssAtByte(p, #char ")") {
+            CssAdvance(p, 1)
+            branch.mask &= ~CssMotionBits | CssMotionReduceBit
             return
         }
-        if !CssExpect(p, #char ")", "expected ')' after the media feature") { return }
-        if !CssNameEquals(value, "reduce") && !CssNameEquals(value, "no-preference") {
-            CssFailName(p, "unknown value", value, " for this media feature")
-            return
-        }
-        CssAddViewport(p, branch, start, p.cursor.pos - start)
-        return
     }
     if !CssExpect(p, #char ":", "expected ':' in the media feature") { return }
     CssSkipSpace(p)
@@ -278,7 +277,7 @@ CssReadMediaQuery :: (p: *CssParser) -> CssCondition {
 CssBranchPossible :: (branch: CssBranch) -> bool {
     return (branch.mask & CssSchemeBits) != cast(u32)0 && (branch.mask & CssContrastBits) != cast(u32)0 &&
         (branch.mask & CssDensityBits) != cast(u32)0 && (branch.mask & CssPointerBits) != cast(u32)0 &&
-        (branch.mask & CssPlatformBits) != cast(u32)0
+        (branch.mask & CssPlatformBits) != cast(u32)0 && (branch.mask & CssMotionBits) != cast(u32)0
 }
 
 // Both conditions: a query nested in another.
@@ -316,7 +315,7 @@ CssConditionAnd :: (p: *CssParser, outer: CssCondition, inner: CssCondition) -> 
 }
 
 // Does the condition hold? Native hosts pass web=false: viewport features
-// never match there. The web exporter passes web=true and keeps them.
+// never match there. Web export delegates viewport and motion to the browser.
 #program_export
 CssConditionMatches :: (condition: *CssCondition, env: CssEnvironment, themes: []CssName,
     web: bool) -> bool {
@@ -331,7 +330,8 @@ CssConditionMatches :: (condition: *CssCondition, env: CssEnvironment, themes: [
 
 CssBranchMatches :: (branch: *CssBranch, env: CssEnvironment, bits: u32, themes: []CssName,
     web: bool) -> bool {
-    if (branch.mask & bits) != bits { return false }
+    required: u32 = ifx web then bits & ~CssMotionBits else bits
+    if (branch.mask & required) != required { return false }
     if branch.viewport_count > 0 && !web { return false }
     if branch.theme >= 0 {
         if branch.theme >= cast(s32)themes.count { return false }

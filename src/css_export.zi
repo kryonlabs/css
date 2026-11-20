@@ -2,7 +2,7 @@
 // export is mostly scoping: selectors go under #kryon-dom-root and match the
 // data-kryon-* attributes the host writes, custom properties live on the
 // root element, -kryon-* declarations are dropped, environment media
-// queries are decided for `env`, and viewport queries stay for the browser.
+// queries are decided for `env`, with viewport and motion left to the browser.
 //
 // The browser must rank rules as Kryon does: by layer, then Kryon's
 // specificity (classes outrank attributes; states add nothing), then order,
@@ -133,7 +133,7 @@ CssExportCompound :: (e: *CssExporter, text: string) -> bool {
     return true
 }
 
-// The viewport part of the item's condition for `env`: `never` when no
+// The browser part of the item's condition for `env`: `never` when no
 // branch holds, an empty query when one holds outright.
 CssExportQuery :: struct {
     holds: bool
@@ -152,12 +152,10 @@ CssExportCondition :: (p: *CssParser, condition: *CssCondition, env: CssEnvironm
     }
     bits: u32 = CssEnvironmentBits(env)
     for index: cast(s32)0..condition.count - 1 {
-        branch: CssBranch = condition.branches[index]
-        // Decide the environment part here; the browser decides the rest.
-        branch.viewport_count = 0
-        if !CssBranchMatches(*branch, env, bits, p.themes[:p.theme_count], false) { continue }
+        branch: *CssBranch = *condition.branches[index]
+        if !CssBranchMatches(branch, env, bits, p.themes[:p.theme_count], true) { continue }
         query.holds = true
-        if condition.branches[index].viewport_count == 0 { query.always = true }
+        if branch.viewport_count == 0 && (branch.mask & CssMotionBits) == CssMotionBits { query.always = true }
         query.branches[query.count] = index
         query.count += 1
     }
@@ -174,6 +172,12 @@ CssExportOpen :: (e: *CssExporter, source: string, condition: *CssCondition, que
             if feature > 0 { CssExportWrite(e, " and ") }
             span: CssFeatureSpan = branch.viewport[feature]
             CssExportWrite(e, source[span.start:span.start + span.length])
+        }
+        motion: u32 = branch.mask & CssMotionBits
+        if motion != CssMotionBits {
+            if branch.viewport_count > 0 { CssExportWrite(e, " and ") }
+            CssExportWrite(e, ifx motion == CssMotionReduceBit then "(prefers-reduced-motion: reduce)"
+                else "(prefers-reduced-motion: no-preference)")
         }
     }
     CssExportWrite(e, " {\n")

@@ -19,6 +19,7 @@ sheet: CSS.CssSheet;
 
 css_source :: #string CSS
 :root {
+  --save-ink: color-mix(in srgb, #e0d0c0, #f0e0d0);
   --save-motion: 123ms;
 }
 
@@ -33,7 +34,7 @@ Button.primary {
 
 Button#save {
   background: #102030;
-  color: #f0e0d0;
+  color: var(--save-ink);
   min-height: 64px;
   line-height: 1.4;
   font-family: "Kryon Css Test";
@@ -61,9 +62,10 @@ Button#state:selected {
   background: #405060;
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion) {
   Button#save {
     transition: opacity 0ms linear;
+    -kryon-motion-duration: 0ms;
   }
 }
 CSS;
@@ -93,6 +95,7 @@ Start :: () -> bool {
     save: Button.Props = ButtonFor(101, CSS.StyleId("save"), "Save", false)
     face := Button.ButtonInstalledFaceFor(save, cast(s32)ButtonStateNormal)
     scope: s32 = WebScope()
+    WebSet(WebGlobal, WebName("__cssDomInk"), WebNumber(cast(float64)face.foreground))
     WebSet(WebGlobal, WebName("__cssDomMinHeight"), WebNumber(cast(float64)face.min_height))
     WebSet(WebGlobal, WebName("__cssDomLineHeight"), WebNumber(cast(float64)face.line_height))
     WebSet(WebGlobal, WebName("__cssDomLineUnit"), WebNumber(cast(float64)cast(s32)face.line_height_unit))

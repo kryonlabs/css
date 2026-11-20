@@ -321,7 +321,9 @@ GeneratePack :: (pack: string, source: string) -> s32 {
         SignedWord(condition.count)
         Word(ifx condition.never then cast(u32)1 else cast(u32)0)
         for branch: cast(s32)0..3 {
-            Word(condition.branches[branch].mask)
+            mask: u32 = condition.branches[branch].mask
+            if (mask & CssMotionBits) == CssMotionBits { mask &= ~CssMotionBits }
+            Word(mask)
             SignedWord(condition.branches[branch].theme + 1)
         }
     }

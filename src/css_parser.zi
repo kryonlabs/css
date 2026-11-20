@@ -157,6 +157,7 @@ CssEnvironment :: struct {
     density: s32
     pointer: s32
     platform: s32
+    reduced_motion: bool
 }
 
 CssSourceFile :: struct {

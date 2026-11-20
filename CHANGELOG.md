@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added native `color-mix(in srgb, ...)` for two literal color stops with
+  browser-compatible percentages and premultiplied alpha.
+- Added native `prefers-reduced-motion` queries through `CssEnvironment`,
+  including compiled packs and browser-controlled web export.
 - Added native CSS gaps and axis padding for `Row` and `Column`, plus font
   weight, font style, signed letter spacing and typed line height for text.
 - Added `hwb()` colors, hue angle units and `min-block-size` for horizontal

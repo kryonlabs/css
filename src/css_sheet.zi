@@ -759,7 +759,10 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         condition.count = cast(s32)compiled.conditions[at]
         condition.never = compiled.conditions[at + 1] != cast(u32)0
         for branch: cast(s32)0..3 {
-            condition.branches[branch].mask = compiled.conditions[at + 2 + branch * 2]
+            mask: u32 = compiled.conditions[at + 2 + branch * 2]
+            // A pack with no motion bits accepts both settings.
+            if branch < condition.count && (mask & CssMotionBits) == 0 { mask |= CssMotionBits }
+            condition.branches[branch].mask = mask
             theme: s32 = cast(s32)compiled.conditions[at + 3 + branch * 2] - 1
             condition.branches[branch].theme = ifx theme >= 0 then themes[theme] else -1
         }

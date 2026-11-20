@@ -27,6 +27,7 @@ conformance_app :: #string CSS
   --ink: #1d2733;
   --paper: #fbfaf7;
   --brand: rgb(40 90 160);
+  --soft-brand: color-mix(in srgb, 30% rgb(40 90 160 / 80%), #e1ecf9 40%);
   --pad: 6px;
   --round: 0.5rem;
   --leading: 125%;
@@ -72,11 +73,12 @@ Button:disabled {
 }
 
 Button:selected {
-  border-color: var(--brand);
+  border-color: color-mix(in srgb, transparent, #2877b3 38%);
 }
 
 Button.primary:loading {
-  background: hsl(210 40% 50%);
+  background: var(--soft-brand);
+  color: color-mix(in srgb, rgb(10.4 30.4 50.4 / .499) 80%, rgb(11.4 31.4 51.4 / .501) 20%);
 }
 
 #conformance {
@@ -92,6 +94,12 @@ Button.primary:loading {
   -kryon-motion-multiplier: 1.5;
   -kryon-motion-easing: linear;
   -kryon-motion-reduced: reduce;
+}
+
+@media (prefers-reduced-motion) {
+  #conformance {
+    -kryon-motion-duration: 0ms;
+  }
 }
 
 Button#conformance:selected {
@@ -119,7 +127,7 @@ Card, TextField {
 }
 
 TextField:disabled {
-  color: #888888;
+  color: var(--dim, color-mix(in srgb, color-mix(in srgb, #223344, #8a9bac), #eeeeee 33%));
 }
 CSS;
 
@@ -136,7 +144,9 @@ Pack :: (pack: s32) -> CssCompiledSheet {
 }
 
 ThemeEnv :: (theme: s32) -> CssEnvironment {
-    return CssEnvironmentWithNames(CssDefaultEnvironment(), ifx theme == 1 then "dark" else "light", "", "", "", "")
+    env: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(), ifx theme == 1 then "dark" else "light", "", "", "", "")
+    env.reduced_motion = theme == 1
+    return env
 }
 
 // Small numbers are failures: 1 the pack, 2 the app sheet, 3 the build.

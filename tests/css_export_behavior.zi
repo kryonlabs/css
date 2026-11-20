@@ -134,10 +134,16 @@ Media :: () {
         CssDefaultEnvironment())
     Check(Contains(reduced, "@media (prefers-reduced-motion: reduce) {") &&
         Contains(reduced, "gap: 2px;"), "reduced motion stays a browser query")
-    unreduced: string = Export("@media (prefers-reduced-motion: no-preference) { Text { gap: 3px; } }",
-        CssDefaultEnvironment())
+    env: CssEnvironment = CssDefaultEnvironment()
+    env.reduced_motion = true
+    unreduced: string = Export("@media (prefers-reduced-motion: no-preference) { Text { gap: 3px; } }", env)
     Check(Contains(unreduced, "@media (prefers-reduced-motion: no-preference) {") &&
         Contains(unreduced, "gap: 3px;"), "no preference stays a browser query")
+    mixed: string = Export("@media print and (prefers-reduced-motion), (prefers-reduced-motion: no-preference) and (min-width: 400px) { Text { gap: 4px; } }", env)
+    Check(Contains(mixed, "@media print and (prefers-reduced-motion: reduce), (min-width: 400px) and (prefers-reduced-motion: no-preference) {"),
+        "viewport queries and motion alternatives stay browser queries")
+    impossible: string = Export("@media (prefers-reduced-motion: reduce) and (prefers-reduced-motion: no-preference) { Text { gap: 5px; } }", env)
+    Check(!Contains(impossible, "5px"), "contradictory motion query has no branch")
 }
 
 Refusals :: () {

@@ -3,7 +3,7 @@ name = "Css"
 module_roots = ["src", "tests", "tools"]
 
 [toolchain]
-git = "https://github.com/ziranlang/ziran.git"
+git = "https://git.waozi.xyz/ziranlang/ziran.git"
 ref = "9432a110709c4a4f72c4f732fcfc368e15213a54"
 
 [dependencies.kryon]

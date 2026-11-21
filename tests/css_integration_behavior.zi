@@ -7,6 +7,9 @@ using RasterHost :: #import "css_button_raster_host";
 BoxWidget :: #import "kryon/box";
 ButtonWidget :: #import "kryon/button";
 Layout :: #import "kryon/layout";
+Grid :: #import "kryon/grid";
+Page :: #import "kryon/page";
+#import "kryon/grid_props"
 #import "kryon/control_props"
 #import "kryon/drawing_props"
 #import "kryon/geometry"
@@ -84,6 +87,11 @@ Row.sized {
   width: 132.5PX /* fractional logical pixels */;
   width: calc(100% - 2rem);
 }
+
+Text.dashboard { color: #ddecff; }
+Heading.dashboard { font-size: 34px; }
+ParagraphText.dashboard { font-size: 15px; }
+Link.dashboard { font-size: 17px; }
 CSS;
 
 PropsFor :: (id: s32, state: s32) -> ButtonWidget.Props {
@@ -124,6 +132,22 @@ Install :: () -> bool {
 Integration :: () {
     Check(InstallDefaultTheme(false), "theme installs")
     Check(Install(), "integration sheet installs")
+    class_name := StyleClass("dashboard")
+    state := cast(s32)ButtonStateNormal
+    base: StyleData
+    heading := StyleTextFacts(0, class_name, StyleKindHeading(), state)
+    face_heading := ResolveInstalledStyleRules(base, heading, state)
+    Check(face_heading.foreground == cast(u32)0xddecffff && face_heading.font_size == 34.0,
+        "headings accept generic and heading selectors")
+    Check(ResolveStyleRules(ActiveStyleRules(), base, heading, state).font_size == 34.0,
+        "direct cascade matches heading selectors")
+    paragraph := StyleTextFacts(0, class_name, StyleKindParagraphText(), state)
+    link := StyleTextFacts(0, class_name, StyleKindLink(), state)
+    plain := StyleTextFacts(0, class_name, StyleKindText(), state)
+    Check(ResolveInstalledStyleRules(base, paragraph, state).font_size == 15.0 &&
+        ResolveInstalledStyleRules(base, link, state).font_size == 17.0 &&
+        ResolveInstalledStyleRules(base, plain, state).font_size == 0.0,
+        "semantic selectors reach only the matching text widgets")
     save: ButtonWidget.Props = PropsFor(StyleId("save"), ButtonStateNormal)
     face: StyleData = ButtonWidget.ButtonInstalledFaceFor(save, ButtonStateNormal)
     Check(face.background == cast(u32)0x33ccccff && face.radius == 9.0,
@@ -230,11 +254,69 @@ LayoutSizing :: () {
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "packed size frame")
 }
 
+ResponsiveGrid :: (width: float32, columns: s32, row_gap: s32, section: bool = false) {
+    env := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), width)
+    Check(CssSheetInstall(*integration_sheet, env, null), "install viewport styles")
+    BeginFrame(integration_session, cast(u64)503, Rectangle.{0.0, 0.0, width, 540.0})
+    if section {
+        parent := Page.Section(integration_session, .{.key = 301, .label = "Dashboard",
+            .class_name = StyleClass("dashboard")})
+        Check(parent.opened, "open dashboard section")
+    } else {
+        parent := Layout.Draw(integration_session, .{.key = 301, .padding = 16, .gap = 10})
+        Check(parent.opened, "open dashboard column")
+    }
+    items: [3]GridItem = .[.{.height = 100, .column_span = -1}, .{.height = 80}, .{.height = 60}]
+    grid := Layout.Grid(integration_session, GridProps.{.key = 302, .class_name = StyleClass("panels")}, items[:])
+    cursor := grid.cursor
+    Check(grid.container.opened && cursor.metrics.columns == columns &&
+        grid.container.bounds.width == width - 32.0 && grid.container.content.width == width - 52.0,
+        "grid inherits the parent inner width and resolves viewport track count")
+    expected_height: s32 = ifx columns == 1 then 256 + 2 * row_gap else 196 + row_gap
+    Check(grid.container.bounds.height == cast(float32)expected_height && cursor.metrics.row_gap == row_gap,
+        "rows reserve their tallest child, CSS row gaps and block padding")
+    cursor = Grid.GridStep(cursor, items[0].height, items[0].column_span)
+    Check(cursor.item.width == width - 52.0 && cursor.item.x == 26.0 && cursor.item.y == 24.0,
+        "full-span panel fills the grid content")
+    cursor = Grid.GridStep(cursor, items[1].height, items[1].column_span)
+    second := cursor.item
+    cursor = Grid.GridStep(cursor, items[2].height, items[2].column_span)
+    if columns == 1 {
+        Check(second.x == cursor.item.x && cursor.item.y - second.y == cast(float32)(80 + row_gap),
+            "narrow chart panels stack")
+    } else {
+        Check(second.y == cursor.item.y && cursor.item.x - second.x - second.width == 14.0,
+            "wide chart panels share a row with the CSS column gap")
+    }
+    Check(End(integration_session), "close panels")
+    metrics := Layout.Grid(integration_session, GridProps.{.key = 303, .class_name = StyleClass("metrics")}, items[1:])
+    Check(metrics.cursor.metrics.columns == 2, "auto-fit collapses unused columns when item spans are declared")
+    Check(metrics.container.bounds.y == grid.container.bounds.y + grid.container.bounds.height + 10.0,
+        "following grid advances by measured height")
+    Check(End(integration_session), "close metrics")
+    Check(End(integration_session), "close dashboard parent")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "responsive grid frame")
+}
+
+ViewportGrid :: () {
+    CssSheetReset(*integration_sheet)
+    Check(CssSheetLoad(*integration_sheet, StylePackLayout()), "load packed grid stylesheet")
+    base := CssDefaultEnvironment()
+    Check(CssSheetSameMedia(*integration_sheet, CssEnvironmentWithViewportWidth(base, 550.0),
+        CssEnvironmentWithViewportWidth(base, 820.0)), "inclusive max-width matches its boundary")
+    Check(!CssSheetSameMedia(*integration_sheet, CssEnvironmentWithViewportWidth(base, 820.0),
+        CssEnvironmentWithViewportWidth(base, 820.25)), "media change detects fractional breakpoint crossing")
+    ResponsiveGrid(550.0, 1, 12)
+    ResponsiveGrid(1200.0, 2, 20)
+    ResponsiveGrid(550.0, 1, 12, true)
+}
+
 main :: () -> s32 {
     if !SessionValid(integration_session) { integration_session = SessionOpen() }
     Integration()
     LayoutIntegration()
     LayoutSizing()
+    ViewportGrid()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }
     return test_failures

@@ -158,6 +158,8 @@ CssEnvironment :: struct {
     pointer: s32
     platform: s32
     reduced_motion: bool
+    viewport_width: float32
+    has_viewport_width: bool
 }
 
 CssSourceFile :: struct {
@@ -212,8 +214,7 @@ CssDeclaration :: struct {
     scope: s32
 }
 
-// A viewport feature such as '(max-width: 600px)': only the web document
-// host evaluates it, so the exporter keeps its text.
+// Preserve the original feature for browser export alongside the native bounds.
 CssFeatureSpan :: struct {
     start: s32
     length: s32
@@ -226,6 +227,10 @@ CssBranch :: struct {
     theme: s32
     viewport: [4]CssFeatureSpan
     viewport_count: s32
+    width_count: s32
+    min_width: float32
+    // Negative means no upper bound once at least one width query is present.
+    max_width: float32
 }
 
 // Branches are alternatives. No branches means always; `never` means none
@@ -381,6 +386,14 @@ CssDefaultEnvironment :: () -> CssEnvironment {
     env.density = cast(s32)CssDensityComfortable
     env.pointer = cast(s32)CssPointerMouse
     env.platform = cast(s32)CssPlatformDesktop
+    return env
+}
+
+// A positive finite width is the frame viewport in logical pixels.
+#program_export
+CssEnvironmentWithViewportWidth :: (env: CssEnvironment, width: float32) -> CssEnvironment {
+    env.viewport_width = width
+    env.has_viewport_width = width > 0.0 && width <= 3.4028234e38
     return env
 }
 

@@ -312,11 +312,14 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         text: [256]u8
         return Fail(path, CssSheetDiagnostic(*sheet, text[:]))
     }
+    condition_words: s32 = CssCompiledConditionWords
     for index: cast(s32)0..sheet.condition_count - 1 {
         for branch: cast(s32)0..sheet.conditions[index].count - 1 {
-            if sheet.conditions[index].branches[branch].viewport_count > 0 {
-                return Fail(path, "packs are native tables; viewport media queries are for web sheets")
+            query := sheet.conditions[index].branches[branch]
+            if query.viewport_count != query.width_count {
+                return Fail(path, "packs only support native viewport width queries")
             }
+            if query.width_count > 0 { condition_words = CssViewportConditionWords }
         }
     }
     if sheet.web_declarations > 0 {
@@ -330,10 +333,9 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         Emit("#import \"css_sheet\"\n\n")
     rule_words: s32 = CssCompiledRuleWords
     for index: cast(s32)0..sheet.rule_count - 1 {
-        if StyleHasField(sheet.rules[index].rule.style, cast(u32)StyleWidth | cast(u32)StyleHeight) {
-            rule_words = CssSizedRuleWords
-            break
-        }
+        fields := sheet.rules[index].rule.style.fields
+        if (fields & cast(u32)StyleGridTracks) != 0 { rule_words = CssGridRuleWords; break }
+        if (fields & (cast(u32)StyleWidth | cast(u32)StyleHeight)) != 0 { rule_words = CssSizedRuleWords }
     }
     for index: cast(s32)0..sheet.rule_count - 1 {
         entry: CssSheetRule = sheet.rules[index]
@@ -388,10 +390,11 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         SignedWord(style.font_weight)
         SignedWord(cast(s32)style.font_style)
         SignedWord(cast(s32)style.line_height_unit)
-        if rule_words == CssSizedRuleWords {
+        if rule_words >= CssSizedRuleWords {
             Word(FloatBits(style.width))
             Word(FloatBits(style.height))
         }
+        if rule_words == CssGridRuleWords { SignedWord(style.grid_tracks) }
     }
     ok = ok && EmitWords("rules", pack, rule_words)
     for index: cast(s32)0..sheet.ref_count - 1 {
@@ -424,8 +427,16 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
             Word(mask)
             SignedWord(condition.branches[branch].theme + 1)
         }
+        if condition_words == CssViewportConditionWords {
+            for branch: cast(s32)0..3 {
+                query := condition.branches[branch]
+                SignedWord(query.width_count)
+                Word(FloatBits(query.min_width))
+                Word(FloatBits(query.max_width))
+            }
+        }
     }
-    ok = ok && EmitWords("conditions", pack, CssCompiledConditionWords)
+    ok = ok && EmitWords("conditions", pack, condition_words)
     ok = ok && EmitStrings("names", pack, sheet.names[:], sheet.name_count) &&
         EmitStrings("themes", pack, sheet.themes[:], sheet.theme_count) &&
         EmitStrings("layers", pack, sheet.layers[:], sheet.layer_count) &&
@@ -439,6 +450,9 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         Emit("#program_export\nStylePack") && Emit(title) && Emit(" :: () -> CssCompiledSheet {\n") &&
         Emit("    compiled: CssCompiledSheet\n") &&
         Emit("    compiled.rule_words = ") && EmitNumber(rule_words) && Emit("\n")
+    if condition_words != CssCompiledConditionWords {
+        ok = ok && Emit("    compiled.condition_words = ") && EmitNumber(condition_words) && Emit("\n")
+    }
     for part: css_tool_parts {
         ok = ok && PackPart(pack, part)
     }

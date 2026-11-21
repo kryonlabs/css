@@ -248,15 +248,17 @@ CssConditionSame :: (a: *CssCondition, b: *CssCondition) -> bool {
     for index: cast(s32)0..a.count - 1 {
         if a.branches[index].mask != b.branches[index].mask ||
             a.branches[index].theme != b.branches[index].theme ||
-            a.branches[index].viewport_count != b.branches[index].viewport_count {
+            a.branches[index].viewport_count != b.branches[index].viewport_count ||
+            a.branches[index].width_count != b.branches[index].width_count ||
+            a.branches[index].min_width != b.branches[index].min_width ||
+            a.branches[index].max_width != b.branches[index].max_width {
             return false
         }
     }
     return true
 }
 
-// The parser's condition in sheet terms: themes renumbered. Viewport text is
-// not kept; native hosts only need to know a viewport feature is present.
+// In native sheets the typed viewport bounds outlive the source spans.
 CssSheetCondition :: (sheet: *CssSheet, p: *CssParser, condition: CssCondition) -> s32 {
     if condition.count == 0 && !condition.never { return -1 }
     mapped: CssCondition = condition
@@ -466,6 +468,18 @@ CssBareText :: (name: string) -> string {
 CssSheetConditionHolds :: (sheet: *CssSheet, condition: s32, env: CssEnvironment) -> bool {
     if condition < 0 { return true }
     return CssConditionMatches(*sheet.conditions[condition], env, sheet.themes[:sheet.theme_count], false)
+}
+
+// Compare active branches without rebuilding rules or resolving custom properties.
+// Use after a successful install when the sheet and overrides are unchanged.
+#program_export
+CssSheetSameMedia :: (sheet: *CssSheet, previous: CssEnvironment, next: CssEnvironment) -> bool {
+    for index: cast(s32)0..sheet.condition_count - 1 {
+        if CssSheetConditionHolds(sheet, index, previous) != CssSheetConditionHolds(sheet, index, next) {
+            return false
+        }
+    }
+    return true
 }
 
 // Each custom property's value for `env`: the last definition whose
@@ -774,9 +788,11 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 CssPreviousRuleWords :: 42
 CssCompiledRuleWords :: 47
 CssSizedRuleWords :: 49
+CssGridRuleWords :: 50
 CssCompiledRefWords :: 4
 CssCompiledDefinitionWords :: 8
 CssCompiledConditionWords :: 10
+CssViewportConditionWords :: 22
 
 CssCompiledSheet :: struct {
     rules: []u32
@@ -792,6 +808,7 @@ CssCompiledSheet :: struct {
     motion: []u32
     keyframes: []u32
     frames: []u32
+    condition_words: s32
 }
 
 CssWordFloat :: (word: u32) -> float32 {
@@ -804,7 +821,7 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
     if sheet.failed { return false }
     rule_words: s32 = compiled.rule_words
     if rule_words == 0 { rule_words = CssPreviousRuleWords }
-    if (rule_words != CssSizedRuleWords && rule_words != CssCompiledRuleWords &&
+    if (rule_words != CssGridRuleWords && rule_words != CssSizedRuleWords && rule_words != CssCompiledRuleWords &&
         rule_words != CssPreviousRuleWords) ||
         cast(s32)compiled.rules.count % rule_words != 0 {
         CssSheetFail(sheet, "unsupported compiled CSS rule format")
@@ -813,7 +830,14 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
     rule_count: s32 = cast(s32)compiled.rules.count / rule_words
     ref_count: s32 = cast(s32)compiled.refs.count / CssCompiledRefWords
     definition_count: s32 = cast(s32)compiled.definitions.count / CssCompiledDefinitionWords
-    condition_count: s32 = cast(s32)compiled.conditions.count / CssCompiledConditionWords
+    condition_words := compiled.condition_words
+    if condition_words == 0 { condition_words = CssCompiledConditionWords }
+    if (condition_words != CssCompiledConditionWords && condition_words != CssViewportConditionWords) ||
+        compiled.conditions.count % cast(s64)condition_words != 0 {
+        CssSheetFail(sheet, "unsupported compiled CSS condition format")
+        return false
+    }
+    condition_count: s32 = cast(s32)compiled.conditions.count / condition_words
     if sheet.rule_count + rule_count > CssSheetRuleCapacity ||
         sheet.ref_count + ref_count > CssSheetRefCapacity ||
         sheet.definition_count + definition_count > CssSheetDefinitionCapacity ||
@@ -838,7 +862,7 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
     if sheet.failed { return false }
     conditions: [CssSheetConditionCapacity]s32
     for index: cast(s32)0..condition_count - 1 {
-        at: s32 = index * CssCompiledConditionWords
+        at: s32 = index * condition_words
         condition: CssCondition
         condition.count = cast(s32)compiled.conditions[at]
         condition.never = compiled.conditions[at + 1] != cast(u32)0
@@ -849,6 +873,15 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
             condition.branches[branch].mask = mask
             theme: s32 = cast(s32)compiled.conditions[at + 3 + branch * 2] - 1
             condition.branches[branch].theme = ifx theme >= 0 then themes[theme] else -1
+        }
+        if condition_words == CssViewportConditionWords {
+            for branch: cast(s32)0..3 {
+                pos := at + CssCompiledConditionWords + branch * 3
+                condition.branches[branch].width_count = cast(s32)compiled.conditions[pos]
+                condition.branches[branch].viewport_count = condition.branches[branch].width_count
+                condition.branches[branch].min_width = CssWordFloat(compiled.conditions[pos + 1])
+                condition.branches[branch].max_width = CssWordFloat(compiled.conditions[pos + 2])
+            }
         }
         conditions[index] = sheet.condition_count
         sheet.conditions[sheet.condition_count] = condition
@@ -914,10 +947,11 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         } else if (style.fields & cast(u32)StyleLineHeight) != cast(u32)0 {
             style.line_height_unit = cast(LineHeightUnit)LineHeightFactor
         }
-        if rule_words == CssSizedRuleWords {
+        if rule_words >= CssSizedRuleWords {
             style.width = CssWordFloat(w[47])
             style.height = CssWordFloat(w[48])
         }
+        if rule_words == CssGridRuleWords { style.grid_tracks = cast(s32)w[49] }
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

@@ -49,7 +49,7 @@ Hosts without imports pass `CssNoImports`.
 ## The subset
 
 Each selector can combine a widget type (`Button`, `TextField`, `Row`,
-`Column`, `App`, `*`),
+`Column`, `Grid`, `App`, `*`),
 one class (`.primary`), one ID (`#save`; set `props.id` to `StyleId("save")`),
 Kryon attributes (`[role=Label]`, `[tone=Accent]`, `[emphasis=Soft]`,
 `[size=Small]`, `[state=normal]`) and one state pseudo-class:
@@ -63,6 +63,7 @@ Properties: `color`, `background` (a color or a two-stop
 `outline-color`, `opacity` (number or percentage), `padding` (opposite sides
 must match),
 `padding-inline`, `padding-block`, `gap`, `row-gap`, `column-gap`,
+`grid-template-columns`,
 `font-size`, `font-family`, `font-weight`, `font-style`,
 `letter-spacing`, `width`, `height`, `min-height`, `min-block-size`, `line-height`,
 `translate`, `-kryon-material` (`lightfield`, `flat`, `glass`),
@@ -78,15 +79,23 @@ its paint and layout implement:
 - `gap` takes one value for both axes or two values in row, column order.
   `row-gap` and `column-gap` cascade independently. Gaps take `normal`
   (zero in native layout) or a nonnegative `px` or `rem` length. A `Row`
-  uses its column gap and a `Column` uses its row gap. Controls that use a
-  uniform gap read the first `gap` value.
-- `Row` and `Column` read `width` and `height` as outer sizes, including
+  uses its column gap and a `Column` uses its row gap. A `Grid` uses both independently.
+  Controls that use a uniform gap read the first `gap` value.
+- `Row`, `Column` and `Grid` read `width` and `height` as outer sizes, including
   padding. They accept positive `px` or `rem` lengths and `auto`. A positive
   axis in `props.bounds` takes precedence. Otherwise `auto` uses the ordinary
-  parent content size and can override an earlier size rule. Other sizing
+  parent content size, or the measured row height for a grid with declared
+  items, and can override an earlier size rule. Other sizing
   values, including zero, percentages, intrinsic keywords, `var()` and
   `calc()`, are browser-only and are skipped by native layout. Browser export
   keeps both sets of values. Native packs accept the native subset.
+- `Grid` supports `1fr`, `minmax(0, 1fr)`, `repeat(N, 1fr)`,
+  `repeat(N, minmax(0, 1fr))` and `repeat(auto-fit, minmax(LENGTH, 1fr))`.
+  `N` is 1–1024 and `LENGTH` is a positive `px` or `rem` length. The
+  responsive spelling `min(LENGTH, 100%)` also works as the minimum.
+  Other track expressions remain available to browser export. Choose
+  `Layout.Grid` in the app frame and declare each item's height and span.
+- `Card.Draw` uses stylesheet axis padding for its returned content rectangle.
 - Native `Text`, `Heading` and `ParagraphText` read `font-weight`,
   `font-style` and `letter-spacing`. Weight takes `normal` (400), `bold` (700)
   or a number from 1 to 1000, rounded to a whole number for native fonts.
@@ -135,7 +144,7 @@ Button.primary:hover {
 
 At-rules: `@import` (before other rules), `@layer` statements and blocks,
 `@media` with `prefers-color-scheme`, `prefers-contrast`, `pointer`,
-`prefers-reduced-motion`, `min-width` and `max-width`, plus Kryon's
+`prefers-reduced-motion`, `width`, `min-width` and `max-width`, plus Kryon's
 `-kryon-theme`, `-kryon-density`, `-kryon-pointer` and `-kryon-platform`
 features, and `@keyframes`.
 `!important`, escapes and `//` comments are errors.
@@ -146,6 +155,21 @@ which defaults to `false`. `(prefers-reduced-motion)` and
 `(prefers-reduced-motion: no-preference)` matches `false`. Set the field
 from your app's motion preference and reinstall the sheet when it changes.
 Browser export keeps the media query for the browser to evaluate.
+
+For responsive native grids, set the environment width to your frame's
+logical horizontal size. Native width media conditions accept literal `px`,
+`rem` or unitless zero. `CssSheetSameMedia` compares which media conditions
+match for two environments, so resizing within one breakpoint can reuse
+installed styles. Use `CssSheetInstall` if the active styles were replaced
+elsewhere or if the sheet or overrides changed.
+
+```zi
+env := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), viewport.width)
+if !installed || !CssSheetSameMedia(*sheet, previous, env) {
+    installed = CssSheetInstall(*sheet, env, null)
+    if installed { previous = env }
+}
+```
 
 Rules rank by layer (unlayered rules last), then Kryon's specificity, then
 source order. Kryon's specificity counts a widget type 1, each attribute 10,

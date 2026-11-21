@@ -220,6 +220,7 @@ CssKindValueMore :: (name: CssName) -> s32 {
     }
     if CssNameEquals(name, "Row") { return StyleKindRow() }
     if CssNameEquals(name, "Column") { return StyleKindColumn() }
+    if CssNameEquals(name, "Grid") { return StyleKindGrid() }
     return -999999
 }
 

@@ -3,8 +3,8 @@
 // prefers-reduced-motion, -kryon-density, -kryon-pointer, -kryon-platform
 // and -kryon-theme
 // features) become bit masks every host tests the same way. Viewport
-// features (width, height, orientation, aspect-ratio and their ranges) and
-// the print type only apply on the web document host.
+// width bounds have a native subset. Other viewport features and print
+// apply on the web document host.
 
 CssSchemeBits :: 0x3
 CssContrastBits :: 0xc
@@ -110,6 +110,45 @@ CssFeatureAxis :: (feature: CssName) -> u32 {
     return 0
 }
 
+// Classify literal viewport widths while retaining all other valid browser
+// syntax as web-only. The ordinary span scan still owns parser diagnostics.
+CssReadWidthBound :: (p: *CssParser, branch: *CssBranch, feature: CssName) {
+    minimum := CssNameEquals(feature, "min-width")
+    maximum := CssNameEquals(feature, "max-width")
+    if !minimum && !maximum && !CssNameEquals(feature, "width") { return }
+    cursor := p.cursor
+    status := p.status
+    CssSkipSpace(p)
+    if CssAtByte(p, #char ":") {
+        CssAdvance(p, 1)
+        CssSkipSpace(p)
+        number := CssReadNumber(p)
+        CssSkipSpace(p)
+        if number.ok && !number.percent && number.value >= 0.0 && CssAtByte(p, #char ")") {
+            width := cast(float32)number.value
+            px := CssNameEquals(number.unit, "px") || (number.unit.length == 0 && width == 0.0)
+            rem := CssNameEquals(number.unit, "rem")
+            if px || rem {
+                if rem { width *= cast(float32)CssRemPixels }
+                CssAddWidthBounds(branch, ifx maximum then 0.0 else width,
+                    ifx minimum then -1.0 else width, 1)
+            }
+        }
+    }
+    p.cursor = cursor
+    p.status = status
+    p.diagnostic_length = 0
+}
+
+CssAddWidthBounds :: (branch: *CssBranch, low: float32, high: float32, count: s32) {
+    if count <= 0 { return }
+    if branch.width_count == 0 || low > branch.min_width { branch.min_width = low }
+    if branch.width_count == 0 || (high >= 0.0 && (branch.max_width < 0.0 || high < branch.max_width)) {
+        branch.max_width = high
+    }
+    branch.width_count += count
+}
+
 // One '(feature: value)' with the cursor on '('.
 CssReadFeature :: (p: *CssParser, branch: *CssBranch) {
     start: s32 = p.cursor.pos
@@ -123,6 +162,7 @@ CssReadFeature :: (p: *CssParser, branch: *CssBranch) {
         return
     }
     if CssViewportFeature(feature) {
+        CssReadWidthBound(p, branch, feature)
         depth: s32 = 1
         while !CssAtEnd(p) && depth > 0 {
             byte: u8 = CssPeek(p, 0)
@@ -298,6 +338,7 @@ CssConditionAnd :: (p: *CssParser, outer: CssCondition, inner: CssCondition) -> 
             if branch.theme >= 0 && other.theme >= 0 && branch.theme != other.theme { continue }
             if other.theme >= 0 { branch.theme = other.theme }
             if !CssBranchPossible(branch) { continue }
+            CssAddWidthBounds(*branch, other.min_width, other.max_width, other.width_count)
             for index: cast(s32)0..other.viewport_count - 1 {
                 CssAddViewport(p, *branch, other.viewport[index].start, other.viewport[index].length)
             }
@@ -314,8 +355,8 @@ CssConditionAnd :: (p: *CssParser, outer: CssCondition, inner: CssCondition) -> 
     return result
 }
 
-// Does the condition hold? Native hosts pass web=false: viewport features
-// never match there. Web export delegates viewport and motion to the browser.
+// Native matching uses the supplied viewport width. Web export delegates
+// viewport and motion to the browser.
 #program_export
 CssConditionMatches :: (condition: *CssCondition, env: CssEnvironment, themes: []CssName,
     web: bool) -> bool {
@@ -332,7 +373,11 @@ CssBranchMatches :: (branch: *CssBranch, env: CssEnvironment, bits: u32, themes:
     web: bool) -> bool {
     required: u32 = ifx web then bits & ~CssMotionBits else bits
     if (branch.mask & required) != required { return false }
-    if branch.viewport_count > 0 && !web { return false }
+    if branch.viewport_count > 0 && !web {
+        if branch.width_count != branch.viewport_count || !env.has_viewport_width { return false }
+        if env.viewport_width < branch.min_width ||
+            (branch.max_width >= 0.0 && env.viewport_width > branch.max_width) { return false }
+    }
     if branch.theme >= 0 {
         if branch.theme >= cast(s32)themes.count { return false }
         if !CssNameEqualsName(themes[branch.theme], env.theme_name) { return false }

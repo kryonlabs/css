@@ -416,19 +416,92 @@ CssReadNativeSize :: (p: *CssParser, end: s32) -> (extent: float32, native: bool
     return 0.0, false
 }
 
+// Equal flexible tracks and auto-fit for native Grid. Keep other valid CSS
+// values for DOM export just as native width/height do.
+CssReadGridLength :: (p: *CssParser) -> s32 {
+    number := CssReadNumber(p)
+    if !number.ok || number.percent || number.value < 0.0 { return -1 }
+    value := number.value
+    if CssNameEquals(number.unit, "rem") { value *= CssRemPixels }
+    else if !CssNameEquals(number.unit, "px") && !(number.unit.length == 0 && value == 0.0) { return -1 }
+    if value > 1048576.0 { return -1 }
+    return cast(s32)(value + 0.5)
+}
+
+CssGridComma :: (p: *CssParser) -> bool {
+    if !CssExpect(p, #char ",", "expected a comma between grid arguments") { return false }
+    CssSkipSpace(p)
+    return !CssFailed(p)
+}
+
+CssReadGridTrack :: (p: *CssParser, auto_fit: bool) -> s32 {
+    minimum: s32 = 0
+    minmax := CssNameEquals(CssReadName(p), "minmax")
+    if minmax {
+        if !CssExpect(p, #char "(", "expected a minmax track") { return -1 }
+        CssSkipSpace(p)
+        clamped := CssNameEquals(CssReadName(p), "min")
+        if clamped {
+            if !CssExpect(p, #char "(", "expected a min track") { return -1 }
+            CssSkipSpace(p)
+        }
+        minimum = CssReadGridLength(p)
+        if minimum < 0 || (minimum > 0) != auto_fit { return -1 }
+        if clamped {
+            if !CssGridComma(p) { return -1 }
+            limit := CssReadNumber(p)
+            if !limit.ok || !limit.percent || limit.value != 100.0 ||
+                !CssExpect(p, #char ")", "expected ')' after min track") { return -1 }
+        }
+        if !CssGridComma(p) { return -1 }
+    } else if auto_fit { return -1 }
+    share := CssReadNumber(p)
+    if !share.ok || share.percent || share.value != 1.0 || !CssNameEquals(share.unit, "fr") { return -1 }
+    if minmax && !CssExpect(p, #char ")", "expected ')' after minmax track") { return -1 }
+    return minimum
+}
+
+CssReadGridTracks :: (p: *CssParser, end: s32) -> (tracks: s32, native: bool) {
+    cursor := p.cursor
+    kind := CssReadName(p)
+    if CssNameEquals(kind, "none") { return 0, !CssMoreValue(p, end) }
+    if !CssNameEquals(kind, "repeat") {
+        p.cursor = cursor
+        track := CssReadGridTrack(p, false)
+        return 1, track == 0 && !CssMoreValue(p, end)
+    }
+    if !CssExpect(p, #char "(", "expected a repeat track") { return 0, false }
+    CssSkipSpace(p)
+    count := CssReadNumber(p)
+    columns: s32 = 0
+    auto_fit: bool = false
+    if count.ok {
+        if count.percent || count.unit.length != 0 || count.value < 1.0 || count.value > 1024.0 { return 0, false }
+        columns = cast(s32)count.value
+        if count.value != cast(float64)columns { return 0, false }
+    } else {
+        auto_fit = CssNameEquals(CssReadName(p), "auto-fit")
+        if !auto_fit { return 0, false }
+    }
+    if !CssGridComma(p) { return 0, false }
+    minimum := CssReadGridTrack(p, auto_fit)
+    if minimum < 0 || !CssExpect(p, #char ")", "expected ')' after repeat track") { return 0, false }
+    return ifx auto_fit then -minimum else columns, !CssMoreValue(p, end)
+}
+
 CssPassWebDeclaration :: (p: *CssParser) -> s32 {
     p.cursor = p.pending_end
     p.web_declarations += 1
     return CssScopeWeb
 }
 
-css_web_properties: [30]string = .[
+css_web_properties: [29]string = .[
     "min-width", "max-width", "max-height",
     "margin", "margin-top", "margin-right", "margin-bottom", "margin-left", "margin-inline",
     "margin-block", "text-align", "text-decoration",
     "text-transform", "white-space", "cursor", "box-shadow",
     "display", "flex", "flex-direction", "flex-wrap", "justify-content", "align-items",
-    "align-self", "grid-template-columns", "grid-template-rows", "grid-column", "grid-row", "overflow",
+    "align-self", "grid-template-rows", "grid-column", "grid-row", "overflow",
     "z-index", "visibility"];
 
 // Properties the web document host applies and native hosts skip: browser
@@ -568,6 +641,17 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
             p.template.fields |= cast(u32)StyleHeight
             p.template.height = extent
         }
+        return CssScopeNative
+    } else if CssNameEquals(name, "grid-template-columns") {
+        status := p.status
+        tracks, native := CssReadGridTracks(p, end)
+        if !native || CssFailed(p) {
+            p.status = status
+            p.diagnostic_length = 0
+            return CssPassWebDeclaration(p)
+        }
+        p.template.fields |= cast(u32)StyleGridTracks
+        p.template.grid_tracks = tracks
         return CssScopeNative
     } else if CssNameEquals(name, "line-height") {
         value: CssValue = CssReadField(p, cast(s32)CssFieldLineHeight)

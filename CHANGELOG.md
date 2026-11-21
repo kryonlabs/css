@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Resolve native viewport-width media queries and responsive equal-width grid
+  tracks in parsed sheets and compiled packs while preserving browser export.
+
 - Align the native stylesheet runtime with Kryon size serialization so compiled
   width and height rules survive widget transport.
 

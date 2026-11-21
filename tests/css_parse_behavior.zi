@@ -329,7 +329,7 @@ Variables :: () {
 Media :: () {
     source: string = "@media (-kryon-platform: android) { Button { gap: 3px; } }\n@media (pointer: coarse) { Button { gap: 5px; } }\n@media (max-width: 600px) { Button { gap: 7px; } }\n@media (prefers-contrast: more), (-kryon-density: compact) { Text { gap: 9px; } }\n@media (prefers-reduced-motion: reduce) { Text { gap: 11px; } }"
     if Builds(source, "media") {
-        Check(test_rules.count == 0, "desktop mouse skips every block; viewport queries are for the web")
+        Check(test_rules.count == 0, "a native environment without viewport width skips viewport rules")
     }
     android: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(), "", "", "touch", "touch", "android")
     if BuildIn(source, android) {
@@ -337,6 +337,17 @@ Media :: () {
     } else {
         Check(false, "android build")
     }
+    narrow := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), 550.0)
+    Check(BuildIn(source, narrow) && test_rules.count == 1 && Rule(0).style.gap == 7.0,
+        "parsed viewport width matches native rules")
+    mixed := "@media (orientation: portrait) and (max-width: 600px), (min-width: 1000px) { Text { gap: 9px; } }"
+    Check(BuildIn(mixed, narrow) && test_rules.count == 0, "unsupported viewport features do not match natively")
+    Check(BuildIn(mixed, CssEnvironmentWithViewportWidth(narrow, 1200.0)) && test_rules.count == 1,
+        "supported alternative matches in a mixed query list")
+    bounded := "@media (min-width: 30rem) { @media (max-width: 700px) { Text { gap: 9px; } } }"
+    Check(BuildIn(bounded, narrow) && test_rules.count == 1, "nested width constraints intersect")
+    Check(BuildIn(bounded, CssEnvironmentWithViewportWidth(narrow, 450.0)) && test_rules.count == 0,
+        "nested query enforces outer width")
     compact: CssEnvironment = CssEnvironmentWithNames(CssDefaultEnvironment(), "", "", "compact", "", "")
     Check(BuildIn(source, compact) && test_rules.count == 1, "one branch of a list is enough")
     themed: string = ":root { --ink: #000000; }\n@media (-kryon-theme: sky_dark) { :root { --ink: #0000ff; } }\nText { color: var(--ink); }"

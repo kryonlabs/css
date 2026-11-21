@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Align the native stylesheet runtime with Kryon size serialization so compiled
+  width and height rules survive widget transport.
+
 - Added opt-in native CSS transitions and keyframes for parsed and compiled
   stylesheets, with browser motion declarations preserved in CSS export.
 

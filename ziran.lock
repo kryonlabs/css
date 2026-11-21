@@ -124,8 +124,8 @@
     "name": "Css"
   },
   "toolchain": {
-    "commit": "9432a110709c4a4f72c4f732fcfc368e15213a54",
-    "ref": "9432a110709c4a4f72c4f732fcfc368e15213a54",
+    "commit": "5db3d3c39425d5dfe4bfe4a84e6f6e2e5a810ad0",
+    "ref": "5db3d3c39425d5dfe4bfe4a84e6f6e2e5a810ad0",
     "url": "https://git.waozi.xyz/ziranlang/ziran.git"
   }
 }

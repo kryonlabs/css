@@ -99,6 +99,16 @@ CssReadMedia :: (p: *CssParser) {
     while length > 0 && CssIsSpace(p.cursor.source[start + length - 1]) { length -= 1 }
     combined: CssCondition = CssConditionAnd(p, CssCurrentCondition(p), condition)
     if CssFailed(p) { return }
+    if CssCollectIssues(p) {
+        for index: cast(s32)0..condition.count - 1 {
+            branch: *CssBranch = *condition.branches[index]
+            if branch.viewport_count != branch.width_count {
+                CssReportIssue(p, p.statement_origin, CssIssueKind.AtRule, "@media",
+                    "media condition is evaluated only by the browser", true)
+                break
+            }
+        }
+    }
     CssAdvance(p, 1)
     p.imports_open = false
     unused CssOpenBlock(p, CssBlockMedia, combined, start, length)
@@ -230,9 +240,11 @@ CssReadAtRule :: (p: *CssParser) -> bool {
         p.cursor = body
         p.cursor.source = body.source[:end.pos]
         p.keyframes = CssReadKeyframes(p, name)
+        if CssCollectIssues(p) && p.keyframes.unsupported && p.keyframes.count == 0 {
+            CssReportFailure(p, p.statement_origin, CssIssueKind.AtRule, "@keyframes", true)
+        }
         p.cursor = end
-        p.status = cast(s32)CssStatusContinue
-        p.diagnostic_length = 0
+        CssClearFailure(p)
         p.layer_of_rule = p.layer
         p.raw_start = start
         p.raw_length = p.cursor.pos - start
@@ -260,6 +272,7 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
     p.declaration_count = 0
     p.web_declarations = 0
     p.rule_span.body_start = p.cursor.pos
+    collect: bool = CssCollectIssues(p)
     while true {
         CssSkipSpace(p)
         if CssFailed(p) { return false }
@@ -276,19 +289,50 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
             CssAdvance(p, 1)
             continue
         }
+        origin: CssCursor = p.cursor
         if CssAtByte(p, #char "{") || CssAtByte(p, #char "@") || CssAtByte(p, #char "&") ||
             CssAtByte(p, #char ".") || CssAtByte(p, #char "#") || CssAtByte(p, #char "[") ||
             CssAtByte(p, #char "*") || CssAtByte(p, #char ">") || CssAtByte(p, #char ":") {
             CssFail(p, "nested rules are outside Kryon CSS")
+            kind: CssIssueKind = ifx CssAtByte(p, #char "@") then CssIssueKind.AtRule else CssIssueKind.Selector
+            if CssRecoverItem(p, origin, kind) { continue }
             return false
         }
         head: CssDeclarationResult = CssReadDeclarationHead(p)
-        if !head.ok { return false }
+        if !head.ok {
+            if CssRecoverItem(p, origin, CssIssueKind.Declaration) { continue }
+            return false
+        }
+        previous: StyleData
+        motion: CssRuleMotion
+        refs: [24]CssLocalRef
+        ref_count: s32 = p.rule_ref_count
+        name_count: s32 = p.name_count
+        web_count: s32 = p.web_declarations
+        if collect {
+            previous = p.template
+            motion = p.motion
+            for index: cast(s32)0..ref_count - 1 { refs[index] = p.rule_refs[index] }
+        }
         scope: s32 = CssApplyProperty(p, head.name, head.end)
-        if scope < 0 { return false }
-        CssRecordDeclaration(p, p.pending_name_start, p.pending_name_length,
-            p.pending_value_start, p.pending_value_length, scope)
-        if CssFailed(p) { return false }
+        if scope >= 0 {
+            CssRecordDeclaration(p, p.pending_name_start, p.pending_name_length,
+                p.pending_value_start, p.pending_value_length, scope)
+        }
+        if scope < 0 || CssFailed(p) {
+            if !collect { return false }
+            CssReportFailure(p, origin, CssIssueKind.Declaration, TextView(head.name.bytes[:head.name.length]))
+            p.template = previous
+            p.motion = motion
+            p.rule_ref_count = ref_count
+            p.name_count = name_count
+            p.web_declarations = web_count
+            for index: cast(s32)0..ref_count - 1 { p.rule_refs[index] = refs[index] }
+            CssClearFailure(p)
+        } else if collect && scope == CssScopeWeb {
+            CssReportIssue(p, origin, CssIssueKind.Declaration, TextView(head.name.bytes[:head.name.length]),
+                "declaration is applied only by the browser", true)
+        }
         CssFinishDeclaration(p)
     }
     return false
@@ -371,6 +415,7 @@ CssStep :: (p: *CssParser) -> s32 {
             p.status = cast(s32)CssStatusDone
             return p.status
         }
+        origin: CssCursor = p.cursor
         byte: u8 = p.cursor.source[p.cursor.pos]
         if CssInRoot(p) {
             if byte == #char "}" {
@@ -383,12 +428,13 @@ CssStep :: (p: *CssParser) -> s32 {
                 continue
             }
             if CssReadDefinitionItem(p) { return p.status }
-            if CssFailed(p) { return p.status }
+            if CssFailed(p) && !CssRecoverItem(p, origin, CssIssueKind.Declaration) { return p.status }
             continue
         }
         if byte == #char "}" {
             if p.depth == 0 {
                 CssFail(p, "unexpected '}'")
+                if CssRecoverItem(p, origin, CssIssueKind.Stylesheet, "}") { continue }
                 return p.status
             }
             CssAdvance(p, 1)
@@ -397,11 +443,19 @@ CssStep :: (p: *CssParser) -> s32 {
         }
         if byte == #char ";" {
             CssFail(p, "unexpected ';'")
+            if CssRecoverItem(p, origin, CssIssueKind.Stylesheet, ";") { continue }
             return p.status
         }
         if byte == #char "@" {
+            p.statement_origin = origin
+            layers: s32 = p.layer_count
+            themes: s32 = p.theme_count
             if CssReadAtRule(p) { return p.status }
-            if CssFailed(p) { return p.status }
+            if CssFailed(p) {
+                if !CssRecoverItem(p, origin, CssIssueKind.AtRule) { return p.status }
+                p.layer_count = layers
+                p.theme_count = themes
+            }
             continue
         }
         p.imports_open = false
@@ -411,12 +465,21 @@ CssStep :: (p: *CssParser) -> s32 {
             if CssFailed(p) { return p.status }
             continue
         }
-        if CssFailed(p) { return p.status }
+        if CssFailed(p) {
+            if CssRecoverItem(p, origin, CssIssueKind.Selector) { continue }
+            return p.status
+        }
         p.origin.file = p.cursor.file
         p.origin.line = p.cursor.line
         p.origin.column = p.cursor.column
         p.rule_span.file = p.cursor.file
-        if !CssReadSelectorList(p) { return p.status }
+        if !CssReadSelectorList(p) {
+            if CssRecoverItem(p, origin, CssIssueKind.Selector) {
+                p.selector_count = 0
+                continue
+            }
+            return p.status
+        }
         p.rule_span.selector_start = p.selector_start
         p.rule_span.selector_length = p.selector_length
         CssAdvance(p, 1)

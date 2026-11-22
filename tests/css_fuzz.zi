@@ -344,6 +344,11 @@ CheckCss :: (source: string, must_parse: bool) {
     } else if CssSheetDiagnostic(*fuzz_sheet, fuzz_diagnostic[:]).count == 0 {
         Fail("a parse failed without a diagnostic")
     }
+    CssSheetReset(*fuzz_sheet)
+    if !CssSheetParseWithDiagnostics(*fuzz_sheet, source, "fuzz.css", FuzzImports, CssDiagnostics.{}) &&
+        CssSheetDiagnostic(*fuzz_sheet, fuzz_diagnostic[:]).count == 0 {
+        Fail("a recovering parse failed without a diagnostic")
+    }
     // The formatter answers imports with empty sheets.
     CssSheetReset(*fuzz_sheet)
     parses: bool = CssSheetParse(*fuzz_sheet, source, "fuzz.css", EmptyImports)

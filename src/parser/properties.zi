@@ -391,6 +391,13 @@ CssReadTypeface :: (p: *CssParser, end: s32) {
         CssFail(p, "expected a font family")
         return
     }
+    if CssCollectIssues(p) {
+        CssSkipSpace(p)
+        if CssAtByte(p, #char ",") {
+            CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, "font-family",
+                "native text uses only the first font family", true)
+        }
+    }
     p.template.typeface = p.cursor.source[start:start + length]
     p.template.fields |= cast(u32)StyleTypeface
     p.cursor.column += end - p.cursor.pos
@@ -487,6 +494,19 @@ CssReadGridTracks :: (p: *CssParser, end: s32) -> (tracks: s32, native: bool) {
     minimum := CssReadGridTrack(p, auto_fit)
     if minimum < 0 || !CssExpect(p, #char ")", "expected ')' after repeat track") { return 0, false }
     return ifx auto_fit then -minimum else columns, !CssMoreValue(p, end)
+}
+
+CssCheckLayoutTarget :: (p: *CssParser, name: string, grid_only: bool) {
+    if !CssCollectIssues(p) { return }
+    for index: cast(s32)0..p.selector_count - 1 {
+        kind: s32 = p.selectors[index].selector.kind
+        if kind == StyleKindAny() || kind == StyleKindGrid() { continue }
+        if !grid_only && (kind == StyleKindRow() || kind == StyleKindColumn()) { continue }
+        reason: string = "explicit sizes apply only to native Row, Column and Grid"
+        if grid_only { reason = "grid tracks apply only to native Grid" }
+        CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, name, reason, true)
+        return
+    }
 }
 
 CssPassWebDeclaration :: (p: *CssParser) -> s32 {
@@ -634,6 +654,7 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
     } else if CssNameEquals(name, "width") || CssNameEquals(name, "height") {
         extent, native := CssReadNativeSize(p, end)
         if !native { return CssPassWebDeclaration(p) }
+        CssCheckLayoutTarget(p, TextView(name.bytes[:name.length]), false)
         if CssNameEquals(name, "width") {
             p.template.fields |= cast(u32)StyleWidth
             p.template.width = extent
@@ -650,6 +671,7 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
             p.diagnostic_length = 0
             return CssPassWebDeclaration(p)
         }
+        CssCheckLayoutTarget(p, "grid-template-columns", true)
         p.template.fields |= cast(u32)StyleGridTracks
         p.template.grid_tracks = tracks
         return CssScopeNative

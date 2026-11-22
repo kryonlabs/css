@@ -46,6 +46,26 @@ is installed separately; no style pack is restored automatically.
 Imports go through a resolver you pass: `(name: string) -> CssImportAnswer`.
 Hosts without imports pass `CssNoImports`.
 
+## Check styles for native support
+
+Build the CLI with `make build/tools/css_tool`. Run `build/tools/css_tool check app.css`
+to list issues with filename, line, byte column, item name and reason. The command
+reports each recoverable issue it encounters, including browser-only declarations
+and media conditions. A rejected selector or at-rule skips its entire block.
+`build/tools/css_tool check --strict app.css` exits with status 1 if any issue is
+reported. Both modes exit with status 1 when the stylesheet cannot be recovered.
+The CLI checks the given source and treats imports as empty sheets.
+
+Apps can use `CssSheetParseWithDiagnostics(sheet, source, path, resolve, options)`
+from `css/Css` to recover while parsing. Set `options.report` to a `CssIssueSink`
+with signature `(context: *void, issue: CssIssue) -> void`. Each issue supplies
+its origin, item kind, name, reason and `web_only` flag. Copy any text you need
+after the callback returns. Imported issues use the paths from the host's
+resolver. Set `options.strict = true` to collect the same issues and reject the
+sheet. The ordinary `CssSheetParse` preserves its fail-fast behavior and browser
+export support. `CssSheetBuild` and installation still validate values after
+resolving custom properties in the chosen environment.
+
 ## The subset
 
 Each selector can combine a widget type (`Button`, `TextField`, `Row`,

@@ -272,6 +272,7 @@ CssReadMotionProperty :: (p: *CssParser, name: CssName, end: s32) -> bool {
         animation = text.count > 10 && CssNameEquals(CssMakeName(text[:10]), "animation-")
     }
     if !transition && !animation { return false }
+    unsupported: bool = false
     if transition {
         value: CssTransition = p.motion.transition
         ok: bool
@@ -279,6 +280,7 @@ CssReadMotionProperty :: (p: *CssParser, name: CssName, end: s32) -> bool {
         else { ok = CssTransitionLonghand(p, name, end, *value) }
         if !ok || CssFailed(p) { value = CssTransition.{.set = true, .unsupported = true} }
         p.motion.transition = value
+        unsupported = !ok || CssFailed(p)
     } else {
         value: CssAnimation = p.motion.animation
         ok: bool
@@ -286,9 +288,12 @@ CssReadMotionProperty :: (p: *CssParser, name: CssName, end: s32) -> bool {
         else { ok = CssAnimationLonghand(p, name, end, *value) }
         if !ok || CssFailed(p) { value = CssAnimation.{.set = true, .unsupported = true} }
         p.motion.animation = value
+        unsupported = !ok || CssFailed(p)
     }
-    p.status = cast(s32)CssStatusContinue
-    p.diagnostic_length = 0
+    if unsupported && CssCollectIssues(p) {
+        CssReportFailure(p, p.pending_name_cursor, CssIssueKind.Declaration, text, true)
+    }
+    CssClearFailure(p)
     return true
 }
 
@@ -309,6 +314,10 @@ CssReadKeyframeStyle :: (p: *CssParser, track: *CssParsedKeyframes) -> StyleData
         head: CssDeclarationResult = CssReadDeclarationHead(p)
         if !head.ok { break }
         if CssAnimatedProperty(head.name) == 0 {
+            if CssCollectIssues(p) {
+                CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, TextView(head.name.bytes[:head.name.length]),
+                    "property cannot be animated by native keyframes", true)
+            }
             track.unsupported = true
         } else {
             previous: StyleData = p.template
@@ -319,6 +328,10 @@ CssReadKeyframeStyle :: (p: *CssParser, track: *CssParsedKeyframes) -> StyleData
                 (p.template.fields & ~CssAnimatedFields()) == 0 {
                 p.template = MergeValues(previous, p.template)
             } else {
+                if CssCollectIssues(p) {
+                    CssReportFailure(p, p.pending_name_cursor, CssIssueKind.Declaration,
+                        TextView(head.name.bytes[:head.name.length]), true)
+                }
                 p.template = previous
                 track.unsupported = true
                 p.rule_ref_count = 0

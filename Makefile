@@ -9,7 +9,7 @@ STYLE_PACKS := classic material lightfield
 CSS_TOOL := $(BUILD)/tools/css_tool
 INCLUDE = -I$$($(ZIRAN) pkg path ziran)/include
 
-.PHONY: check test conformance style-packs style-pack-check format export css-dom-test motion-test fuzz clean
+.PHONY: check test conformance style-packs style-pack-check diagnostics-test format export css-dom-test motion-test fuzz clean
 
 check: test conformance style-pack-check css-dom-test motion-test fuzz
 
@@ -21,7 +21,7 @@ define native_test
 	$(BUILD)/$(1)
 endef
 
-test: $(BUILD)/layout-pack/style_pack_layout.zi
+test: diagnostics-test $(BUILD)/layout-pack/style_pack_layout.zi
 	$(ZIRAN) check --project src/Css/module.zi
 	$(ZIRAN) check --project src/css_lexer_laws.zi
 	$(call native_test,css_parse_behavior)
@@ -52,6 +52,14 @@ $(CSS_TOOL): tools/css_tool.zi src/*.zi src/parser/*.zi
 	mkdir -p $(dir $@)
 	$(ZIRAN) build --project --target=c --exe --entry css_tool:main -o $@-c tools/css_tool.zi
 	$(CC) -std=c11 -O2 $(INCLUDE) -I$@-c $@-c/*.c -o $@ -lm
+
+diagnostics-test: $(CSS_TOOL)
+	$(CSS_TOOL) check --strict styles/classic.css
+	$(CSS_TOOL) check tests/css_diagnostics.css 2>$(BUILD)/css-diagnostics.log
+	@if $(CSS_TOOL) check --strict tests/css_diagnostics.css 2>$(BUILD)/css-diagnostics-strict.log; then exit 1; else test $$? -eq 1; fi
+	cmp $(BUILD)/css-diagnostics.log $(BUILD)/css-diagnostics-strict.log
+	grep -Fx "tests/css_diagnostics.css:5:3: web-only declaration 'box-shadow': declaration is applied only by the browser" $(BUILD)/css-diagnostics.log
+	grep -Fx "tests/css_diagnostics.css:14:1: skipped at-rule '@supports': at-rule 'supports' is outside Kryon CSS" $(BUILD)/css-diagnostics.log
 
 # Packs are compiled into rule tables apps load without parsing. The
 # modules are committed, because apps import this package without running

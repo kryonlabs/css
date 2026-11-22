@@ -2,7 +2,7 @@
 //
 //   css_tool export IN.css OUT.css    write browser CSS for the DOM host and
 //                                     check the result parses
-//   css_tool check FILE.css           parse a sheet; imports count as empty
+//   css_tool check [--strict] FILE.css report native CSS issues; imports count as empty
 //   css_tool format FILE.css          rewrite a sheet in the standard layout
 //   css_tool format-check FILE.css    fail when a sheet is not formatted
 //   css_tool pack NAME                compile styles/NAME.css into
@@ -81,13 +81,33 @@ EmptyImport :: (name: string) -> CssImportAnswer {
     return answer
 }
 
-CheckSheet :: (path: string, source: string) -> s32 {
-    CssSheetReset(*sheet)
-    if !CssSheetParse(*sheet, source, path, EmptyImport) {
-        text: [256]u8
-        return Fail(path, CssSheetDiagnostic(*sheet, text[:]))
+PrintIssue :: (context: *void, issue: CssIssue) {
+    output_length = 0
+    unused EmitNumber(issue.line)
+    unused Emit(":")
+    unused EmitNumber(issue.column)
+    WriteText(2, issue.path)
+    WriteText(2, ":")
+    WriteText(2, TextView(output_bytes[:output_length]))
+    WriteText(2, ifx issue.web_only then ": web-only " else ": skipped ")
+    if issue.kind == CssIssueKind.Declaration { WriteText(2, "declaration") }
+    else if issue.kind == CssIssueKind.AtRule { WriteText(2, "at-rule") }
+    else if issue.kind == CssIssueKind.Selector { WriteText(2, "selector") }
+    else { WriteText(2, "stylesheet") }
+    if issue.name.count > 0 {
+        WriteText(2, " '")
+        WriteText(2, issue.name)
+        WriteText(2, "'")
     }
-    return 0
+    WriteText(2, ": ")
+    WriteText(2, issue.reason)
+    WriteText(2, "\n")
+}
+
+CheckSheet :: (path: string, source: string, strict: bool) -> s32 {
+    CssSheetReset(*sheet)
+    diagnostics: CssDiagnostics = .{.report = PrintIssue, .strict = strict}
+    return ifx CssSheetParseWithDiagnostics(*sheet, source, path, EmptyImport, diagnostics) then 0 else 1
 }
 
 // Generated module text ------------------------------------------------
@@ -491,15 +511,21 @@ Argument :: (argv: **s8, index: s32) -> string {
 #program_export
 main :: (argc: s32, argv: **s8) -> s32 {
     if argc < 3 {
-        WriteText(2, "usage: css_tool export IN.css OUT.css | check FILE.css | format FILE.css | format-check FILE.css | pack NAME | pack-file NAME IN.css OUT.zi | pack-check NAME\n")
+        WriteText(2, "usage: css_tool export IN.css OUT.css | check [--strict] FILE.css | format FILE.css | format-check FILE.css | pack NAME | pack-file NAME IN.css OUT.zi | pack-check NAME\n")
         return 2
     }
     mode: string = Argument(argv, 1)
     if mode == "check" {
-        path: string = Argument(argv, 2)
+        strict: bool = Argument(argv, 2) == "--strict"
+        index: s32 = ifx strict then 3 else 2
+        if argc != index + 1 {
+            WriteText(2, "usage: css_tool check [--strict] FILE.css\n")
+            return 2
+        }
+        path: string = Argument(argv, index)
         count: s32 = ReadFile(path)
         if count < 0 { return Fail(path, "cannot read") }
-        return CheckSheet(path, TextView(source_bytes[:count]))
+        return CheckSheet(path, TextView(source_bytes[:count]), strict)
     }
     if mode == "format" || mode == "format-check" {
         path: string = Argument(argv, 2)

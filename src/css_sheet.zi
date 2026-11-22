@@ -392,24 +392,58 @@ css_sheet_parser: CssParser;
 
 #program_export
 CssSheetParse :: (sheet: *CssSheet, source: string, path: string, resolve: CssImportResolver) -> bool {
+    return CssSheetParseSource(sheet, source, path, resolve, CssDiagnostics.{}, false)
+}
+
+// Collect source issues through a caller-supplied sink. In lenient mode a
+// recoverable rejected item is skipped and the supported rules remain usable.
+// A strict native check still scans the whole source before it fails.
+#program_export
+CssSheetParseWithDiagnostics :: (sheet: *CssSheet, source: string, path: string,
+    resolve: CssImportResolver, diagnostics: CssDiagnostics) -> bool {
+    return CssSheetParseSource(sheet, source, path, resolve, diagnostics, true)
+}
+
+CssSheetParseSource :: (sheet: *CssSheet, source: string, path: string, resolve: CssImportResolver,
+    diagnostics: CssDiagnostics, collect: bool) -> bool {
     if sheet.failed { return false }
     p: *CssParser = *css_sheet_parser
     CssBegin(p, source, path)
+    p.diagnostics = diagnostics
+    p.collect_issues = collect
+    p.report_path = path
     while true {
         status: s32 = CssStep(p)
         if status == cast(s32)CssStatusRule || status == cast(s32)CssStatusProperty ||
             status == cast(s32)CssStatusKeyframes {
             CssSheetTake(sheet, p)
-            if sheet.failed { return false }
+            if sheet.failed {
+                if CssCollectIssues(p) {
+                    CssReportIssue(p, p.cursor, CssIssueKind.Stylesheet, "",
+                        TextView(sheet.diagnostic[:sheet.diagnostic_length]), false)
+                }
+                return false
+            }
         } else if status == cast(s32)CssStatusNeedImport {
             target: [64]u8
             name: string = CssPendingImport(p, target[:])
             answer: CssImportAnswer = resolve(name)
             if answer.found { CssProvideImport(p, answer.source, name) }
             else { CssFailImport(p) }
+            if CssFailed(p) && CssCollectIssues(p) {
+                CssReportFailure(p, p.statement_origin, CssIssueKind.AtRule, "@import")
+                CssClearFailure(p)
+            }
         } else if status == cast(s32)CssStatusDone {
+            if diagnostics.strict && p.issue_count > 0 {
+                CssSheetFail(sheet, "stylesheet has native CSS diagnostics")
+                return false
+            }
             return true
         } else if status == cast(s32)CssStatusError {
+            if CssCollectIssues(p) {
+                CssReportFailure(p, p.diagnostic_cursor, CssIssueKind.Stylesheet, "")
+            }
             sheet.failed = true
             sheet.diagnostic_length = 0
             for index: cast(s32)0..p.diagnostic_length - 1 {

@@ -28,9 +28,8 @@ using LineHeightUnit;
 // rule lowered to Kryon's typed style table, each :root custom property and
 // the media condition both apply under. var() references stay symbolic until
 // the sheet installs, so a theme switch only swaps custom property values.
-// Anything outside the subset is a diagnostic with file, line and column;
-// a sheet never installs partly. Hosts own I/O: they feed source text in and
-// answer @import requests.
+// The default parser rejects unsupported syntax. Hosts can opt into recovery
+// with source diagnostics. Hosts own I/O and answer @import requests.
 
 CssStatus :: enum {
     CssStatusContinue :: 0
@@ -138,6 +137,34 @@ CssThemeCapacity :: 32
 CssName :: struct {
     bytes: [64]u8
     length: s32
+}
+
+CssIssueKind :: enum {
+    Stylesheet
+    Declaration
+    Selector
+    AtRule
+}
+
+// Borrowed text is valid only during the callback. Positions are one-based
+// byte columns, like the original parser diagnostics.
+CssIssue :: struct {
+    path: string
+    line: s32
+    column: s32
+    kind: CssIssueKind
+    name: string
+    reason: string
+    web_only: bool
+}
+
+CssIssueSink :: #type (context: *void, issue: CssIssue) -> void;
+
+CssDiagnostics :: struct {
+    report: CssIssueSink
+    context: *void
+    // Fail the sheet after collecting all issues, including browser-only CSS.
+    strict: bool
 }
 
 CssCursor :: struct {
@@ -375,6 +402,13 @@ CssParser :: struct {
     pending_end: CssCursor
     diagnostic: [256]u8
     diagnostic_length: s32
+    diagnostic_reason_length: s32
+    diagnostic_cursor: CssCursor
+    diagnostics: CssDiagnostics
+    collect_issues: bool
+    issue_count: s32
+    report_path: string
+    statement_origin: CssCursor
     rule_total: s32
 }
 
@@ -480,6 +514,11 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
     p.declaration_count = 0
     p.web_declarations = 0
     p.diagnostic_length = 0
+    p.diagnostic_reason_length = 0
+    p.diagnostics = CssDiagnostics.{}
+    p.collect_issues = false
+    p.issue_count = 0
+    p.report_path = ""
     p.rule_total = 0
 }
 

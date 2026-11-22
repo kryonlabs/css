@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add recoverable native stylesheet diagnostics and `css_tool check --strict`
+  with source locations for rejected and browser-only CSS.
+
 - Resolve native viewport-width media queries and responsive equal-width grid
   tracks in parsed sheets and compiled packs while preserving browser export.
 

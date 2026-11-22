@@ -252,6 +252,8 @@ CssDiagnosticAppendInt :: (p: *CssParser, value: s32) {
 }
 
 CssDiagnosticAt :: (p: *CssParser) {
+    p.diagnostic_reason_length = p.diagnostic_length
+    p.diagnostic_cursor = p.cursor
     CssDiagnosticAppend(p, " at ")
     file: s32 = p.cursor.file
     if file >= 0 && file < p.file_count && p.files[file].length > 0 {
@@ -282,6 +284,119 @@ CssFailName :: (p: *CssParser, message: string, name: CssName, suffix: string) {
     CssDiagnosticAppend(p, suffix)
     CssDiagnosticAt(p)
     p.status = cast(s32)CssStatusError
+}
+
+CssCollectIssues :: (p: *CssParser) -> bool {
+    return p.collect_issues
+}
+
+CssReportIssue :: (p: *CssParser, origin: CssCursor, kind: CssIssueKind,
+    name: string, reason: string, web_only: bool) {
+    p.issue_count += 1
+    if p.diagnostics.report == null { return }
+    path: string = p.report_path
+    if origin.file > 0 && origin.file < p.file_count {
+        path = TextView(p.files[origin.file].name[:p.files[origin.file].length])
+    }
+    p.diagnostics.report(p.diagnostics.context,
+        CssIssue.{path, origin.line, origin.column, kind, name, reason, web_only})
+}
+
+CssReportFailure :: (p: *CssParser, origin: CssCursor, kind: CssIssueKind, name: string, web_only: bool = false) {
+    reason: string = "value has no native CSS mapping"
+    if CssFailed(p) && p.diagnostic_reason_length > 0 {
+        reason = TextView(p.diagnostic[:p.diagnostic_reason_length])
+    }
+    CssReportIssue(p, origin, kind, name, reason, web_only)
+}
+
+CssClearFailure :: (p: *CssParser) {
+    p.status = cast(s32)CssStatusContinue
+    p.diagnostic_length = 0
+}
+
+// Scan a rejected statement without interpreting its contents. Delimiters
+// inside strings, comments, functions, and nested blocks belong to that item.
+// A containing '}' stays for the caller. Return the end of the item header
+// so the diagnostic can display an unsupported selector or nested rule.
+CssSkipRejected :: (p: *CssParser) -> s32 {
+    quote: u8 = 0
+    nesting: s32 = 0
+    braces: s32 = 0
+    head_end: s32 = -1
+    separator: CssCursor = p.cursor
+    has_separator: bool = false
+    while !CssAtEnd(p) {
+        byte: u8 = CssPeek(p, 0)
+        if quote != 0 {
+            if byte == #char "\\" { CssAdvance(p, 2); continue }
+            if byte == quote || byte == 10 || byte == 13 { quote = 0 }
+        } else if byte == #char "\"" || byte == #char "'" {
+            quote = byte
+        } else if byte == #char "\\" {
+            CssAdvance(p, 2)
+            continue
+        } else if byte == #char "/" && CssPeek(p, 1) == #char "*" {
+            CssAdvance(p, 2)
+            while !CssAtEnd(p) && !(CssPeek(p, 0) == #char "*" && CssPeek(p, 1) == #char "/") {
+                CssAdvance(p, 1)
+            }
+            CssAdvance(p, 2)
+            continue
+        } else if byte == #char "(" || byte == #char "[" {
+            nesting += 1
+        } else if byte == #char ")" || byte == #char "]" {
+            if nesting > 0 { nesting -= 1 }
+            if nesting == 0 { has_separator = false }
+        } else if byte == #char "{" && (nesting == 0 || braces > 0) {
+            if braces == 0 { head_end = p.cursor.pos }
+            braces += 1
+        } else if byte == #char "}" {
+            if braces == 0 { break }
+            braces -= 1
+            if braces == 0 {
+                CssAdvance(p, 1)
+                return head_end
+            }
+        } else if byte == #char ";" && braces == 0 {
+            if nesting == 0 {
+                head_end = p.cursor.pos
+                CssAdvance(p, 1)
+                return head_end
+            }
+            if !has_separator {
+                separator = p.cursor
+                has_separator = true
+            }
+        }
+        CssAdvance(p, 1)
+    }
+    if braces == 0 && has_separator {
+        p.cursor = separator
+        CssAdvance(p, 1)
+        return separator.pos
+    }
+    return ifx head_end >= 0 then head_end else p.cursor.pos
+}
+
+CssRecoverItem :: (p: *CssParser, origin: CssCursor, kind: CssIssueKind, name: string = "") -> bool {
+    if !CssCollectIssues(p) { return false }
+    p.cursor = origin
+    end: s32 = CssSkipRejected(p)
+    label: string = name
+    if label.count == 0 {
+        if kind == CssIssueKind.AtRule || kind == CssIssueKind.Declaration {
+            end = origin.pos
+            if kind == CssIssueKind.AtRule { end += 1 }
+            while end < cast(s32)origin.source.count && CssNameChar(origin.source[end]) { end += 1 }
+        }
+        while end > origin.pos && CssIsSpace(origin.source[end - 1]) { end -= 1 }
+        label = origin.source[origin.pos:end]
+    }
+    CssReportFailure(p, origin, kind, label)
+    if p.cursor.pos == origin.pos && !CssAtEnd(p) { CssAdvance(p, 1) }
+    CssClearFailure(p)
+    return true
 }
 
 // The diagnostic, copied into `output`.

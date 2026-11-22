@@ -432,10 +432,25 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         ref: CssSheetRef = sheet.refs[index]
         SignedWord(ref.rule)
         SignedWord(ref.name)
-        Word(cast(u32)ref.field | (ifx ref.fallback then cast(u32)256 else cast(u32)0))
+        Word(cast(u32)ref.field | (ifx ref.fallback then cast(u32)256 else cast(u32)0) |
+            (cast(u32)ref.alternate << cast(u32)16))
         SignedWord(ref.line)
     }
     ok = ok && EmitWords("refs", pack, CssCompiledRefWords * 2)
+    for index: cast(s32)0..sheet.expr_count - 1 {
+        entry := sheet.exprs[index]
+        SignedWord(entry.rule)
+        SignedWord(entry.field)
+        Word((ifx entry.expr.has_low then cast(u32)1 else cast(u32)0) |
+            (ifx entry.expr.has_high then cast(u32)2 else cast(u32)0))
+        forms: [3]CssLinear = .[entry.expr.value, entry.expr.low, entry.expr.high]
+        for form: forms {
+            Word(FloatBits(cast(float32)form.px))
+            Word(FloatBits(cast(float32)form.vw))
+            Word(FloatBits(cast(float32)form.vh))
+        }
+    }
+    ok = ok && EmitWords("exprs", pack, CssCompiledExprWords)
     for index: cast(s32)0..sheet.definition_count - 1 {
         definition: CssSheetDefinition = sheet.definitions[index]
         SignedWord(definition.name)
@@ -488,7 +503,7 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
     return 0
 }
 
-css_tool_parts: [8]string = .["rules", "refs", "definitions", "conditions", "names", "themes", "layers", "typefaces"];
+css_tool_parts: [9]string = .["rules", "refs", "exprs", "definitions", "conditions", "names", "themes", "layers", "typefaces"];
 
 join_bytes: [512]u8;
 Join :: (output: []u8, first: string, second: string) -> string {

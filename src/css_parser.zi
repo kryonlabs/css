@@ -189,6 +189,8 @@ CssEnvironment :: struct {
     reduced_motion: bool
     viewport_width: float32
     has_viewport_width: bool
+    viewport_height: float32
+    has_viewport_height: bool
 }
 
 CssSourceFile :: struct {
@@ -216,6 +218,31 @@ CssOrigin :: struct {
     column: s32
 }
 
+// A length expression (parser/expressions.zi) as px + vw * width / 100 +
+// vh * height / 100, clamped by optional linear bounds; `number` marks a
+// plain number.
+CssLinear :: struct {
+    px: float64
+    vw: float64
+    vh: float64
+    number: bool
+}
+
+CssLengthExpr :: struct {
+    value: CssLinear
+    low: CssLinear
+    high: CssLinear
+    has_low: bool
+    has_high: bool
+    ok: bool
+}
+
+// A field whose value follows the viewport, kept with the rule being read.
+CssRuleExpr :: struct {
+    field: s32
+    expr: CssLengthExpr
+}
+
 // A var() in the rule being read: custom property `token` fills `field`.
 // With a fallback the rule already holds the fallback value.
 CssLocalRef :: struct {
@@ -223,6 +250,8 @@ CssLocalRef :: struct {
     field: s32
     line: s32
     fallback: bool
+    // A nested var() fallback's token + 1, else 0.
+    alternate: s32
 }
 
 // Source spans of the yielded rule, for the web exporter and formatter.
@@ -373,6 +402,8 @@ CssParser :: struct {
     rule: StyleRule
     rule_refs: [24]CssLocalRef
     rule_ref_count: s32
+    rule_exprs: [16]CssRuleExpr
+    rule_expr_count: s32
     origin: CssOrigin
     rule_span: CssRuleSpan
     // The innermost block around the yielded item, or -1, and its condition.
@@ -433,6 +464,19 @@ CssEnvironmentWithViewportWidth :: (env: CssEnvironment, width: float32) -> CssE
     env.viewport_width = width
     env.has_viewport_width = width > 0.0 && width <= 3.4028234e38
     return env
+}
+
+// The viewport height vh lengths resolve against; 768 without one.
+#program_export
+CssEnvironmentWithViewportHeight :: (env: CssEnvironment, height: float32) -> CssEnvironment {
+    env.viewport_height = height
+    env.has_viewport_height = height > 0.0 && height <= 3.4028234e38
+    return env
+}
+
+CssEnvironmentViewport :: (env: CssEnvironment) -> (width: float64, height: float64) {
+    return ifx env.has_viewport_width then cast(float64)env.viewport_width else CssDefaultViewportWidth,
+        ifx env.has_viewport_height then cast(float64)env.viewport_height else CssDefaultViewportHeight
 }
 
 // Hosts supply platform names; their meaning stays here. A theme other than
@@ -511,6 +555,7 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
     p.depth = 0
     p.status = cast(s32)CssStatusContinue
     p.rule_ref_count = 0
+    p.rule_expr_count = 0
     p.rule_block = -1
     p.rule_condition = CssCondition.{}
     p.selector_count = 0
@@ -530,6 +575,7 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
 #load "parser/lexer.zi";
 #load "parser/vocabulary.zi";
 #load "parser/values.zi";
+#load "parser/expressions.zi";
 #load "parser/selectors.zi";
 #load "parser/properties.zi";
 #load "parser/flex.zi";

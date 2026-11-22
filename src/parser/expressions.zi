@@ -1,0 +1,268 @@
+// Length expressions: calc(), min(), max() and clamp() over px, rem, em, vw,
+// vh and plain numbers. A value without viewport units folds to logical
+// pixels while the sheet is read. One with vw or vh stays a clamp of linear
+// forms that the install evaluates against the environment's viewport.
+
+// The viewport a sheet installed without one evaluates vw and vh against.
+CssDefaultViewportWidth :: 1024.0
+CssDefaultViewportHeight :: 768.0
+
+CssLinearStatic :: (a: CssLinear) -> bool { return a.vw == 0.0 && a.vh == 0.0 }
+
+CssExprStatic :: (e: CssLengthExpr) -> bool {
+    return CssLinearStatic(e.value) && (!e.has_low || CssLinearStatic(e.low)) &&
+        (!e.has_high || CssLinearStatic(e.high))
+}
+
+CssLinearAt :: (a: CssLinear, width: float64, height: float64) -> float64 {
+    return a.px + a.vw * width / 100.0 + a.vh * height / 100.0
+}
+
+// CSS clamp: the low bound wins over the high one.
+CssExprAt :: (e: CssLengthExpr, width: float64, height: float64) -> float64 {
+    value := CssLinearAt(e.value, width, height)
+    if e.has_high {
+        high := CssLinearAt(e.high, width, height)
+        if value > high { value = high }
+    }
+    if e.has_low {
+        low := CssLinearAt(e.low, width, height)
+        if value < low { value = low }
+    }
+    return value
+}
+
+CssExprOf :: (value: CssLinear) -> CssLengthExpr {
+    return .{.value = value, .ok = true}
+}
+
+// A static expression as one linear term; bounds of a viewport expression
+// cannot take part in arithmetic.
+CssExprLinear :: (p: *CssParser, e: CssLengthExpr) -> CssLinear {
+    if !e.has_low && !e.has_high { return e.value }
+    if !CssExprStatic(e) {
+        CssFail(p, "min(), max() and clamp() with vw or vh must be the whole length")
+        return e.value
+    }
+    return .{.px = CssExprAt(e, 0.0, 0.0)}
+}
+
+// em is the rule's own font-size when it sets one, else the root's 16px.
+CssEmPixels :: (p: *CssParser) -> float64 {
+    if (p.template.fields & cast(u32)StyleFontSize) != 0 && p.template.font_size > 0.0 {
+        return cast(float64)p.template.font_size
+    }
+    return CssRemPixels
+}
+
+CssReadExprLiteral :: (p: *CssParser) -> CssLengthExpr {
+    result: CssLengthExpr
+    number := CssReadNumber(p)
+    if CssFailed(p) { return result }
+    if !number.ok {
+        CssFail(p, "expected a length")
+        return result
+    }
+    if number.percent {
+        CssFail(p, "percentages are not native lengths; use px, rem, em, vw or vh")
+        return result
+    }
+    value: CssLinear
+    if number.unit.length == 0 { value = .{.px = number.value, .number = true} }
+    else if CssNameEquals(number.unit, "px") { value.px = number.value }
+    else if CssNameEquals(number.unit, "rem") { value.px = number.value * CssRemPixels }
+    else if CssNameEquals(number.unit, "em") { value.px = number.value * CssEmPixels(p) }
+    else if CssNameEquals(number.unit, "vw") { value.vw = number.value }
+    else if CssNameEquals(number.unit, "vh") { value.vh = number.value }
+    else {
+        CssFailName(p, "unit", number.unit, " is outside Kryon CSS; use px, rem, em, vw or vh")
+        return result
+    }
+    return CssExprOf(value)
+}
+
+// min(), max() or clamp() arguments, already past the opening parenthesis.
+CssReadExprArguments :: (p: *CssParser, depth: s32, values: []CssLengthExpr) -> s32 {
+    count: s32 = 0
+    while count < cast(s32)values.count {
+        values[count] = CssReadExprSum(p, depth + 1)
+        if CssFailed(p) { return -1 }
+        count += 1
+        CssSkipSpace(p)
+        if !CssAtByte(p, #char ",") { return count }
+        CssAdvance(p, 1)
+    }
+    CssFail(p, "too many arguments in a length function")
+    return -1
+}
+
+CssReadExprFunction :: (p: *CssParser, depth: s32, kind: s32, name: string) -> CssLengthExpr {
+    result: CssLengthExpr
+    args: [8]CssLengthExpr
+    count := CssReadExprArguments(p, depth, args[:])
+    if count < 0 || !CssCloseFunction(p, name) { return result }
+    if kind == 0 {
+        if count != 1 { CssFail(p, "calc() takes one expression"); return result }
+        return args[0]
+    }
+    if kind == 3 && count != 3 { CssFail(p, "clamp() takes a minimum, a value and a maximum"); return result }
+    if kind != 3 && count < 1 { CssFail(p, "expected a length"); return result }
+    all_static := true
+    for index: 0..count - 1 { all_static = all_static && CssExprStatic(args[index]) }
+    if all_static {
+        value := CssExprAt(args[0], 0.0, 0.0)
+        for index: 1..count - 1 {
+            next := CssExprAt(args[index], 0.0, 0.0)
+            if kind == 1 && next < value { value = next }
+            if kind == 2 && next > value { value = next }
+        }
+        if kind == 3 {
+            value = CssExprAt(args[1], 0.0, 0.0)
+            high := CssExprAt(args[2], 0.0, 0.0)
+            low := CssExprAt(args[0], 0.0, 0.0)
+            if value > high { value = high }
+            if value < low { value = low }
+        }
+        return CssExprOf(.{.px = value})
+    }
+    for index: 0..count - 1 {
+        if args[index].has_low || args[index].has_high {
+            CssFail(p, "nested min(), max() or clamp() with vw or vh is outside Kryon CSS")
+            return result
+        }
+    }
+    if kind == 3 {
+        return .{.value = args[1].value, .low = args[0].value, .high = args[2].value,
+            .has_low = true, .has_high = true, .ok = true}
+    }
+    if count != 2 {
+        CssFail(p, "min() or max() with vw or vh takes two arguments")
+        return result
+    }
+    if kind == 1 { return .{.value = args[0].value, .high = args[1].value, .has_high = true, .ok = true} }
+    return .{.value = args[0].value, .low = args[1].value, .has_low = true, .ok = true}
+}
+
+CssReadExprTerm :: (p: *CssParser, depth: s32) -> CssLengthExpr {
+    result: CssLengthExpr
+    if depth > 8 {
+        CssFail(p, "a length expression nests too deeply")
+        return result
+    }
+    CssSkipSpace(p)
+    if CssFailed(p) { return result }
+    if CssAtByte(p, #char "(") {
+        CssAdvance(p, 1)
+        inner := CssReadExprSum(p, depth + 1)
+        if !CssExpect(p, #char ")", "expected ')' in a length expression") { return result }
+        return inner
+    }
+    if CssAtFunction(p, "calc") { return CssReadExprFunction(p, depth, 0, "calc") }
+    if CssAtFunction(p, "min") { return CssReadExprFunction(p, depth, 1, "min") }
+    if CssAtFunction(p, "max") { return CssReadExprFunction(p, depth, 2, "max") }
+    if CssAtFunction(p, "clamp") { return CssReadExprFunction(p, depth, 3, "clamp") }
+    return CssReadExprLiteral(p)
+}
+
+CssReadExprProduct :: (p: *CssParser, depth: s32) -> CssLengthExpr {
+    left := CssReadExprTerm(p, depth)
+    while !CssFailed(p) {
+        CssSkipSpace(p)
+        if !CssAtByte(p, #char "*") && !CssAtByte(p, #char "/") { return left }
+        divide := CssAtByte(p, #char "/")
+        CssAdvance(p, 1)
+        right := CssReadExprTerm(p, depth)
+        if CssFailed(p) { return left }
+        a := CssExprLinear(p, left)
+        b := CssExprLinear(p, right)
+        if CssFailed(p) { return left }
+        if divide {
+            if !b.number || b.px == 0.0 { CssFail(p, "divide a length by a nonzero number"); return left }
+            left = CssExprOf(.{.px = a.px / b.px, .vw = a.vw / b.px, .vh = a.vh / b.px, .number = a.number})
+        } else if b.number {
+            left = CssExprOf(.{.px = a.px * b.px, .vw = a.vw * b.px, .vh = a.vh * b.px, .number = a.number})
+        } else if a.number {
+            left = CssExprOf(.{.px = b.px * a.px, .vw = b.vw * a.px, .vh = b.vh * a.px})
+        } else {
+            CssFail(p, "multiply a length by a number")
+            return left
+        }
+    }
+    return left
+}
+
+// + and - need space on both sides, as in CSS.
+CssReadExprSum :: (p: *CssParser, depth: s32) -> CssLengthExpr {
+    left := CssReadExprProduct(p, depth)
+    while !CssFailed(p) {
+        CssSkipSpace(p)
+        sign: float64 = 0.0
+        if CssAtByte(p, #char "+") && CssIsSpace(CssPeek(p, 1)) { sign = 1.0 }
+        if CssAtByte(p, #char "-") && CssIsSpace(CssPeek(p, 1)) { sign = -1.0 }
+        if sign == 0.0 { return left }
+        CssAdvance(p, 1)
+        right := CssReadExprProduct(p, depth)
+        if CssFailed(p) { return left }
+        a := CssExprLinear(p, left)
+        b := CssExprLinear(p, right)
+        if CssFailed(p) { return left }
+        if a.number != b.number {
+            CssFail(p, "add lengths to lengths and numbers to numbers")
+            return left
+        }
+        left = CssExprOf(.{.px = a.px + sign * b.px, .vw = a.vw + sign * b.vw, .vh = a.vh + sign * b.vh,
+            .number = a.number})
+    }
+    return left
+}
+
+// One length that may be an expression; a plain number is only zero.
+CssReadLengthExpr :: (p: *CssParser) -> CssLengthExpr {
+    result := CssReadExprSum(p, 0)
+    if CssFailed(p) { return result }
+    if result.value.number && !result.has_low && !result.has_high {
+        if result.value.px != 0.0 {
+            CssFail(p, "a length needs a unit; use px, rem, em, vw or vh")
+            return result
+        }
+        result.value.number = false
+    }
+    return result
+}
+
+// A length in logical pixels where the native value is fixed: calc(),
+// min(), max(), clamp(), em and rem fold; vw and vh are refused.
+CssReadStaticLength :: (p: *CssParser) -> (value: float32, ok: bool) {
+    expr := CssReadLengthExpr(p)
+    if CssFailed(p) || !expr.ok { return 0.0, false }
+    if !CssExprStatic(expr) { return 0.0, false }
+    return cast(float32)CssExprAt(expr, 0.0, 0.0), true
+}
+
+// True when the value at the cursor needs the expression reader.
+CssAtLengthExpression :: (p: *CssParser) -> bool {
+    CssSkipSpace(p)
+    saved := p.cursor
+    found := CssAtFunction(p, "calc") || CssAtFunction(p, "min") || CssAtFunction(p, "max") ||
+        CssAtFunction(p, "clamp")
+    p.cursor = saved
+    return found
+}
+
+CssKeepViewportExpr :: (p: *CssParser, field: s32, expr: CssLengthExpr) {
+    kept: s32 = 0
+    for index: cast(s32)0..p.rule_expr_count - 1 {
+        if p.rule_exprs[index].field != field {
+            p.rule_exprs[kept] = p.rule_exprs[index]
+            kept += 1
+        }
+    }
+    p.rule_expr_count = kept
+    if !expr.ok { return }
+    if p.rule_expr_count >= 16 {
+        CssFail(p, "more than 16 viewport lengths in one rule")
+        return
+    }
+    p.rule_exprs[p.rule_expr_count] = .{.field = field, .expr = expr}
+    p.rule_expr_count += 1
+}

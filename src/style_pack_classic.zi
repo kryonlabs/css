@@ -812,6 +812,10 @@ style_pack_classic_refs: [4212]u32 = .[
     0x00000114, 0x0000003c, 0x0000000f, 0x000008c0];
 style_pack_classic_refs_count :: 4212;
 
+style_pack_classic_exprs: [1]u32 = .[
+    0x00000000];
+style_pack_classic_exprs_count :: 0;
+
 style_pack_classic_definitions: [488]u32 = .[
     0x00000000, 0x00000000, 0x00000000, 0xd4d0c8ff, 0x00000000, 0x00000000, 0x00000000, 0x00000005,
     0x00000001, 0x00000000, 0x00000000, 0x171717ff, 0x00000000, 0x00000000, 0x00000000, 0x00000006,
@@ -962,6 +966,7 @@ StylePackClassic :: () -> CssCompiledSheet {
     compiled.rule_words = 69
     compiled.rules = style_pack_classic_rules[0:style_pack_classic_rules_count]
     compiled.refs = style_pack_classic_refs[0:style_pack_classic_refs_count]
+    compiled.exprs = style_pack_classic_exprs[0:style_pack_classic_exprs_count]
     compiled.definitions = style_pack_classic_definitions[0:style_pack_classic_definitions_count]
     compiled.conditions = style_pack_classic_conditions[0:style_pack_classic_conditions_count]
     compiled.names = style_pack_classic_names[0:style_pack_classic_names_count]

@@ -128,6 +128,7 @@ CssSetValue :: (p: *CssParser, field: s32, value: CssValue) {
         ref.field = field
         ref.line = p.cursor.line
         ref.fallback = value.fallback
+        ref.alternate = value.alternate
         p.rule_refs[p.rule_ref_count] = ref
         p.rule_ref_count += 1
     } else {
@@ -140,6 +141,7 @@ CssSetValue :: (p: *CssParser, field: s32, value: CssValue) {
         }
         p.rule_ref_count = kept
     }
+    CssKeepViewportExpr(p, field, value.viewport)
     CssStyleSet(*p.template, field, value.color, value.number, value.material)
 }
 
@@ -408,14 +410,13 @@ CssReadTypeface :: (p: *CssParser, end: s32) {
 // size. Try only a single literal; every other value stays intact for the DOM.
 CssReadNativeSize :: (p: *CssParser, end: s32) -> (extent: float32, native: bool) {
     status := p.status
-    number: CssNumber = CssReadNumber(p)
-    if number.ok && !number.percent && number.value > 0.0 && !CssMoreValue(p, end) {
-        if CssNameEquals(number.unit, "px") { return cast(float32)number.value, true }
-        if CssNameEquals(number.unit, "rem") { return cast(float32)(number.value * CssRemPixels), true }
-    } else if !number.ok && !CssFailed(p) {
-        keyword := CssReadName(p)
-        if CssNameEquals(keyword, "auto") && !CssMoreValue(p, end) { return 0.0, true }
-    }
+    CssSkipSpace(p)
+    origin := p.cursor
+    keyword := CssReadName(p)
+    if CssNameEquals(keyword, "auto") && !CssMoreValue(p, end) { return 0.0, true }
+    p.cursor = origin
+    length, ok := CssReadStaticLength(p)
+    if ok && length > 0.0 && !CssMoreValue(p, end) { return length, true }
     // The declaration span was already validated. Number/name scanning may
     // reject valid browser syntax (for example an exponent or escaped unit).
     p.status = status

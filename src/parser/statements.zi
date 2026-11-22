@@ -271,6 +271,7 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
     p.box_template = StyleBoxData.{}
     p.motion = CssRuleMotion.{}
     p.rule_ref_count = 0
+    p.rule_expr_count = 0
     p.declaration_count = 0
     p.web_declarations = 0
     p.rule_span.body_start = p.cursor.pos
@@ -311,6 +312,8 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
         motion: CssRuleMotion
         refs: [24]CssLocalRef
         ref_count: s32 = p.rule_ref_count
+        exprs: [16]CssRuleExpr
+        expr_count: s32 = p.rule_expr_count
         name_count: s32 = p.name_count
         web_count: s32 = p.web_declarations
         if collect {
@@ -319,6 +322,7 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
             previous_box = p.box_template
             motion = p.motion
             for index: cast(s32)0..ref_count - 1 { refs[index] = p.rule_refs[index] }
+            for index: cast(s32)0..expr_count - 1 { exprs[index] = p.rule_exprs[index] }
         }
         scope: s32 = CssApplyProperty(p, head.name, head.end)
         if scope >= 0 {
@@ -336,6 +340,8 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
             p.name_count = name_count
             p.web_declarations = web_count
             for index: cast(s32)0..ref_count - 1 { p.rule_refs[index] = refs[index] }
+            p.rule_expr_count = expr_count
+            for index: cast(s32)0..expr_count - 1 { p.rule_exprs[index] = exprs[index] }
             CssClearFailure(p)
         } else if collect && scope == CssScopeWeb {
             CssReportIssue(p, origin, CssIssueKind.Declaration, TextView(head.name.bytes[:head.name.length]),

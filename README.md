@@ -104,12 +104,12 @@ uses the fields its paint and layout implement.
   uses its column gap and a `Column` uses its row gap. A `Grid` uses both independently.
   Controls that use a uniform gap read the first `gap` value.
 - `Row`, `Column` and `Grid` read `width` and `height` as outer sizes, including
-  padding. They accept positive `px` or `rem` lengths and `auto`. A positive
+  padding. They accept positive lengths (including a static `calc()`) and `auto`. A positive
   axis in `props.bounds` takes precedence. Otherwise `auto` uses the ordinary
   parent content size or the measured height of a grid or flex container with
   declared items. `auto` can override an earlier size rule. Other sizing
   values, including zero, percentages, intrinsic keywords, `var()` and
-  `calc()`, are browser-only and are skipped by native layout. Browser export
+  `vw`/`vh` sizes, are browser-only and are skipped by native layout. Browser export
   keeps both sets of values. Native packs accept the native subset.
 - `Row`, `Column` and `Grid` read `min-width`, `max-width` and `max-height`
   (`px`, `rem`, `0`, and `none` for maxima, with the logical `-inline-size` and
@@ -161,12 +161,27 @@ length, or zero, for either property. A zero value lets Button use its
 default minimum. Opacity clamps to `0`–`1` after resolving custom properties.
 
 Values: hex, named, `rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()` and `color-mix()` colors;
-`px` and `rem` (16px) lengths; `s` and `ms` durations; `var(--name, fallback)`.
+`px`, `rem` (16px), `em`, `vw` and `vh` lengths and `calc()`, `min()`, `max()`
+and `clamp()` over them; `s` and `ms` durations; `var(--name, fallback)`,
+whose fallback may be one more `var(--other, literal)`; and `var(--kryon-NAME)`
+for the installed theme's `background`, `surface`, `raised`, `sunken`, `text`,
+`muted`, `disabled`, `border`, `border-strong`, `accent`, `accent-strong`,
+`selection`, `selection-text`, `success`, `warning` and `danger` colors when
+the sheet does not define that name.
 Hue accepts a number in degrees or `deg`, `grad`, `rad` or `turn`. Write
 `hwb(hue white% black% / alpha)` with spaces between channels and optional
 alpha as a number or percentage. Colors are stored as 8-bit RGBA.
-`em` and `%` lengths are errors, because Kryon has no inherited font size
-or containing block. Custom properties are declared in `:root`, keep the type
+An expression without `vw` or `vh` folds to pixels when the sheet is read.
+`em` is the rule's own `font-size` when it sets one, else 16px (there is no
+inherited font size). `vw` and `vh` resolve when the sheet installs, against
+`CssEnvironmentWithViewportWidth` and `CssEnvironmentWithViewportHeight`
+(1024x768 when unset); `CssSheetSameMedia` reports a change when a new
+viewport changes any active rule's length, so reinstall then. Lengths with
+`vw` or `vh` work in padding, gap, radius, border width, font size, letter
+spacing and min-height; `width`, `height`, box and flex lengths take static
+expressions only. A `min()` or `max()` with viewport units takes two
+arguments and cannot nest. `%` lengths are errors: there is no containing
+block. Custom properties are declared in `:root`, keep the type
 of their declared value, and cannot be used where another kind is required.
 
 `color-mix(in srgb, <color> [<percentage>], <color> [<percentage>])` mixes

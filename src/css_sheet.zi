@@ -3,6 +3,7 @@
 #import "kryon/style_sheet"
 #import "kryon/drawing_props"
 #import "kryon/control_props"
+Theme :: #import "kryon/theme";
 Binary :: #import "std/binary";
 
 using CssStatus;
@@ -21,6 +22,7 @@ using LineHeightUnit;
 
 CssSheetRuleCapacity :: 1024
 CssSheetRefCapacity :: 4096
+CssSheetExprCapacity :: 512
 CssSheetDefinitionCapacity :: 768
 CssSheetConditionCapacity :: 64
 CssSheetTypefaceCapacity :: 16
@@ -34,11 +36,20 @@ CssSheetRule :: struct {
     condition: s32
 }
 
+// A field of a rule whose length follows the viewport.
+CssSheetExpr :: struct {
+    rule: s32
+    field: s32
+    expr: CssLengthExpr
+}
+
 CssSheetRef :: struct {
     rule: s32
     name: s32
     field: s32
     fallback: bool
+    // The nested var() fallback's name + 1, else 0.
+    alternate: s32
     file: s32
     line: s32
 }
@@ -76,6 +87,8 @@ CssSheet :: struct {
     rule_count: s32
     refs: [CssSheetRefCapacity]CssSheetRef
     ref_count: s32
+    exprs: [CssSheetExprCapacity]CssSheetExpr
+    expr_count: s32
     definitions: [CssSheetDefinitionCapacity]CssSheetDefinition
     definition_count: s32
     conditions: [CssSheetConditionCapacity]CssCondition
@@ -111,6 +124,7 @@ CssSheetResult :: struct {
 CssSheetReset :: (sheet: *CssSheet) {
     sheet.rule_count = 0
     sheet.ref_count = 0
+    sheet.expr_count = 0
     sheet.definition_count = 0
     sheet.condition_count = 0
     sheet.name_count = 0
@@ -347,6 +361,10 @@ CssSheetTake :: (sheet: *CssSheet, p: *CssParser) {
         CssSheetFail(sheet, "more than 4096 var() references in one sheet")
         return
     }
+    if sheet.expr_count + p.rule_expr_count > CssSheetExprCapacity {
+        CssSheetFail(sheet, "more than 512 viewport lengths in one sheet")
+        return
+    }
     entry: CssSheetRule
     entry.rule = p.rule
     entry.motion = p.motion
@@ -362,10 +380,17 @@ CssSheetTake :: (sheet: *CssSheet, p: *CssParser) {
         ref.name = CssSheetName(sheet, p.names[p.rule_refs[index].token])
         ref.field = p.rule_refs[index].field
         ref.fallback = p.rule_refs[index].fallback
+        alternate := p.rule_refs[index].alternate
+        if alternate > 0 { ref.alternate = CssSheetName(sheet, p.names[alternate - 1]) + 1 }
         ref.file = file
         ref.line = p.rule_refs[index].line
         sheet.refs[sheet.ref_count] = ref
         sheet.ref_count += 1
+    }
+    for index: cast(s32)0..p.rule_expr_count - 1 {
+        sheet.exprs[sheet.expr_count] = .{.rule = sheet.rule_count, .field = p.rule_exprs[index].field,
+            .expr = p.rule_exprs[index].expr}
+        sheet.expr_count += 1
     }
     sheet.web_declarations += p.web_declarations
     if p.motion.transition.unsupported || p.motion.animation.unsupported { sheet.motion_unsupported += 1 }
@@ -508,6 +533,16 @@ CssSheetConditionHolds :: (sheet: *CssSheet, condition: s32, env: CssEnvironment
 // Use after a successful install when the sheet and overrides are unchanged.
 #program_export
 CssSheetSameMedia :: (sheet: *CssSheet, previous: CssEnvironment, next: CssEnvironment) -> bool {
+    // A viewport length of an active rule must also come out the same.
+    old_width, old_height := CssEnvironmentViewport(previous)
+    new_width, new_height := CssEnvironmentViewport(next)
+    for index: cast(s32)0..sheet.expr_count - 1 {
+        entry := sheet.exprs[index]
+        if !CssSheetConditionHolds(sheet, sheet.rules[entry.rule].condition, previous) { continue }
+        if CssExprAt(entry.expr, old_width, old_height) != CssExprAt(entry.expr, new_width, new_height) {
+            return false
+        }
+    }
     for index: cast(s32)0..sheet.condition_count - 1 {
         if CssSheetConditionHolds(sheet, index, previous) != CssSheetConditionHolds(sheet, index, next) {
             return false
@@ -651,10 +686,72 @@ css_install_rules: StyleRules;
 
 // The rules that apply for `env`, references filled, into `rules`.
 #program_export
+// The token a var() reads: its custom property, else the nested fallback's,
+// else a Kryon theme color for a `--kryon-NAME` the sheet leaves undefined.
+CssSheetRefToken :: (sheet: *CssSheet, entry: CssSheetRef) -> CssToken {
+    token: CssToken = sheet.final[entry.name]
+    if token.kind == cast(s32)CssTokenUndefined && entry.alternate > 0 {
+        token = sheet.final[entry.alternate - 1]
+    }
+    if token.kind != cast(s32)CssTokenUndefined { return token }
+    names: [2]s32 = .[entry.name, entry.alternate - 1]
+    for name: names {
+        if name < 0 { continue }
+        theme := CssThemeToken(sheet.names[name])
+        if theme.kind != cast(s32)CssTokenUndefined { return theme }
+    }
+    return token
+}
+
+// The installed Kryon theme's palette as --kryon-NAME colors.
+css_theme_tokens: [16]string = .["background", "surface", "raised", "sunken", "text", "muted",
+    "disabled", "border", "border-strong", "accent", "accent-strong", "selection", "selection-text",
+    "success", "warning", "danger"];
+
+CssThemeColor :: (index: s32) -> u32 {
+    if index == 0 { return Theme.CurrentBackground() }
+    if index == 1 { return Theme.CurrentSurface() }
+    if index == 2 { return Theme.CurrentRaised() }
+    if index == 3 { return Theme.CurrentSunken() }
+    if index == 4 { return Theme.CurrentText() }
+    if index == 5 { return Theme.CurrentMuted() }
+    if index == 6 { return Theme.CurrentDisabled() }
+    if index == 7 { return Theme.CurrentBorder() }
+    if index == 8 { return Theme.CurrentBorderStrong() }
+    if index == 9 { return Theme.CurrentAccent() }
+    if index == 10 { return Theme.CurrentAccentPressed() }
+    if index == 11 { return Theme.CurrentSelection() }
+    if index == 12 { return Theme.CurrentSelectionText() }
+    if index == 13 { return Theme.CurrentSuccess() }
+    if index == 14 { return Theme.CurrentWarning() }
+    return Theme.CurrentDanger()
+}
+
+CssThemeToken :: (name: CssName) -> CssToken {
+    token: CssToken
+    token.kind = cast(s32)CssTokenUndefined
+    prefix := "kryon-"
+    if name.length <= cast(s32)prefix.count { return token }
+    for index: 0..cast(s32)prefix.count - 1 {
+        if name.bytes[index] != prefix[index] { return token }
+    }
+    rest := TextView(name.bytes[cast(s32)prefix.count:name.length])
+    for entry, index: css_theme_tokens {
+        if rest == entry {
+            token.kind = cast(s32)CssTokenColor
+            token.color = CssThemeColor(cast(s32)index)
+            return token
+        }
+    }
+    return token
+}
+
 CssSheetBuild :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides,
     rules: *StyleRules) -> bool {
     rules.count = 0
     if !CssSheetResolve(sheet, env, overrides) { return false }
+    width, height := CssEnvironmentViewport(env)
+    expr: s32 = 0
     ref: s32 = 0
     for index: cast(s32)0..sheet.rule_count - 1 {
         active: bool = CssSheetConditionHolds(sheet, sheet.rules[index].condition, env)
@@ -666,7 +763,7 @@ CssSheetBuild :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverride
         while ref < sheet.ref_count && sheet.refs[ref].rule == index {
             if active {
                 entry: CssSheetRef = sheet.refs[ref]
-                token: CssToken = sheet.final[entry.name]
+                token: CssToken = CssSheetRefToken(sheet, entry)
                 if token.kind == cast(s32)CssTokenUndefined {
                     if !entry.fallback {
                         CssSheetFailAt(sheet, "undefined custom property", entry.name, entry.file, entry.line)
@@ -718,6 +815,14 @@ CssSheetBuild :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverride
                 }
             }
             ref += 1
+        }
+        while expr < sheet.expr_count && sheet.exprs[expr].rule == index {
+            if active {
+                entry := sheet.exprs[expr]
+                CssStyleSet(*rules.items[rules.count].style, entry.field, 0,
+                    cast(float32)CssExprAt(entry.expr, width, height), 0)
+            }
+            expr += 1
         }
         if active { rules.count += 1 }
     }
@@ -824,12 +929,16 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // another one is stale and css_tool regenerates it.
 CssRuleWords :: 69
 CssCompiledRefWords :: 4
+// A viewport length: rule, field, which bounds it has, then the value, low
+// and high linear forms as px, vw and vh.
+CssCompiledExprWords :: 12
 CssCompiledDefinitionWords :: 8
 CssConditionWords :: 22
 
 CssCompiledSheet :: struct {
     rules: []u32
     refs: []u32
+    exprs: []u32
     definitions: []u32
     conditions: []u32
     names: []string
@@ -841,6 +950,11 @@ CssCompiledSheet :: struct {
     motion: []u32
     keyframes: []u32
     frames: []u32
+}
+
+CssWordLinear :: (w: []u32) -> CssLinear {
+    return .{.px = cast(float64)CssWordFloat(w[0]), .vw = cast(float64)CssWordFloat(w[1]),
+        .vh = cast(float64)CssWordFloat(w[2])}
 }
 
 CssWordFloat :: (word: u32) -> float32 {
@@ -985,10 +1099,29 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         ref.name = names[cast(s32)compiled.refs[at + 1]]
         ref.field = cast(s32)(compiled.refs[at + 2] & cast(u32)255)
         ref.fallback = (compiled.refs[at + 2] & cast(u32)256) != cast(u32)0
+        alternate := cast(s32)(compiled.refs[at + 2] >> cast(u32)16)
+        if alternate > 0 { ref.alternate = names[alternate - 1] + 1 }
         ref.file = file
         ref.line = cast(s32)compiled.refs[at + 3]
         sheet.refs[sheet.ref_count] = ref
         sheet.ref_count += 1
+    }
+    expr_count: s32 = cast(s32)compiled.exprs.count / CssCompiledExprWords
+    if sheet.expr_count + expr_count > CssSheetExprCapacity {
+        CssSheetFail(sheet, "the compiled sheet does not fit")
+        return false
+    }
+    for index: cast(s32)0..expr_count - 1 {
+        w: []u32 = compiled.exprs[index * CssCompiledExprWords:(index + 1) * CssCompiledExprWords]
+        entry: CssSheetExpr = .{.rule = rule_base + cast(s32)w[0], .field = cast(s32)w[1]}
+        entry.expr.has_low = (w[2] & cast(u32)1) != 0
+        entry.expr.has_high = (w[2] & cast(u32)2) != 0
+        entry.expr.value = CssWordLinear(w[3:6])
+        entry.expr.low = CssWordLinear(w[6:9])
+        entry.expr.high = CssWordLinear(w[9:12])
+        entry.expr.ok = true
+        sheet.exprs[sheet.expr_count] = entry
+        sheet.expr_count += 1
     }
     for index: cast(s32)0..definition_count - 1 {
         at: s32 = index * CssCompiledDefinitionWords

@@ -28,6 +28,10 @@ CssValue :: struct {
     // Custom property name index, or -1 for a literal.
     ref: s32
     fallback: bool
+    // A var() fallback that is itself a var(): its name index + 1, else 0.
+    alternate: s32
+    // A length that follows the viewport; `number` holds it at 1024x768.
+    viewport: CssLengthExpr
     ok: bool
 }
 
@@ -100,6 +104,33 @@ CssPropertyName :: (name: CssName) -> CssName {
 }
 
 // Is the cursor at 'name(' (case-insensitive)? Consumes it when it is.
+CssAtVar :: (p: *CssParser) -> bool {
+    saved := p.cursor
+    found := CssAtFunction(p, "var")
+    p.cursor = saved
+    return found
+}
+
+// var(--b[, literal]) inside another var()'s fallback.
+CssReadNestedVar :: (p: *CssParser, kind: s32) -> CssValue {
+    result: CssValue
+    result.kind = kind
+    result.ref = -1
+    if !CssAtFunction(p, "var") { return result }
+    start: CssVarStart = CssReadVarStart(p)
+    if !start.ok { return result }
+    if start.fallback {
+        literal: CssValue = CssReadTyped(p, kind, false)
+        if !literal.ok { return result }
+        result = literal
+    }
+    if !CssCloseFunction(p, "var") { return result }
+    result.ref = start.name
+    result.fallback = start.fallback
+    result.ok = true
+    return result
+}
+
 CssAtFunction :: (p: *CssParser, name: string) -> bool {
     count: s32 = cast(s32)name.count
     if p.cursor.pos + count >= cast(s32)p.cursor.source.count { return false }
@@ -549,19 +580,28 @@ CssReadTyped :: (p: *CssParser, kind: s32, allow_var: bool) -> CssValue {
     if CssFailed(p) { return result }
     if CssAtFunction(p, "var") {
         if !allow_var {
-            CssFail(p, "nested var() in a fallback is outside Kryon CSS")
+            CssFail(p, "a var() fallback holds one more var() at most")
             return result
         }
         start: CssVarStart = CssReadVarStart(p)
         if !start.ok { return result }
+        fallback_literal := start.fallback
+        alternate: s32 = 0
         if start.fallback {
-            fallback: CssValue = CssReadTyped(p, kind, false)
+            CssSkipSpace(p)
+            nested := CssAtVar(p)
+            fallback: CssValue = ifx nested then CssReadNestedVar(p, kind) else CssReadTyped(p, kind, false)
             if !fallback.ok { return result }
             result = fallback
+            if nested {
+                alternate = fallback.ref + 1
+                fallback_literal = fallback.fallback
+            }
         }
         if !CssCloseFunction(p, "var") { return result }
         result.ref = start.name
-        result.fallback = start.fallback
+        result.fallback = fallback_literal
+        result.alternate = alternate
         result.ok = true
         return result
     }
@@ -632,6 +672,19 @@ CssReadTyped :: (p: *CssParser, kind: s32, allow_var: bool) -> CssValue {
         }
         p.cursor = saved
     }
+    if kind == cast(s32)CssValueLength || kind == cast(s32)CssValueLetterSpacing ||
+        kind == cast(s32)CssValueGap {
+        expr := CssReadLengthExpr(p)
+        if CssFailed(p) || !expr.ok { return result }
+        if CssExprStatic(expr) {
+            result.number = cast(float32)CssExprAt(expr, 0.0, 0.0)
+        } else {
+            result.number = cast(float32)CssExprAt(expr, CssDefaultViewportWidth, CssDefaultViewportHeight)
+            result.viewport = expr
+        }
+        result.ok = true
+        return result
+    }
     number: CssNumber = CssReadNumber(p)
     if CssFailed(p) { return result }
     if !number.ok {
@@ -658,10 +711,6 @@ CssReadTyped :: (p: *CssParser, kind: s32, allow_var: bool) -> CssValue {
             result.number = CssLengthUnit(p, number)
             if CssFailed(p) { return result }
         }
-    } else if kind == cast(s32)CssValueLength || kind == cast(s32)CssValueLetterSpacing ||
-        kind == cast(s32)CssValueGap {
-        result.number = CssLengthUnit(p, number)
-        if CssFailed(p) { return result }
     } else if kind == cast(s32)CssValueDuration {
         if CssNameEquals(number.unit, "ms") {
             result.number = cast(float32)number.value

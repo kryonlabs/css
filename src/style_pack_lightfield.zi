@@ -792,6 +792,10 @@ style_pack_lightfield_refs: [4252]u32 = .[
     0x000000fb, 0x00000034, 0x0000000f, 0x0000083a];
 style_pack_lightfield_refs_count :: 4252;
 
+style_pack_lightfield_exprs: [1]u32 = .[
+    0x00000000];
+style_pack_lightfield_exprs_count :: 0;
+
 style_pack_lightfield_definitions: [424]u32 = .[
     0x00000000, 0x00000000, 0x00000000, 0x0d1118ff, 0x00000000, 0x00000000, 0x00000000, 0x00000005,
     0x00000001, 0x00000000, 0x00000000, 0xf4f0ffff, 0x00000000, 0x00000000, 0x00000000, 0x00000006,
@@ -926,6 +930,7 @@ StylePackLightfield :: () -> CssCompiledSheet {
     compiled.rule_words = 69
     compiled.rules = style_pack_lightfield_rules[0:style_pack_lightfield_rules_count]
     compiled.refs = style_pack_lightfield_refs[0:style_pack_lightfield_refs_count]
+    compiled.exprs = style_pack_lightfield_exprs[0:style_pack_lightfield_exprs_count]
     compiled.definitions = style_pack_lightfield_definitions[0:style_pack_lightfield_definitions_count]
     compiled.conditions = style_pack_lightfield_conditions[0:style_pack_lightfield_conditions_count]
     compiled.names = style_pack_lightfield_names[0:style_pack_lightfield_names_count]

@@ -86,3 +86,7 @@ Column.card {
 Column.side { width: 120px; }
 Column.grow { flex: 1; }
 Row.push { width: 50px; margin-left: auto; }
+
+@media (min-width: 75rem) {
+  Column.fluid-pad { padding: clamp(8px, 2vw, 20px); }
+}

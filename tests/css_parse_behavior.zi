@@ -122,7 +122,7 @@ NativeAuthoring :: () {
         "has an invalid value", "negative logical size from token")
     BuildFails("Button { min-block-size: var(--size, -1px); }",
         "has an invalid value", "negative logical size from used fallback")
-    ParseFails("Button { min-block-size: 50%; }", "percentages are not lengths", "relative logical size")
+    ParseFails("Button { min-block-size: 50%; }", "percentages are not native lengths", "relative logical size")
     ParseFails("Button { color: hwb(0, 10%, 20%); }", "hwb() uses spaces", "HWB comma syntax")
     ParseFails("Button { color: hwb(0 10 20%); }", "expected a percentage", "HWB percentage subset")
     ParseFails("Button { color: hsl(10% 50% 50%); }", "a hue needs an angle", "invalid hue percentage")
@@ -213,8 +213,12 @@ Diagnostics :: () {
     ParseFails("Button { color: red; } /* open", "unterminated comment", "open comment")
     ParseFails("Button { color: red !important; }", "!important is outside Kryon CSS", "important")
     ParseFails("Button { gap: 4; }", "a length needs a unit", "unitless length")
-    ParseFails("Button { gap: 2em; }", "em depends on the inherited font size", "em")
-    ParseFails("Button { gap: 50%; }", "percentages are not lengths", "percent")
+    ParseFails("Button { gap: 2vmin; }", "is outside Kryon CSS; use px, rem, em, vw or vh", "unknown length unit")
+    ParseFails("Button { gap: 50%; }", "percentages are not native lengths", "percent")
+    ParseFails("Button { gap: calc(4px * 2px); }", "multiply a length by a number", "length times length")
+    ParseFails("Button { gap: calc(4px +2px); }", "expected ')' to close calc", "calc sign needs spaces")
+    ParseFails("Button { gap: min(1vw, max(2vw, 4px)); }", "nested min(), max() or clamp() with vw or vh",
+        "nested viewport bounds")
     ParseFails("Button { padding-left: 4px; }", "use padding-inline", "one side")
     ParseFails("Button { padding: 1px 2px 3px 4px; }", "Kryon pads", "uneven sides")
     ParseFails("Button { border: 1px dashed red; }", "borders are solid", "border style")

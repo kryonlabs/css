@@ -31,24 +31,18 @@ CssBoxTarget :: (p: *CssParser, name: CssName, text: bool) {
     }
 }
 
-// One length in logical pixels: px, rem or a bare zero. `keyword` is
-// accepted as the given sentinel (`none` for maxima, `auto` for margins).
+// One length in logical pixels: px, rem, em, zero or a calc(), min(), max()
+// or clamp() of them. `keyword` is accepted as the given sentinel (`none`
+// for maxima, `auto` for margins).
 CssBoxLength :: (p: *CssParser, keyword: string, sentinel: float32) -> (value: float32, ok: bool) {
+    CssSkipSpace(p)
     origin := p.cursor
-    number := CssReadNumber(p)
-    if number.ok {
-        if number.percent || number.value < 0.0 { return 0.0, false }
-        if CssNameEquals(number.unit, "px") || (number.unit.length == 0 && number.value == 0.0) {
-            return cast(float32)number.value, true
-        }
-        if CssNameEquals(number.unit, "rem") { return cast(float32)(number.value * CssRemPixels), true }
-        return 0.0, false
-    }
-    if CssFailed(p) { return 0.0, false }
-    p.cursor = origin
     word := CssReadName(p)
     if keyword != "" && CssNameEquals(word, keyword) { return sentinel, true }
-    return 0.0, false
+    p.cursor = origin
+    length, ok := CssReadStaticLength(p)
+    if !ok || length < 0.0 { return 0.0, false }
+    return length, true
 }
 
 // Up to `most` margins (lengths or auto) in CSS shorthand order.

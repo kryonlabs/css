@@ -766,6 +766,10 @@ style_pack_material_refs: [3932]u32 = .[
     0x00000109, 0x0000000b, 0x00000004, 0x00000881];
 style_pack_material_refs_count :: 3932;
 
+style_pack_material_exprs: [1]u32 = .[
+    0x00000000];
+style_pack_material_exprs_count :: 0;
+
 style_pack_material_definitions: [424]u32 = .[
     0x00000000, 0x00000000, 0x00000000, 0x101217ff, 0x00000000, 0x00000000, 0x00000000, 0x00000005,
     0x00000001, 0x00000000, 0x00000000, 0xf5f2ffff, 0x00000000, 0x00000000, 0x00000000, 0x00000006,
@@ -900,6 +904,7 @@ StylePackMaterial :: () -> CssCompiledSheet {
     compiled.rule_words = 69
     compiled.rules = style_pack_material_rules[0:style_pack_material_rules_count]
     compiled.refs = style_pack_material_refs[0:style_pack_material_refs_count]
+    compiled.exprs = style_pack_material_exprs[0:style_pack_material_exprs_count]
     compiled.definitions = style_pack_material_definitions[0:style_pack_material_definitions_count]
     compiled.conditions = style_pack_material_conditions[0:style_pack_material_conditions_count]
     compiled.names = style_pack_material_names[0:style_pack_material_names_count]

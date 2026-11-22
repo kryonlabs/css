@@ -373,6 +373,11 @@ ResponsiveBox :: (width: float32) {
         .bounds = .{width = 200.0, height = 40.0}})
     Check(Near(bounded.bounds, 0.0, 172.0, 300.0, 24.0), "min-width and max-height clamp the declared size")
     Check(End(integration_session), "close bounded row")
+    fluid := Layout.Draw(integration_session, .{.key = 607, .class_name = StyleClass("fluid-pad"),
+        .bounds = .{height = 40.0}})
+    Check(fluid.content.x - fluid.bounds.x == ifx width > 820.0 then 20.0 else 0.0,
+        "a packed clamp() of vw applies in its media rule and caps at its maximum")
+    Check(End(integration_session), "close fluid column")
     Check(outer.opened && End(integration_session), "close box column")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "box frame")
     align: s32 = 0
@@ -436,6 +441,69 @@ FillLayout :: () {
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "fill frame")
 }
 
+fluid_sheet: CssSheet;
+
+fluid_css :: #string CSS
+Text.fluid {
+  font-size: calc(1rem + 2px);
+  padding: clamp(12px, 2vw, 22px);
+  gap: max(8px, 1vw);
+  letter-spacing: -.25em;
+  border-radius: calc((10px + 2px) / 2);
+}
+
+Column.fluid-box { max-width: calc(50rem - 100px); margin: 0 min(10px, 0.5em); }
+
+:root { --inner: 7px; }
+Text.nested {
+  padding: var(--outer, var(--inner, 3px));
+  gap: var(--outer, var(--missing, 5px));
+  color: var(--kryon-text);
+}
+CSS;
+
+FluidAt :: (width: float32) -> StyleData {
+    env := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), width)
+    installed := CssSheetInstall(*fluid_sheet, env, null)
+    if !installed {
+        TestSay("  diagnostic: ")
+        TestSay(CssSheetDiagnostic(*fluid_sheet, test_diagnostic[:]))
+        TestSay("\n")
+    }
+    Check(installed, "install fluid styles")
+    state := cast(s32)ButtonStateNormal
+    return ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(0, StyleClass("fluid"), StyleKindText(), state), state)
+}
+
+// calc(), min(), max(), clamp(), em and vw: static ones fold while parsing,
+// viewport ones follow the installed width.
+FluidValues :: () {
+    CssSheetReset(*fluid_sheet)
+    Check(CssSheetParse(*fluid_sheet, fluid_css, "fluid.css", CssNoImports), "fluid sheet parses")
+    narrow := FluidAt(400.0)
+    Check(narrow.font_size == 18.0 && narrow.letter_spacing == -4.5 && narrow.radius == 6.0,
+        "static calc and em fold to pixels")
+    Check(narrow.padding_x == 12.0 && narrow.gap == 8.0, "clamp and max hold their floor at 400 px")
+    wide := FluidAt(1200.0)
+    Check(wide.padding_x == 22.0 && wide.padding_y == 22.0 && wide.gap == 12.0,
+        "clamp caps and max follows the viewport at 1200 px")
+    Check(FluidAt(900.0).padding_x == 18.0, "2vw between the bounds")
+    base := CssDefaultEnvironment()
+    Check(!CssSheetSameMedia(*fluid_sheet, CssEnvironmentWithViewportWidth(base, 400.0),
+        CssEnvironmentWithViewportWidth(base, 900.0)), "a width that changes a viewport length reinstalls")
+    Check(CssSheetSameMedia(*fluid_sheet, CssEnvironmentWithViewportWidth(base, 400.0),
+        CssEnvironmentWithViewportWidth(base, 500.0)), "lengths held at their floor need no reinstall")
+    facts := StyleDefaultFacts(StyleKindColumn())
+    facts.class_name = StyleClass("fluid-box")
+    box: StyleBoxData
+    unused ResolveInstalledLayoutStyle(facts, null, *box)
+    Check(box.max_width == 700.0 && box.margin_left == 8.0, "box lengths fold calc, min and em")
+    state := cast(s32)ButtonStateNormal
+    nested := ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(0, StyleClass("nested"), StyleKindText(), state), state)
+    Check(nested.padding_x == 7.0 && nested.gap == 5.0, "a nested var() fallback reads the inner property, then its literal")
+    Check(nested.foreground == CurrentText(), "--kryon-text reads the installed theme's text color")
+}
+
 main :: () -> s32 {
     if !SessionValid(integration_session) { integration_session = SessionOpen() }
     Integration()
@@ -448,6 +516,7 @@ main :: () -> s32 {
     ResponsiveBox(1200.0)
     PaintedBox()
     FillLayout()
+    FluidValues()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }
     return test_failures

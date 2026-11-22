@@ -58,7 +58,7 @@ diagnostics-test: $(CSS_TOOL)
 	$(CSS_TOOL) check tests/css_diagnostics.css 2>$(BUILD)/css-diagnostics.log
 	@if $(CSS_TOOL) check --strict tests/css_diagnostics.css 2>$(BUILD)/css-diagnostics-strict.log; then exit 1; else test $$? -eq 1; fi
 	cmp $(BUILD)/css-diagnostics.log $(BUILD)/css-diagnostics-strict.log
-	grep -Fx "tests/css_diagnostics.css:5:3: web-only declaration 'box-shadow': declaration is applied only by the browser" $(BUILD)/css-diagnostics.log
+	grep -Fx "tests/css_diagnostics.css:5:3: web-only declaration 'text-transform': declaration is applied only by the browser" $(BUILD)/css-diagnostics.log
 	grep -Fx "tests/css_diagnostics.css:14:1: skipped at-rule '@supports': at-rule 'supports' is outside Kryon CSS" $(BUILD)/css-diagnostics.log
 
 # Packs are compiled into rule tables apps load without parsing. The

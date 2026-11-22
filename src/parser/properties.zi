@@ -393,15 +393,25 @@ CssReadTypeface :: (p: *CssParser, end: s32) {
         CssFail(p, "expected a font family")
         return
     }
-    if CssCollectIssues(p) {
-        CssSkipSpace(p)
-        if CssAtByte(p, #char ",") {
-            CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, "font-family",
-                "native text uses only the first font family", true)
+    family := p.cursor.source[start:start + length]
+    generic := CssGenericFamily(family)
+    if generic >= 0 {
+        // A generic family keeps the theme's typeface; monospace is the code role.
+        if generic == cast(s32)FontRoleCode {
+            role: CssValue = .{.ref = -1, .ok = true, .material = generic}
+            CssSetValue(p, cast(s32)CssFieldFontRole, role)
         }
+    } else {
+        if CssCollectIssues(p) {
+            CssSkipSpace(p)
+            if CssAtByte(p, #char ",") {
+                CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, "font-family",
+                    "native text uses only the first font family", true)
+            }
+        }
+        p.template.typeface = family
+        p.template.fields |= cast(u32)StyleTypeface
     }
-    p.template.typeface = p.cursor.source[start:start + length]
-    p.template.fields |= cast(u32)StyleTypeface
     p.cursor.column += end - p.cursor.pos
     p.cursor.pos = end
 }
@@ -516,8 +526,8 @@ CssPassWebDeclaration :: (p: *CssParser) -> s32 {
     return CssScopeWeb
 }
 
-css_web_properties: [10]string = .[
-    "text-decoration", "text-transform", "white-space", "cursor", "box-shadow",
+css_web_properties: [9]string = .[
+    "text-decoration", "text-transform", "white-space", "cursor",
     "grid-template-rows", "grid-column", "grid-row", "z-index", "visibility"];
 
 // Properties the web document host applies and native hosts skip: browser
@@ -643,6 +653,16 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
     } else if CssNameEquals(name, "font-family") {
         CssReadTypeface(p, end)
         return ifx CssFailed(p) then -1 else CssScopeNative
+    } else if CssNameEquals(name, "font") || CssNameEquals(name, "box-shadow") {
+        status := p.status
+        native := ifx CssNameEquals(name, "font") then CssApplyFontShorthand(p, end) else CssApplyBoxShadow(p, end)
+        if !native || CssFailed(p) {
+            p.status = status
+            p.diagnostic_length = 0
+            return CssPassWebDeclaration(p)
+        }
+        p.cursor = p.pending_end
+        return CssScopeNative
     } else if CssNameEquals(name, "min-height") || CssNameEquals(name, "min-block-size") {
         value: CssValue = CssReadField(p, cast(s32)CssFieldMinHeight)
         if !value.ok { return -1 }

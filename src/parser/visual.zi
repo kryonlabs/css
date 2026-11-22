@@ -1,0 +1,108 @@
+// Shadows and type in Kryon's own systems: box-shadow becomes an elevation
+// role and a generic font family a font role. Shadow geometry and colors,
+// and fallback font lists, stay with the browser.
+
+// none clears the elevation; a shadow whose largest blur is at most 8px is
+// raised and a softer one floating. Colors, offsets and inset are checked.
+CssApplyBoxShadow :: (p: *CssParser, end: s32) -> bool {
+    origin := p.cursor
+    word := CssReadName(p)
+    value: CssValue
+    value.ref = -1
+    value.ok = true
+    if CssNameEquals(word, "none") && !CssMoreValue(p, end) {
+        value.material = cast(s32)ElevationRoleNone
+        CssSetValue(p, cast(s32)CssFieldElevation, value)
+        return true
+    }
+    p.cursor = origin
+    blur: float64 = 0.0
+    while CssMoreValue(p, end) {
+        lengths: s32 = 0
+        while CssMoreValue(p, end) && !CssAtByte(p, #char ",") {
+            saved := p.cursor
+            number := CssReadNumber(p)
+            if CssFailed(p) { return false }
+            if number.ok {
+                pixels: float64 = number.value
+                if CssNameEquals(number.unit, "rem") { pixels *= CssRemPixels }
+                else if CssNameEquals(number.unit, "em") { pixels *= CssEmPixels(p) }
+                else if !CssNameEquals(number.unit, "px") && !(number.unit.length == 0 && number.value == 0.0) {
+                    return false
+                }
+                lengths += 1
+                if lengths == 3 && pixels > blur { blur = pixels }
+                continue
+            }
+            p.cursor = saved
+            name := CssReadName(p)
+            if CssNameEquals(name, "inset") { continue }
+            p.cursor = saved
+            color := CssReadColor(p, true)
+            if !color.ok { return false }
+        }
+        if lengths < 2 || lengths > 4 { return false }
+        if CssAtByte(p, #char ",") { CssAdvance(p, 1) }
+    }
+    value.material = cast(s32)(ifx blur <= 8.0 then ElevationRoleRaised else ElevationRoleFloating)
+    CssSetValue(p, cast(s32)CssFieldElevation, value)
+    return true
+}
+
+// A generic family: -1 when it is not one, else the font role it maps to
+// (code for monospace, the inherited role for the others).
+CssGenericFamily :: (name: string) -> s32 {
+    if name == "monospace" || name == "ui-monospace" { return cast(s32)FontRoleCode }
+    if name == "sans-serif" || name == "serif" || name == "system-ui" || name == "ui-sans-serif" ||
+        name == "ui-serif" || name == "cursive" || name == "fantasy" || name == "-apple-system" {
+        return cast(s32)FontRoleInherit
+    }
+    return -1
+}
+
+// font: [style] [weight] size[/line-height] family, family...
+CssApplyFontShorthand :: (p: *CssParser, end: s32) -> bool {
+    for step: 0..1 {
+        saved := p.cursor
+        word := CssReadName(p)
+        if word.length == 0 { p.cursor = saved; break }
+        if CssNameEquals(word, "italic") || CssNameEquals(word, "oblique") {
+            style: CssValue = .{.ref = -1, .ok = true, .material = CssFontStyleValue(word)}
+            CssSetValue(p, cast(s32)CssFieldFontStyle, style)
+        } else if CssNameEquals(word, "bold") {
+            weight: CssValue = .{.ref = -1, .ok = true, .number = 700.0}
+            CssSetValue(p, cast(s32)CssFieldFontWeight, weight)
+        } else if !CssNameEquals(word, "normal") {
+            p.cursor = saved
+            break
+        }
+        CssSkipSpace(p)
+    }
+    saved := p.cursor
+    number := CssReadNumber(p)
+    if number.ok && number.unit.length == 0 && !number.percent && number.value >= 100.0 && number.value <= 900.0 {
+        weight: CssValue = .{.ref = -1, .ok = true, .number = cast(float32)number.value}
+        CssSetValue(p, cast(s32)CssFieldFontWeight, weight)
+    } else {
+        p.cursor = saved
+    }
+    // One term: the '/' after it starts the line height, not a division.
+    term := CssReadExprTerm(p, 0)
+    if CssFailed(p) || !term.ok || term.value.number { return false }
+    size: CssValue = .{.ref = -1, .ok = true, .number = cast(float32)CssExprAt(term, 0.0, 0.0)}
+    if !CssExprStatic(term) {
+        size.number = cast(float32)CssExprAt(term, CssDefaultViewportWidth, CssDefaultViewportHeight)
+        size.viewport = term
+    }
+    CssSetValue(p, cast(s32)CssFieldFontSize, size)
+    CssSkipSpace(p)
+    if CssAtByte(p, #char "/") {
+        CssAdvance(p, 1)
+        line: CssValue = CssReadField(p, cast(s32)CssFieldLineHeight)
+        if !line.ok { return false }
+        CssSetValue(p, cast(s32)CssFieldLineHeight, line)
+    }
+    if !CssMoreValue(p, end) { return false }
+    CssReadTypeface(p, end)
+    return !CssFailed(p)
+}

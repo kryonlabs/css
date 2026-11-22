@@ -460,6 +460,12 @@ Text.nest {
   &#special { color: #333333; }
 }
 
+Card.soft { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+Card.lifted { box-shadow: 0 12px 32px #0004, inset 0 0 0 1px #fff2; }
+Card.flat { box-shadow: none; }
+Text.body { font: italic bold 15px/1.5 system-ui, sans-serif; }
+Text.mono { font-family: ui-monospace, monospace; }
+
 :root { --inner: 7px; }
 Text.nested {
   padding: var(--outer, var(--inner, 3px));
@@ -505,9 +511,26 @@ FluidValues :: () {
     unused ResolveInstalledLayoutStyle(facts, null, *box)
     Check(box.max_width == 700.0 && box.margin_left == 8.0, "box lengths fold calc, min and em")
     state := cast(s32)ButtonStateNormal
+    normal_state := state
     nested := ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(0, StyleClass("nested"), StyleKindText(), state), state)
     Check(nested.padding_x == 7.0 && nested.gap == 5.0, "a nested var() fallback reads the inner property, then its literal")
     Check(nested.foreground == CurrentText(), "--kryon-text reads the installed theme's text color")
+    card := StyleControlRoleFacts(StyleKindCard(), 0, StyleClass("soft"), StyleAny(), 0, 0, 0, normal_state)
+    Check(cast(s32)ResolveInstalledStyleRules(StyleData.{}, card, normal_state).elevation == cast(s32)ElevationRoleRaised,
+        "a tight box-shadow is a raised elevation")
+    card.class_name = StyleClass("lifted")
+    Check(cast(s32)ResolveInstalledStyleRules(StyleData.{}, card, normal_state).elevation == cast(s32)ElevationRoleFloating,
+        "a soft box-shadow is a floating elevation")
+    card.class_name = StyleClass("flat")
+    flat := ResolveInstalledStyleRules(StyleData.{}, card, normal_state)
+    Check(StyleHasField(flat, cast(u32)StyleElevation) && cast(s32)flat.elevation == cast(s32)ElevationRoleNone,
+        "box-shadow: none clears the elevation")
+    body := ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(0, StyleClass("body"), StyleKindText(), normal_state), normal_state)
+    Check(body.font_size == 15.0 && body.line_height == 1.5 && body.font_weight == 700 &&
+        body.font_style == .FontStyleItalic && !StyleHasField(body, cast(u32)StyleTypeface),
+        "the font shorthand sets size, line height, weight and style; a generic family keeps the theme face")
+    mono := ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(0, StyleClass("mono"), StyleKindText(), normal_state), normal_state)
+    Check(cast(s32)mono.font_role == cast(s32)FontRoleCode, "monospace selects the code font role")
     nest := StyleClass("nest")
     normal := cast(s32)ButtonStateNormal
     disabled := cast(s32)ButtonStateDisabled

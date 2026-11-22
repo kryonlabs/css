@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `box-shadow` maps to Kryon elevation roles, the `font` shorthand sets size, line height, weight and style, and generic font families map to the theme face or the code font role.
+
 - Rules nest `&:state`, `&.class`, `&#id` and `&[attribute]` rules one level deep, flattened into compound selectors and exported with the parent selector. Combinator, `:not()` and child-position errors name the native idiom.
 
 - Lengths take em, vw and vh and calc(), min(), max() and clamp(): static ones fold while the sheet is read, viewport ones resolve at install and packs keep them; CssSheetSameMedia reports a change when a new viewport changes an active length. var() fallbacks may nest one var(), and var(--kryon-NAME) reads the installed theme palette.

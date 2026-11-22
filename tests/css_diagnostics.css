@@ -2,7 +2,7 @@
 Row.fixture {
   gap: var(--gap);
   gap: 13px -2px;
-  box-shadow: 0 1px 2px black;
+  text-transform: uppercase;
   colour: red;
   broken-name red;
   & > Text { color: blue; }
@@ -14,5 +14,5 @@ Row.fixture > Text { color: red; }
 @supports (display: grid) { Text { color: red; } }
 @media (orientation: landscape) { Text { color: red; } }
 Text { width: 100vw; transition: transform 1s; height: 24px; }
-@keyframes flash { from { opacity: 0.2; box-shadow: none; } to { opacity: 1; } }
+@keyframes flash { from { opacity: 0.2; text-transform: none; } to { opacity: 1; } }
 Text { font-family: "Inter", sans-serif; }

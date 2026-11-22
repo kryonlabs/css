@@ -324,7 +324,7 @@ DiagnosticIssueCount :: 14
 ObserveIssue :: (context: *void, issue: CssIssue) {
     diagnostic_expectations: [DiagnosticIssueCount]DiagnosticExpectation = .[
         .{4, 3, CssIssueKind.Declaration, "gap", false},
-        .{5, 3, CssIssueKind.Declaration, "box-shadow", true},
+        .{5, 3, CssIssueKind.Declaration, "text-transform", true},
         .{6, 3, CssIssueKind.Declaration, "colour", false},
         .{7, 3, CssIssueKind.Declaration, "broken-name", false},
         .{8, 3, CssIssueKind.Selector, "& > Text", false},
@@ -335,7 +335,7 @@ ObserveIssue :: (context: *void, issue: CssIssue) {
         .{16, 8, CssIssueKind.Declaration, "width", true},
         .{16, 22, CssIssueKind.Declaration, "transition", true},
         .{16, 48, CssIssueKind.Declaration, "height", true},
-        .{17, 41, CssIssueKind.Declaration, "box-shadow", true},
+        .{17, 41, CssIssueKind.Declaration, "text-transform", true},
         .{18, 8, CssIssueKind.Declaration, "font-family", true}]
     count: *s32 = cast(*s32)context
     index: s32 = <<count
@@ -351,7 +351,7 @@ ObserveIssue :: (context: *void, issue: CssIssue) {
 }
 
 ImportedDiagnostics :: (name: string) -> CssImportAnswer {
-    if name == "nested.css" { return .{true, "Text { box-shadow: none; }"} }
+    if name == "nested.css" { return .{true, "Text { text-transform: none; }"} }
     return .{}
 }
 
@@ -359,7 +359,7 @@ ObserveImportIssue :: (context: *void, issue: CssIssue) {
     count: *s32 = cast(*s32)context
     if <<count == 0 {
         Check(issue.path == "nested.css" && issue.line == 1 && issue.column == 8 &&
-            issue.name == "box-shadow" && issue.web_only, "import reports its own filename")
+            issue.name == "text-transform" && issue.web_only, "import reports its own filename")
     } else {
         Check(issue.path == "entry.css" && issue.line == 2 && issue.column == 1 &&
             issue.name == "@import" && !issue.web_only && Contains(issue.reason, "absent.css"),

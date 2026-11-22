@@ -596,6 +596,7 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
 #load "parser/properties.zi";
 #load "parser/flex.zi";
 #load "parser/box.zi";
+#load "parser/visual.zi";
 #load "parser/media.zi";
 #load "parser/motion.zi";
 #load "parser/statements.zi";

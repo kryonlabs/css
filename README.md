@@ -101,8 +101,18 @@ must match),
 `-kryon-motion-duration`, `-kryon-motion-multiplier`,
 `-kryon-motion-easing` (`inherit`, `standard`, `linear`, `instant`) and
 `-kryon-motion-reduced` (`reduce`, `no-preference`). The web document host
-also uses browser-only declarations such as `box-shadow`. Each native widget
-uses the fields its paint and layout implement.
+also uses browser-only declarations such as `text-transform`. Each native
+widget uses the fields its paint and layout implement.
+- `box-shadow` selects a Kryon elevation role: `none` clears it, a shadow
+  whose largest blur is at most 8px is `raised` and a softer one `floating`
+  (the widgets that draw elevation, such as Card and Modal, use their own
+  shadow geometry and colors). `font: [style] [weight] size[/line-height]
+  family` sets those fields. A generic first family (`system-ui`,
+  `sans-serif`, `serif`) keeps the theme's typeface and `monospace` or
+  `ui-monospace` selects the `code` font role; a named first family is the
+  typeface and later families are ignored natively. Per-side borders,
+  multi-stop, angled and radial gradients, `transform` and outline width and
+  style are browser-only.
 
 - `gap` takes one value for both axes or two values in row, column order.
   `row-gap` and `column-gap` cascade independently. Gaps take `normal`

@@ -82,6 +82,12 @@ ImageHeight :: (asset_path: string) -> s32 {
 }
 
 #program_export
+RasterTriangles :: (points: []Vector2, color: Color) {
+    unused points
+    unused color
+}
+
+#program_export
 RasterLine :: (line: Rectangle, color: Color) {
     unused line; unused color
 }

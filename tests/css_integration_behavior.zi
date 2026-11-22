@@ -9,6 +9,7 @@ ButtonWidget :: #import "kryon/button";
 Layout :: #import "kryon/layout";
 Grid :: #import "kryon/grid";
 Page :: #import "kryon/page";
+TextWidget :: #import "kryon/text";
 #import "kryon/grid_props"
 #import "kryon/control_props"
 #import "kryon/drawing_props"
@@ -21,6 +22,7 @@ Page :: #import "kryon/page";
 #import "kryon/Theme"
 #import "kryon/tree"
 #import "kryon/Frame"
+#import "kryon/paint_queue"
 
 using ButtonState;
 using ElevationRole;
@@ -28,6 +30,7 @@ using FontRole;
 using FrameStatus;
 using MotionEasing;
 using StyleField;
+using PaintKind;
 
 integration_sheet: CssSheet;
 integration_session: Session;
@@ -378,6 +381,61 @@ ResponsiveBox :: (width: float32) {
     Check(align == 1, "text-align reaches native Text")
 }
 
+// A content-sized Column with a CSS background and border paints its box
+// when it closes, beneath the children it already queued.
+PaintedBox :: () {
+    env := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), 400.0)
+    Check(CssSheetInstall(*integration_sheet, env, null), "install card styles")
+    BeginFrame(integration_session, cast(u64)506, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    outer := Layout.Draw(integration_session, .{.key = 701})
+    before := PendingPaintCount(integration_session)
+    card := Layout.Draw(integration_session, .{.key = 702, .class_name = StyleClass("card")})
+    unused BoxWidget.Draw(integration_session, .{.key = 703, .bounds = .{height = 30.0},
+        .fill = Color.{1, 2, 3, 255}})
+    Check(card.opened && End(integration_session), "close card")
+    Check(Near(TreeSubmittedBounds(integration_session, card.node), 0.0, 0.0, 400.0, 50.0),
+        "the card wraps its child and padding")
+    fill := PendingPaintAt(integration_session, before)
+    line := PendingPaintAt(integration_session, before + 1)
+    child := PendingPaintAt(integration_session, before + 2)
+    Check(fill.kind == PaintKindRoundedFill && Near(fill.bounds, 0.0, 0.0, 400.0, 50.0) &&
+        fill.radius == 8.0 && ColorIs(fill.color, cast(u32)0x102030ff), "the card fill paints first")
+    Check(line.kind == PaintKindRoundedOutline && line.line_width == 1.0 &&
+        ColorIs(line.color, cast(u32)0x405060ff), "then its border")
+    Check(child.kind == PaintKindRoundedFill && ColorIs(child.color, cast(u32)0x010203ff) &&
+        Near(child.bounds, 10.0, 10.0, 380.0, 30.0), "children paint above the box")
+    Check(outer.opened && End(integration_session), "close painted column")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "painted frame")
+}
+
+// In a row of fixed height children stretch and an auto width takes what
+// is left; flex: 1 takes a column's remaining height; margin-left: auto
+// pushes a row child to the end; Text sizes itself where it is placed.
+FillLayout :: () {
+    Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install fill styles")
+    BeginFrame(integration_session, cast(u64)507, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    shell := Layout.Row(integration_session, .{.key = 801, .bounds = .{0.0, 0.0, 400.0, 300.0}})
+    side := Layout.Draw(integration_session, .{.key = 802, .class_name = StyleClass("side")})
+    Check(shell.opened && Near(side.bounds, 0.0, 0.0, 120.0, 300.0), "a fixed-width column stretches to the row")
+    Check(End(integration_session), "close side")
+    main := Layout.Draw(integration_session, .{.key = 803})
+    Check(Near(main.bounds, 120.0, 0.0, 280.0, 300.0), "an auto width takes what the row has left")
+    TextWidget.Draw(integration_session, .{.key = 804, .text = "Services"})
+    title := TreeSubmittedBounds(integration_session, TreeSubmittedCount(integration_session) - 1)
+    Check(title.x == 120.0 && title.y == 0.0 && title.width == 280.0 && title.height > 0.0,
+        "placed text fills the column and takes its line height")
+    grow := Layout.Draw(integration_session, .{.key = 805, .class_name = StyleClass("grow")})
+    Check(grow.bounds.y == title.height && grow.bounds.height == 300.0 - title.height,
+        "flex: 1 takes the column's remaining height")
+    Check(End(integration_session), "close grow")
+    row := Layout.Row(integration_session, .{.key = 806})
+    push := Layout.Row(integration_session, .{.key = 807, .class_name = StyleClass("push")})
+    Check(row.opened && push.bounds.x == 350.0 && push.bounds.width == 50.0, "margin-left: auto pushes to the row end")
+    Check(End(integration_session) && End(integration_session), "close push row")
+    Check(End(integration_session) && End(integration_session), "close main and shell")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "fill frame")
+}
+
 main :: () -> s32 {
     if !SessionValid(integration_session) { integration_session = SessionOpen() }
     Integration()
@@ -388,6 +446,8 @@ main :: () -> s32 {
     ResponsiveFlex(1200.0, false)
     ResponsiveBox(550.0)
     ResponsiveBox(1200.0)
+    PaintedBox()
+    FillLayout()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }
     return test_failures

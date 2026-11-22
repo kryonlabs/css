@@ -75,3 +75,14 @@ Row.bounded {
 }
 
 Text.centered { text-align: center; }
+
+Column.card {
+  background: #102030;
+  border: 1px solid #405060;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+Column.side { width: 120px; }
+Column.grow { flex: 1; }
+Row.push { width: 50px; margin-left: auto; }

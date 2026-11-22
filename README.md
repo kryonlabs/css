@@ -74,8 +74,14 @@ one class (`.primary`), one ID (`#save`; set `props.id` to `StyleId("save")`),
 Kryon attributes (`[role=Label]`, `[tone=Accent]`, `[emphasis=Soft]`,
 `[size=Small]`, `[state=normal]`) and one state pseudo-class:
 `:hover`, `:active`, `:focus`, `:focus-visible`, `:disabled`, `:selected`,
-`:checked` or `:loading`, in comma lists. Combinators and nesting are outside
-the subset.
+`:checked` or `:loading`, in comma lists. A rule can hold nested `&:state`,
+`&.class`, `&#id` and `&[attribute]` rules one level deep; each adds its parts
+to every parent selector and may not set a class, id, attribute or state the
+parent sets to another value. Native styles are matched without tree
+context, so descendant and child combinators (` `, `>`, `+`, `~`), `:not()`,
+`:first-child`, `:last-child` and `:nth-child()` are errors: give the inner
+widget its own class (`.card .title` becomes `Text.card-title`), or set a
+class or state from the frame.
 
 Properties: `color`, `background` (a color or a two-stop
 `linear-gradient`), `background-color`, `border`, `border-color`,

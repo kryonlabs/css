@@ -195,6 +195,9 @@ CssExportItem :: struct {
     order: s32
     selector_start: s32
     selector_length: s32
+    // A nested & rule's own parts, written after the parent's selector.
+    suffix_start: s32
+    suffix_length: s32
     body: s32
 }
 
@@ -224,7 +227,16 @@ CssExportRule :: (e: *CssExporter, source: string, item: CssExportItem) -> bool 
     body: *CssExportBody = *css_export_bodies[item.body]
     CssExportOpen(e, source, *body.condition, body.query)
     CssExportWrite(e, "#kryon-dom-root :where(")
-    if !CssExportCompound(e, source[item.selector_start:item.selector_start + item.selector_length]) {
+    selector := source[item.selector_start:item.selector_start + item.selector_length]
+    combined: [512]u8
+    if item.suffix_length > 0 && item.selector_length + item.suffix_length <= 512 {
+        for index: 0..item.selector_length - 1 { combined[index] = selector[index] }
+        for index: 0..item.suffix_length - 1 {
+            combined[item.selector_length + index] = source[item.suffix_start + index]
+        }
+        selector = TextView(combined[:item.selector_length + item.suffix_length])
+    }
+    if !CssExportCompound(e, selector) {
         return false
     }
     CssExportWrite(e, ") {\n")
@@ -321,6 +333,8 @@ ExportCSS :: (source: string, path: string, env: CssEnvironment, output: []u8) -
             item.order = item_count
             item.selector_start = pending.start
             item.selector_length = pending.length
+            item.suffix_start = pending.suffix_start
+            item.suffix_length = pending.suffix_length
             item.body = body_count - 1
             item_count += 1
         }

@@ -326,6 +326,17 @@ CssPendingSelector :: struct {
     state: s32
     start: s32
     length: s32
+    // A nested `&` rule's own parts, written after the parent's selector.
+    suffix_start: s32
+    suffix_length: s32
+}
+
+// A nested `&:hover { }`-style rule: the parent's selectors with its own
+// parts added, and where its body starts. It is read after the parent.
+CssNestedRule :: struct {
+    selectors: [8]CssPendingSelector
+    count: s32
+    body: CssCursor
 }
 
 CssKeyframeCapacity :: 64
@@ -420,6 +431,11 @@ CssParser :: struct {
     selectors: [8]CssPendingSelector
     selector_count: s32
     selector_next: s32
+    nested: [4]CssNestedRule
+    nested_count: s32
+    nested_next: s32
+    nested_resume: CssCursor
+    in_nested: bool
     selector_start: s32
     selector_length: s32
     template: StyleData

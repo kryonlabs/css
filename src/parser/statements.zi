@@ -264,6 +264,114 @@ CssReadAtRule :: (p: *CssParser) -> bool {
     return false
 }
 
+// Adds a nested rule's own parts to a parent selector: each part may only
+// add what the parent leaves open, so the result is one flat compound.
+CssMergeSelector :: (p: *CssParser, target: *CssPendingSelector, part: CssPendingSelector) -> bool {
+    a := *target.selector
+    b := part.selector
+    clash := (b.class_name != 0 && a.class_name != 0 && a.class_name != b.class_name) ||
+        (b.id != 0 && a.id != 0 && a.id != b.id)
+    if b.class_name != 0 { a.class_name = b.class_name }
+    if b.id != 0 { a.id = b.id }
+    fields: [8]*s32 = .[*a.role, *a.tone, *a.emphasis, *a.size, *a.state, *a.validation, *a.orientation, *a.placement]
+    values: [8]s32 = .[b.role, b.tone, b.emphasis, b.size, b.state, b.validation, b.orientation, b.placement]
+    for index: 0..7 {
+        if values[index] == StyleAny() { continue }
+        field := fields[index]
+        if field.* != StyleAny() && field.* != values[index] { clash = true }
+        <<field = values[index]
+    }
+    if part.state != StyleStateAny() {
+        if target.state != StyleStateAny() && target.state != part.state { clash = true }
+        target.state = part.state
+    }
+    if clash {
+        CssFail(p, "a nested & rule repeats a class, id, attribute or state of its parent with another value")
+        return false
+    }
+    return true
+}
+
+// From after '{' past the matching '}', over strings and comments.
+CssSkipBlock :: (p: *CssParser) -> bool {
+    depth: s32 = 1
+    while !CssAtEnd(p) {
+        byte := p.cursor.source[p.cursor.pos]
+        if byte == #char "\"" || byte == #char "'" {
+            span := CssReadString(p)
+            if !span.ok { return false }
+            continue
+        }
+        if byte == #char "/" && CssPeek(p, 1) == #char "*" {
+            CssSkipSpace(p)
+            if CssFailed(p) { return false }
+            continue
+        }
+        CssAdvance(p, 1)
+        if byte == #char "{" { depth += 1 }
+        if byte == #char "}" {
+            depth -= 1
+            if depth == 0 { return true }
+        }
+    }
+    CssFail(p, "expected '}' to close the nested rule")
+    return false
+}
+
+// `&:hover { }`, `&.active { }`, `&#save { }` or `&[tone=Accent] { }` inside a
+// rule: kept with the parent's selectors and read once the parent yields.
+CssReadNestedRule :: (p: *CssParser) -> bool {
+    if p.nested_count >= 4 {
+        CssFail(p, "more than 4 nested rules in one rule")
+        return false
+    }
+    CssAdvance(p, 1)
+    part: CssPendingSelector
+    part.selector = StyleDefaultSelector()
+    part.state = StyleStateAny()
+    part.suffix_start = p.cursor.pos
+    parts := CssReadSelectorParts(p, *part)
+    if parts < 0 { return false }
+    part.suffix_length = p.cursor.pos - part.suffix_start
+    if parts == 0 || !CssExpect(p, #char "{",
+        "nest as &:state, &.class, &#id or &[attribute] { }; a nested combinator is outside Kryon CSS") {
+        if !CssFailed(p) {
+            CssFail(p, "nest as &:state, &.class, &#id or &[attribute] { }; a nested combinator is outside Kryon CSS")
+        }
+        return false
+    }
+    nested := *p.nested[p.nested_count]
+    nested.count = 0
+    for index: cast(s32)0..p.selector_count - 1 {
+        merged := p.selectors[index]
+        if !CssMergeSelector(p, *merged, part) { return false }
+        merged.suffix_start = part.suffix_start
+        merged.suffix_length = part.suffix_length
+        nested.selectors[nested.count] = merged
+        nested.count += 1
+    }
+    nested.body = p.cursor
+    if !CssSkipBlock(p) { return false }
+    p.nested_count += 1
+    return true
+}
+
+// The next nested rule of the rule just yielded: its selectors and body.
+CssStartNested :: (p: *CssParser) -> bool {
+    nested := p.nested[p.nested_next]
+    if p.nested_next == 0 { p.nested_resume = p.cursor }
+    p.nested_next += 1
+    for index: cast(s32)0..nested.count - 1 { p.selectors[index] = nested.selectors[index] }
+    p.selector_count = nested.count
+    p.selector_next = 0
+    p.cursor = nested.body
+    p.in_nested = true
+    ok := CssReadRuleBody(p)
+    p.in_nested = false
+    if p.nested_next >= p.nested_count { p.cursor = p.nested_resume }
+    return ok
+}
+
 // A rule body after '{': declarations up to '}'.
 CssReadRuleBody :: (p: *CssParser) -> bool {
     p.template = StyleData.{}
@@ -293,6 +401,11 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
             continue
         }
         origin: CssCursor = p.cursor
+        if CssAtByte(p, #char "&") && !p.in_nested {
+            if CssReadNestedRule(p) { continue }
+            if CssRecoverItem(p, origin, CssIssueKind.Selector) { continue }
+            return false
+        }
         if CssAtByte(p, #char "{") || CssAtByte(p, #char "@") || CssAtByte(p, #char "&") ||
             CssAtByte(p, #char ".") || CssAtByte(p, #char "#") || CssAtByte(p, #char "[") ||
             CssAtByte(p, #char "*") || CssAtByte(p, #char ">") || CssAtByte(p, #char ":") {
@@ -414,8 +527,15 @@ CssStep :: (p: *CssParser) -> s32 {
         CssYieldSelector(p)
         return p.status
     }
+    if p.nested_next < p.nested_count {
+        if !CssStartNested(p) { return p.status }
+        CssYieldSelector(p)
+        return p.status
+    }
     p.selector_count = 0
     p.selector_next = 0
+    p.nested_count = 0
+    p.nested_next = 0
     while true {
         CssSkipSpace(p)
         if CssFailed(p) { return p.status }

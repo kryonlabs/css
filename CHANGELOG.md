@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Rules nest `&:state`, `&.class`, `&#id` and `&[attribute]` rules one level deep, flattened into compound selectors and exported with the parent selector. Combinator, `:not()` and child-position errors name the native idiom.
+
 - Lengths take em, vw and vh and calc(), min(), max() and clamp(): static ones fold while the sheet is read, viewport ones resolve at install and packs keep them; CssSheetSameMedia reports a change when a new viewport changes an active length. var() fallbacks may nest one var(), and var(--kryon-NAME) reads the installed theme palette.
 
 - Lower margin, min/max width, max height, overflow and text-align to native box styles. Packs use one rule layout; a pack in an older layout is refused as stale.

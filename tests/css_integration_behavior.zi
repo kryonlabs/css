@@ -454,6 +454,12 @@ Text.fluid {
 
 Column.fluid-box { max-width: calc(50rem - 100px); margin: 0 min(10px, 0.5em); }
 
+Text.nest {
+  color: #111111;
+  &:disabled { color: #222222; }
+  &#special { color: #333333; }
+}
+
 :root { --inner: 7px; }
 Text.nested {
   padding: var(--outer, var(--inner, 3px));
@@ -502,6 +508,15 @@ FluidValues :: () {
     nested := ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(0, StyleClass("nested"), StyleKindText(), state), state)
     Check(nested.padding_x == 7.0 && nested.gap == 5.0, "a nested var() fallback reads the inner property, then its literal")
     Check(nested.foreground == CurrentText(), "--kryon-text reads the installed theme's text color")
+    nest := StyleClass("nest")
+    normal := cast(s32)ButtonStateNormal
+    disabled := cast(s32)ButtonStateDisabled
+    Check(ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(0, nest, StyleKindText(), normal), normal).foreground ==
+        cast(u32)0x111111ff, "the parent of nested rules keeps its own declarations")
+    Check(ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(0, nest, StyleKindText(), disabled), disabled).foreground ==
+        cast(u32)0x222222ff, "&:disabled adds a state to the parent selector")
+    Check(ResolveInstalledStyleRules(StyleData.{}, StyleTextFacts(StyleId("special"), nest, StyleKindText(), normal),
+        normal).foreground == cast(u32)0x333333ff, "&#special adds an id to the parent selector")
 }
 
 main :: () -> s32 {

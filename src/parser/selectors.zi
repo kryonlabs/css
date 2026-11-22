@@ -93,6 +93,8 @@ CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
     pending.selector = StyleDefaultSelector()
     pending.state = StyleStateAny()
     pending.start = p.cursor.pos
+    pending.suffix_start = 0
+    pending.suffix_length = 0
     parts: s32 = 0
     if CssAtByte(p, #char "*") {
         CssAdvance(p, 1)
@@ -108,66 +110,9 @@ CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
         pending.selector.kind = kind
         parts += 1
     }
-    while !CssAtEnd(p) {
-        byte: u8 = p.cursor.source[p.cursor.pos]
-        if byte == #char "." {
-            CssAdvance(p, 1)
-            name: CssName = CssReadName(p)
-            if CssFailed(p) { return false }
-            if name.length == 0 {
-                CssFail(p, "expected a class name after '.'")
-                return false
-            }
-            if pending.selector.class_name != 0 {
-                CssFail(p, "one class per selector in Kryon CSS")
-                return false
-            }
-            pending.selector.class_name = CssClassId(name)
-        } else if byte == #char "[" {
-            CssAdvance(p, 1)
-            CssReadAttribute(p, *pending.selector)
-            if CssFailed(p) { return false }
-        } else if byte == #char ":" {
-            if CssPeek(p, 1) == #char ":" {
-                CssFail(p, "pseudo-elements are outside Kryon CSS")
-                return false
-            }
-            CssAdvance(p, 1)
-            name: CssName = CssReadName(p)
-            if CssFailed(p) { return false }
-            if CssAtByte(p, #char "(") {
-                CssFailName(p, "selector function", name, "() is outside Kryon CSS")
-                return false
-            }
-            state: s32 = CssPseudoState(name)
-            if state < 0 {
-                if CssNameEquals(name, "root") { CssFail(p, ":root holds only custom properties") }
-                else { CssFailName(p, "unknown pseudo-class", name, "") }
-                return false
-            }
-            if pending.state != StyleStateAny() {
-                CssFail(p, "one state pseudo-class per selector")
-                return false
-            }
-            pending.state = state
-        } else if byte == #char "#" {
-            CssAdvance(p, 1)
-            name: CssName = CssReadName(p)
-            if CssFailed(p) { return false }
-            if name.length == 0 {
-                CssFail(p, "expected an id name after '#'")
-                return false
-            }
-            if pending.selector.id != 0 {
-                CssFail(p, "one id per selector in Kryon CSS")
-                return false
-            }
-            pending.selector.id = CssClassId(name)
-        } else {
-            break
-        }
-        parts += 1
-    }
+    more := CssReadSelectorParts(p, pending)
+    if more < 0 { return false }
+    parts += more
     if parts == 0 {
         CssFail(p, "expected a selector")
         return false
@@ -178,12 +123,83 @@ CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
     if CssAtByte(p, #char ",") || CssAtByte(p, #char "{") { return true }
     if CssAtByte(p, #char ">") || CssAtByte(p, #char "+") || CssAtByte(p, #char "~") ||
         CssNameStart(CssPeek(p, 0)) || CssAtByte(p, #char "*") || CssAtByte(p, #char ".") {
-        CssFail(p, "combinators are outside Kryon CSS; style the widget with a class")
+        CssFail(p, "combinators are outside Kryon CSS; give the inner widget its own class")
         return false
     }
     CssFail(p, "expected '{' after the selector")
     return false
 }
+
+// Classes, ids, attributes and one state pseudo-class after a type; the
+// count read, or -1 after a diagnostic.
+CssReadSelectorParts :: (p: *CssParser, pending: *CssPendingSelector) -> s32 {
+    parts: s32 = 0
+    while !CssAtEnd(p) {
+        byte: u8 = p.cursor.source[p.cursor.pos]
+        if byte == #char "." {
+            CssAdvance(p, 1)
+            name: CssName = CssReadName(p)
+            if CssFailed(p) { return -1 }
+            if name.length == 0 {
+                CssFail(p, "expected a class name after '.'")
+                return -1
+            }
+            if pending.selector.class_name != 0 {
+                CssFail(p, "one class per selector in Kryon CSS")
+                return -1
+            }
+            pending.selector.class_name = CssClassId(name)
+        } else if byte == #char "[" {
+            CssAdvance(p, 1)
+            CssReadAttribute(p, *pending.selector)
+            if CssFailed(p) { return -1 }
+        } else if byte == #char ":" {
+            if CssPeek(p, 1) == #char ":" {
+                CssFail(p, "pseudo-elements are outside Kryon CSS")
+                return -1
+            }
+            CssAdvance(p, 1)
+            name: CssName = CssReadName(p)
+            if CssFailed(p) { return -1 }
+            if CssAtByte(p, #char "(") {
+                CssFailName(p, "selector function", name, "() is outside Kryon CSS; write the positive state or give the widget a class")
+                return -1
+            }
+            state: s32 = CssPseudoState(name)
+            if state < 0 {
+                if CssNameEquals(name, "root") { CssFail(p, ":root holds only custom properties") }
+                else if CssNameEquals(name, "first-child") || CssNameEquals(name, "last-child") ||
+                    CssNameEquals(name, "nth-child") {
+                    CssFailName(p, "pseudo-class", name, " needs sibling context; set a class from the frame")
+                } else { CssFailName(p, "unknown pseudo-class", name, "") }
+                return -1
+            }
+            if pending.state != StyleStateAny() {
+                CssFail(p, "one state pseudo-class per selector")
+                return -1
+            }
+            pending.state = state
+        } else if byte == #char "#" {
+            CssAdvance(p, 1)
+            name: CssName = CssReadName(p)
+            if CssFailed(p) { return -1 }
+            if name.length == 0 {
+                CssFail(p, "expected an id name after '#'")
+                return -1
+            }
+            if pending.selector.id != 0 {
+                CssFail(p, "one id per selector in Kryon CSS")
+                return -1
+            }
+            pending.selector.id = CssClassId(name)
+        } else {
+            break
+        }
+        parts += 1
+    }
+    return parts
+}
+
 
 // A selector list up to '{'. ':root' alone opens a custom property block.
 CssReadSelectorList :: (p: *CssParser) -> bool {

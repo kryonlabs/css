@@ -215,6 +215,10 @@ Diagnostics :: () {
     ParseFails("Button { gap: 4; }", "a length needs a unit", "unitless length")
     ParseFails("Button { gap: 2vmin; }", "is outside Kryon CSS; use px, rem, em, vw or vh", "unknown length unit")
     ParseFails("Button { gap: 50%; }", "percentages are not native lengths", "percent")
+    ParseFails("Button.a { & .b { color: red; } }", "a nested combinator is outside Kryon CSS", "nested combinator")
+    ParseFails("Button.a { &.b { color: red; } }", "repeats a class, id, attribute or state", "nested second class")
+    ParseFails("Button.a { &:hover { &:focus { color: red; } } }", "nested rules are outside Kryon CSS", "nesting twice")
+    ParseFails("Button:first-child { color: red; }", "needs sibling context", "first child")
     ParseFails("Button { gap: calc(4px * 2px); }", "multiply a length by a number", "length times length")
     ParseFails("Button { gap: calc(4px +2px); }", "expected ')' to close calc", "calc sign needs spaces")
     ParseFails("Button { gap: min(1vw, max(2vw, 4px)); }", "nested min(), max() or clamp() with vw or vh",

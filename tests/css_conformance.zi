@@ -149,9 +149,25 @@ ThemeEnv :: (theme: s32) -> CssEnvironment {
     return env
 }
 
-// Small numbers are failures: 1 the pack, 2 the app sheet, 3 the build.
+conformance_flex_css :: #string CSS
+Row { display: flex; justify-content: space-around; }
+Text { flex: initial; flex-grow: .5; flex-shrink: 2; flex-basis: 2rem; }
+CSS;
+
+FlexConforms :: () -> bool {
+    CssSheetReset(*conformance_sheet)
+    if !CssSheetParse(*conformance_sheet, conformance_flex_css, "flex.css", CssNoImports) ||
+        !CssSheetBuild(*conformance_sheet, CssDefaultEnvironment(), null, *conformance_rules) { return false }
+    container := conformance_rules.items[0].flex
+    item := conformance_rules.items[1].flex
+    return conformance_rules.count == 2 && container.justify_content == 4 &&
+        item.basis == 32.0 && item.grow == 0.5 && item.shrink == 2.0
+}
+
+// Small numbers signal failure to load, parse, build or resolve flex declarations.
 #program_export
 CssConformanceDigest :: (pack: s32, theme: s32) -> u32 {
+    if pack == 0 && theme == 0 && !FlexConforms() { return 4 }
     CssSheetReset(*conformance_sheet)
     if !CssSheetLoad(*conformance_sheet, Pack(pack)) { return 1 }
     if !CssSheetParse(*conformance_sheet, conformance_app, "conformance.css", CssNoImports) { return 2 }

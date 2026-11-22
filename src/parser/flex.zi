@@ -1,0 +1,172 @@
+// Native flex declarations are stored separately from widget paint and text
+// fields. Layout.Row and Layout.Draw consume them when placing a measured batch.
+
+css_flex_properties: [10]string = .["display", "flex-direction", "flex-wrap", "justify-content",
+    "align-items", "align-self", "flex", "flex-basis", "flex-grow", "flex-shrink"];
+
+CssFlexProperty :: (name: CssName) -> bool {
+    for property: css_flex_properties {
+        if CssNameEquals(name, property) { return true }
+    }
+    return false
+}
+
+CssFlexTarget :: (p: *CssParser, name: CssName, grid: bool) {
+    if !CssCollectIssues(p) { return }
+    for index: cast(s32)0..p.selector_count - 1 {
+        kind := p.selectors[index].selector.kind
+        if kind == StyleKindAny() { continue }
+        matches := ifx grid then kind == StyleKindGrid() else kind == StyleKindRow() || kind == StyleKindColumn()
+        if !matches {
+            reason := "native flex layout requires a measured Row or Column"
+            if grid { reason = "native grid display requires Layout.Grid" }
+            CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, TextView(name.bytes[:name.length]),
+                reason, true)
+            return
+        }
+    }
+}
+
+CssFlexDirectionValue :: (word: CssName) -> s32 {
+    if CssNameEquals(word, "row") { return 0 }
+    if CssNameEquals(word, "column") { return 1 }
+    if CssNameEquals(word, "row-reverse") { return 2 }
+    if CssNameEquals(word, "column-reverse") { return 3 }
+    return -1
+}
+
+CssFlexJustifyValue :: (word: CssName) -> s32 {
+    if CssNameEquals(word, "flex-start") || CssNameEquals(word, "normal") { return 0 }
+    if CssNameEquals(word, "center") { return 1 }
+    if CssNameEquals(word, "flex-end") { return 2 }
+    if CssNameEquals(word, "space-between") { return 3 }
+    if CssNameEquals(word, "space-around") { return 4 }
+    if CssNameEquals(word, "space-evenly") { return 5 }
+    return -1
+}
+
+CssFlexAlignValue :: (word: CssName) -> s32 {
+    if CssNameEquals(word, "flex-start") || CssNameEquals(word, "start") { return 0 }
+    if CssNameEquals(word, "center") { return 1 }
+    if CssNameEquals(word, "flex-end") || CssNameEquals(word, "end") { return 2 }
+    if CssNameEquals(word, "stretch") || CssNameEquals(word, "normal") { return 3 }
+    return -1
+}
+
+CssFlexBasisValue :: (number: CssNumber) -> (value: float32, ok: bool) {
+    if !number.ok || number.percent || number.value < 0.0 { return 0.0, false }
+    if CssNameEquals(number.unit, "px") || (number.unit.length == 0 && number.value == 0.0) {
+        return cast(float32)number.value, true
+    }
+    if CssNameEquals(number.unit, "rem") { return cast(float32)(number.value * CssRemPixels), true }
+    return 0.0, false
+}
+
+CssFlexShorthand :: (p: *CssParser, end: s32, flex: *StyleFlexData) -> bool {
+    origin := p.cursor
+    word := CssReadName(p)
+    flex.grow = 1.0
+    flex.shrink = 1.0
+    flex.basis = -1.0
+    if CssNameEquals(word, "auto") { return !CssMoreValue(p, end) }
+    if CssNameEquals(word, "none") {
+        flex.grow = 0.0; flex.shrink = 0.0
+        return !CssMoreValue(p, end)
+    }
+    if CssNameEquals(word, "initial") {
+        flex.grow = 0.0
+        return !CssMoreValue(p, end)
+    }
+    p.cursor = origin
+    factors: s32 = 0
+    basis_seen := false
+    flex.basis = 0.0
+    while CssMoreValue(p, end) {
+        number := CssReadNumber(p)
+        if number.ok && !number.percent && number.unit.length == 0 && number.value >= 0.0 && factors < 2 {
+            if factors == 0 { flex.grow = cast(float32)number.value }
+            else { flex.shrink = cast(float32)number.value }
+            factors += 1
+            continue
+        }
+        if basis_seen { return false }
+        basis, ok := CssFlexBasisValue(number)
+        if !ok {
+            if number.ok || !CssNameEquals(CssReadName(p), "auto") { return false }
+            basis = -1.0
+        }
+        flex.basis = basis
+        basis_seen = true
+    }
+    return factors > 0 || basis_seen
+}
+
+CssApplyFlexProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
+    status := p.status
+    flex := p.flex_template
+    container := false
+    field: u32 = 0
+    valid := true
+    if CssNameEquals(name, "flex") {
+        valid = CssFlexShorthand(p, end, *flex)
+        field = cast(u32)StyleFlexGrow | cast(u32)StyleFlexShrink | cast(u32)StyleFlexBasis
+    } else if CssNameEquals(name, "flex-grow") || CssNameEquals(name, "flex-shrink") {
+        number := CssReadNumber(p)
+        valid = number.ok && !number.percent && number.unit.length == 0 && number.value >= 0.0
+        if CssNameEquals(name, "flex-grow") {
+            flex.grow = cast(float32)number.value
+            field = cast(u32)StyleFlexGrow
+        } else {
+            flex.shrink = cast(float32)number.value
+            field = cast(u32)StyleFlexShrink
+        }
+    } else if CssNameEquals(name, "flex-basis") {
+        number := CssReadNumber(p)
+        basis, ok := CssFlexBasisValue(number)
+        flex.basis = basis
+        valid = ok
+        if !number.ok && CssNameEquals(CssReadName(p), "auto") { flex.basis = -1.0; valid = true }
+        field = cast(u32)StyleFlexBasis
+    } else {
+        word := CssReadName(p)
+        container = true
+        if CssNameEquals(name, "display") {
+            if !CssMoreValue(p, end) && !CssFailed(p) &&
+                (CssNameEquals(word, "flex") || CssNameEquals(word, "grid")) {
+                CssFlexTarget(p, name, CssNameEquals(word, "grid"))
+                return CssScopeNative
+            }
+            valid = false
+        } else if CssNameEquals(name, "flex-direction") {
+            flex.direction = CssFlexDirectionValue(word)
+            valid = flex.direction >= 0
+            field = cast(u32)StyleFlexDirection
+        } else if CssNameEquals(name, "flex-wrap") {
+            flex.wrap = CssNameEquals(word, "wrap")
+            valid = flex.wrap || CssNameEquals(word, "nowrap")
+            field = cast(u32)StyleFlexWrap
+        } else if CssNameEquals(name, "justify-content") {
+            flex.justify_content = CssFlexJustifyValue(word)
+            valid = flex.justify_content >= 0
+            field = cast(u32)StyleFlexJustify
+        } else if CssNameEquals(name, "align-items") {
+            flex.align_items = CssFlexAlignValue(word)
+            valid = flex.align_items >= 0
+            field = cast(u32)StyleFlexAlign
+        } else {
+            container = false
+            flex.align_self = CssFlexAlignValue(word)
+            valid = flex.align_self >= 0 || CssNameEquals(word, "auto")
+            field = cast(u32)StyleFlexSelf
+        }
+    }
+    if !valid || CssMoreValue(p, end) || CssFailed(p) {
+        p.status = status
+        p.diagnostic_length = 0
+        return CssPassWebDeclaration(p)
+    }
+    if container { CssFlexTarget(p, name, false) }
+    flex.fields |= field
+    p.flex_template = flex
+    return CssScopeNative
+}

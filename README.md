@@ -83,7 +83,9 @@ Properties: `color`, `background` (a color or a two-stop
 `outline-color`, `opacity` (number or percentage), `padding` (opposite sides
 must match),
 `padding-inline`, `padding-block`, `gap`, `row-gap`, `column-gap`,
-`grid-template-columns`,
+`grid-template-columns`, `display`, `flex`, `flex-direction`, `flex-wrap`,
+`flex-basis`, `flex-grow`, `flex-shrink`, `justify-content`, `align-items`,
+`align-self`,
 `font-size`, `font-family`, `font-weight`, `font-style`,
 `letter-spacing`, `width`, `height`, `min-height`, `min-block-size`, `line-height`,
 `translate`, `-kryon-material` (`lightfield`, `flat`, `glass`),
@@ -91,10 +93,9 @@ must match),
 `heading`, `code`), `-kryon-elevation` (`none`, `rest`, `raised`, `floating`),
 `-kryon-motion-duration`, `-kryon-motion-multiplier`,
 `-kryon-motion-easing` (`inherit`, `standard`, `linear`, `instant`) and
-`-kryon-motion-reduced` (`reduce`, `no-preference`). Document layout properties
-(`margin`, `display` and the like) are kept for the web
-document host and skipped by native hosts. Each native widget uses the fields
-its paint and layout implement:
+`-kryon-motion-reduced` (`reduce`, `no-preference`). The web document host
+also uses browser-only declarations such as `margin`. Each native widget uses
+the fields its paint and layout implement.
 
 - `gap` takes one value for both axes or two values in row, column order.
   `row-gap` and `column-gap` cascade independently. Gaps take `normal`
@@ -104,8 +105,8 @@ its paint and layout implement:
 - `Row`, `Column` and `Grid` read `width` and `height` as outer sizes, including
   padding. They accept positive `px` or `rem` lengths and `auto`. A positive
   axis in `props.bounds` takes precedence. Otherwise `auto` uses the ordinary
-  parent content size, or the measured row height for a grid with declared
-  items, and can override an earlier size rule. Other sizing
+  parent content size or the measured height of a grid or flex container with
+  declared items. `auto` can override an earlier size rule. Other sizing
   values, including zero, percentages, intrinsic keywords, `var()` and
   `calc()`, are browser-only and are skipped by native layout. Browser export
   keeps both sets of values. Native packs accept the native subset.
@@ -114,7 +115,23 @@ its paint and layout implement:
   `N` is 1–1024 and `LENGTH` is a positive `px` or `rem` length. The
   responsive spelling `min(LENGTH, 100%)` also works as the minimum.
   Other track expressions remain available to browser export. Choose
-  `Layout.Grid` in the app frame and declare each item's height and span.
+  `Layout.Grid` in the app frame and provide item heights or width-aware
+  measurements and any spans.
+- `display: flex` maps to measured `Layout.Row` and `Layout.Draw` containers.
+  Pass `[]Layout.FlexItem` and `[]Layout.FlexPlacement` to either API, then
+  draw each child in its placement's `bounds`. Set the item's style `kind`,
+  `id` and `class_name` when a selector matches it. `display: grid` maps
+  to `Layout.Grid`. Native code selects the container.
+- Flex directions are `row`, `row-reverse`, `column` and `column-reverse`.
+  Lines support `wrap` and `nowrap` and use the main-axis and cross-axis gaps.
+  Justification supports `normal`, `flex-start`, `center`, `flex-end`,
+  `space-between`, `space-around` and `space-evenly`. Alignment supports
+  `start`/`flex-start`, `center`, `end`/`flex-end`, `stretch`, `normal`, and
+  `auto` for `align-self`. Stretch fills an unset cross extent. Flex basis
+  accepts `auto`, nonnegative `px` and `rem`, and zero. The `flex` shorthand
+  also accepts `none`, `auto` and `initial`. Percentage or intrinsic basis,
+  `wrap-reverse`, baseline alignment and cross-line distribution are outside
+  this native subset.
 - `Card.Draw` uses stylesheet axis padding for its returned content rectangle.
 - Native `Text`, `Heading` and `ParagraphText` read `font-weight`,
   `font-style` and `letter-spacing`. Weight takes `normal` (400), `bold` (700)
@@ -311,8 +328,9 @@ Heading.title {
 ```
 
 The example sets a 44-unit minimum height and 8-unit vertical and 16-unit
-horizontal padding. Use Kryon layout APIs for native flex/grid layout and
-margins. Text emphasis, alignment and wrapping are widget props where available.
+horizontal padding. Use the measured Kryon layout APIs with the CSS flex and
+grid declarations above. Text emphasis, alignment and wrapping are widget props
+where available.
 
 ## Style packs
 

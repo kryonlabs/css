@@ -73,6 +73,17 @@ CssFormatParse :: (source: string, result: *CssFormatResult) -> CssFormatCounts 
             hash = CssFormatMixFloat(hash, rule.style.motion_multiplier)
             hash = CssFormatMix(hash, cast(u32)cast(s32)rule.style.motion_easing)
             hash = CssFormatMix(hash, ifx rule.style.motion_reduced then cast(u32)1 else cast(u32)0)
+            if rule.flex.fields != 0 {
+                hash = CssFormatMix(hash, rule.flex.fields)
+                hash = CssFormatMix(hash, cast(u32)rule.flex.direction)
+                hash = CssFormatMix(hash, ifx rule.flex.wrap then cast(u32)1 else cast(u32)0)
+                hash = CssFormatMix(hash, cast(u32)rule.flex.justify_content)
+                hash = CssFormatMix(hash, cast(u32)rule.flex.align_items)
+                hash = CssFormatMixFloat(hash, rule.flex.basis)
+                hash = CssFormatMixFloat(hash, rule.flex.grow)
+                hash = CssFormatMixFloat(hash, rule.flex.shrink)
+                hash = CssFormatMix(hash, cast(u32)rule.flex.align_self)
+            }
             hash = CssFormatMix(hash, cast(u32)p.rule_ref_count)
         } else if status == cast(s32)CssStatusProperty {
             counts.properties += 1

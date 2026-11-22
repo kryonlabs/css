@@ -353,9 +353,12 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         Emit("#import \"css_sheet\"\n\n")
     rule_words: s32 = CssCompiledRuleWords
     for index: cast(s32)0..sheet.rule_count - 1 {
+        if sheet.rules[index].rule.flex.fields != 0 { rule_words = CssFlexRuleWords; break }
         fields := sheet.rules[index].rule.style.fields
-        if (fields & cast(u32)StyleGridTracks) != 0 { rule_words = CssGridRuleWords; break }
-        if (fields & (cast(u32)StyleWidth | cast(u32)StyleHeight)) != 0 { rule_words = CssSizedRuleWords }
+        if (fields & cast(u32)StyleGridTracks) != 0 { rule_words = CssGridRuleWords }
+        if rule_words < CssSizedRuleWords && (fields & (cast(u32)StyleWidth | cast(u32)StyleHeight)) != 0 {
+            rule_words = CssSizedRuleWords
+        }
     }
     for index: cast(s32)0..sheet.rule_count - 1 {
         entry: CssSheetRule = sheet.rules[index]
@@ -414,7 +417,19 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
             Word(FloatBits(style.width))
             Word(FloatBits(style.height))
         }
-        if rule_words == CssGridRuleWords { SignedWord(style.grid_tracks) }
+        if rule_words >= CssGridRuleWords { SignedWord(style.grid_tracks) }
+        if rule_words == CssFlexRuleWords {
+            flex := entry.rule.flex
+            Word(flex.fields)
+            SignedWord(flex.direction)
+            Word(ifx flex.wrap then cast(u32)1 else cast(u32)0)
+            SignedWord(flex.justify_content)
+            SignedWord(flex.align_items)
+            Word(FloatBits(flex.basis))
+            Word(FloatBits(flex.grow))
+            Word(FloatBits(flex.shrink))
+            SignedWord(flex.align_self)
+        }
     }
     ok = ok && EmitWords("rules", pack, rule_words)
     for index: cast(s32)0..sheet.ref_count - 1 {

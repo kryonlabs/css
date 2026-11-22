@@ -17,6 +17,7 @@ using ControlSize;
 using ButtonState;
 using MaterialKind;
 using StyleField;
+using StyleFlexField;
 using ElevationRole;
 using FontRole;
 using MotionEasing;
@@ -390,6 +391,7 @@ CssParser :: struct {
     selector_start: s32
     selector_length: s32
     template: StyleData
+    flex_template: StyleFlexData
     declarations: [48]CssDeclaration
     declaration_count: s32
     // Web document declarations in the yielded rule; native hosts skip them.
@@ -528,6 +530,7 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
 #load "parser/values.zi";
 #load "parser/selectors.zi";
 #load "parser/properties.zi";
+#load "parser/flex.zi";
 #load "parser/media.zi";
 #load "parser/motion.zi";
 #load "parser/statements.zi";

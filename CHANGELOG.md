@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Resolve flex direction, wrapping, sizing, gaps and alignment from stylesheets and compiled packs.
+
 - Add recoverable native stylesheet diagnostics and `css_tool check --strict`
   with source locations for rejected and browser-only CSS.
 

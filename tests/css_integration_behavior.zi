@@ -311,12 +311,39 @@ ViewportGrid :: () {
     ResponsiveGrid(550.0, 1, 12, true)
 }
 
+ResponsiveFlex :: (width: float32, wrap: bool) {
+    env := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), width)
+    Check(CssSheetInstall(*integration_sheet, env, null), "install flex viewport styles")
+    BeginFrame(integration_session, cast(u64)504, Rectangle.{0.0, 0.0, width, 540.0})
+    items: [3]Layout.FlexItem = .[.{.kind = StyleKindText(), .class_name = StyleClass("primary-filter"),
+        .width = 120.0, .height = 12.0}, .{.kind = StyleKindText(), .class_name = StyleClass("secondary-filter"),
+        .width = 200.0, .height = 24.0}, .{.width = 100.0, .height = 20.0}]
+    placed: [3]Layout.FlexPlacement
+    row := Layout.Row(integration_session, .{.key = 401, .class_name = StyleClass("filters")}, items[:], placed[:])
+    first := placed[0].bounds
+    second := placed[1].bounds
+    last := placed[2].bounds
+    Check(row.opened && row.bounds.width == width && first.y == 15.0 && second.width == 200.0,
+        "CSS resolves item flex basis, growth and self-alignment")
+    if wrap {
+        Check(row.bounds.height == 55.0 && first.x == 5.0 && first.width == 330.0 && second.x == 345.0 &&
+            last.x == 5.0 && last.y == 32.0, "narrow row wraps with independent inline and block gaps")
+    } else {
+        Check(row.bounds.height == 30.0 && first.x == 325.0 && first.width == 870.0 && second.x == 115.0 &&
+            last.x == 5.0 && last.y == 5.0, "wide row evaluates reverse direction and nowrap at the breakpoint")
+    }
+    Check(End(integration_session), "close flex row")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "responsive flex frame")
+}
+
 main :: () -> s32 {
     if !SessionValid(integration_session) { integration_session = SessionOpen() }
     Integration()
     LayoutIntegration()
     LayoutSizing()
     ViewportGrid()
+    ResponsiveFlex(550.0, true)
+    ResponsiveFlex(1200.0, false)
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }
     return test_failures

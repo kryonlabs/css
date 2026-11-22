@@ -823,6 +823,7 @@ CssPreviousRuleWords :: 42
 CssCompiledRuleWords :: 47
 CssSizedRuleWords :: 49
 CssGridRuleWords :: 50
+CssFlexRuleWords :: 59
 CssCompiledRefWords :: 4
 CssCompiledDefinitionWords :: 8
 CssCompiledConditionWords :: 10
@@ -855,7 +856,8 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
     if sheet.failed { return false }
     rule_words: s32 = compiled.rule_words
     if rule_words == 0 { rule_words = CssPreviousRuleWords }
-    if (rule_words != CssGridRuleWords && rule_words != CssSizedRuleWords && rule_words != CssCompiledRuleWords &&
+    if (rule_words != CssFlexRuleWords && rule_words != CssGridRuleWords &&
+        rule_words != CssSizedRuleWords && rule_words != CssCompiledRuleWords &&
         rule_words != CssPreviousRuleWords) ||
         cast(s32)compiled.rules.count % rule_words != 0 {
         CssSheetFail(sheet, "unsupported compiled CSS rule format")
@@ -985,7 +987,13 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
             style.width = CssWordFloat(w[47])
             style.height = CssWordFloat(w[48])
         }
-        if rule_words == CssGridRuleWords { style.grid_tracks = cast(s32)w[49] }
+        if rule_words >= CssGridRuleWords { style.grid_tracks = cast(s32)w[49] }
+        if rule_words == CssFlexRuleWords {
+            entry.rule.flex = .{.fields = w[50], .direction = cast(s32)w[51], .wrap = w[52] != 0,
+                .justify_content = cast(s32)w[53], .align_items = cast(s32)w[54],
+                .basis = CssWordFloat(w[55]), .grow = CssWordFloat(w[56]), .shrink = CssWordFloat(w[57]),
+                .align_self = cast(s32)w[58]}
+        }
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

@@ -42,7 +42,6 @@ def build_project(ziran, css_source):
         manifest = tomllib.load(manifest_file)
     toolchain = manifest["toolchain"]
     kryon = manifest["dependencies"]["kryon"]
-    ziran_root = package_path(ziran, "ziran")
     kryon_root = package_path(ziran, "kryon")
     quote = json.dumps
     shutil.rmtree(PROJECT, ignore_errors=True)
@@ -58,7 +57,6 @@ def build_project(ziran, css_source):
     )
     (PROJECT / "ziran.local.toml").write_text(
         "[overrides]\n"
-        f'ziran = {quote(ziran_root, ensure_ascii=False)}\n'
         f'kryon = {quote(kryon_root, ensure_ascii=False)}\n'
         f'css = {quote(str(css_source), ensure_ascii=False)}\n'
     )

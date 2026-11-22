@@ -8,8 +8,11 @@ ref = "5db3d3c39425d5dfe4bfe4a84e6f6e2e5a810ad0"
 
 [dependencies.kryon]
 git = "https://git.waozi.xyz/kryonlabs/kryon.git"
-ref = "facaace35051336a2a993d90d1bb7d7396543852"
+ref = "cdf23986a0434cfb01513ecca4763b0477d01a7e"
 
 [exports]
 Css = "src/Css/module.zi"
 motion = "src/css_motion.zi"
+style_pack_classic = "src/style_pack_classic.zi"
+style_pack_lightfield = "src/style_pack_lightfield.zi"
+style_pack_material = "src/style_pack_material.zi"

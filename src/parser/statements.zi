@@ -381,7 +381,6 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
     p.rule_ref_count = 0
     p.rule_expr_count = 0
     p.declaration_count = 0
-    p.web_declarations = 0
     p.rule_span.body_start = p.cursor.pos
     collect: bool = CssCollectIssues(p)
     while true {
@@ -428,7 +427,6 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
         exprs: [16]CssRuleExpr
         expr_count: s32 = p.rule_expr_count
         name_count: s32 = p.name_count
-        web_count: s32 = p.web_declarations
         if collect {
             previous = p.template
             previous_flex = p.flex_template
@@ -451,7 +449,6 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
             p.motion = motion
             p.rule_ref_count = ref_count
             p.name_count = name_count
-            p.web_declarations = web_count
             for index: cast(s32)0..ref_count - 1 { p.rule_refs[index] = refs[index] }
             p.rule_expr_count = expr_count
             for index: cast(s32)0..expr_count - 1 { p.rule_exprs[index] = exprs[index] }

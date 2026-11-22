@@ -443,8 +443,6 @@ CssParser :: struct {
     box_template: StyleBoxData
     declarations: [48]CssDeclaration
     declaration_count: s32
-    // Web document declarations in the yielded rule; native hosts skip them.
-    web_declarations: s32
     pending_name_start: s32
     pending_name_cursor: CssCursor
     pending_name_length: s32
@@ -457,6 +455,8 @@ CssParser :: struct {
     diagnostic_cursor: CssCursor
     diagnostics: CssDiagnostics
     collect_issues: bool
+    // A plain native parse: browser-only declarations are errors there.
+    native_only: bool
     issue_count: s32
     report_path: string
     statement_origin: CssCursor
@@ -577,11 +577,11 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
     p.selector_count = 0
     p.selector_next = 0
     p.declaration_count = 0
-    p.web_declarations = 0
     p.diagnostic_length = 0
     p.diagnostic_reason_length = 0
     p.diagnostics = CssDiagnostics.{}
     p.collect_issues = false
+    p.native_only = false
     p.issue_count = 0
     p.report_path = ""
     p.rule_total = 0
@@ -597,6 +597,7 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
 #load "parser/flex.zi";
 #load "parser/box.zi";
 #load "parser/visual.zi";
+#load "parser/catalog.zi";
 #load "parser/media.zi";
 #load "parser/motion.zi";
 #load "parser/statements.zi";

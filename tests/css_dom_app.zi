@@ -84,7 +84,10 @@ ButtonFor :: (key: u64, id: s32, label: string, selected: bool) -> Button.Props 
 Start :: () -> bool {
     if !Theme.InstallDefaultTheme(false) { return false }
     CSS.CssSheetReset(*sheet)
-    if !CSS.CssSheetParse(*sheet, css_source, "css-dom.css", CSS.CssNoImports) { return false }
+    // The sheet is shared with the browser export, so it is read with the
+    // diagnostics parse, which keeps browser-only declarations for the DOM.
+    if !CSS.CssSheetParseWithDiagnostics(*sheet, css_source, "css-dom.css", CSS.CssNoImports,
+        CSS.CssDiagnostics.{}) { return false }
     if !CSS.CssSheetInstall(*sheet, CSS.CssDefaultEnvironment(), null) { return false }
 
     exported: [16384]u8

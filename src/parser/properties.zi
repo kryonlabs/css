@@ -1,7 +1,8 @@
 // Part of the css_parser module: declarations. Each native property lowers
-// to fields of Kryon's StyleData; web document properties (such as
-// box-shadow and grid placement) style the web document host and
-// are skipped by native hosts. Anything else is an error.
+// to fields of Kryon's StyleData; browser-only properties (such as
+// text-transform and grid placement) style the web document host, are
+// reported by the diagnostics parse and refused by a plain native parse.
+// Anything else is an error.
 
 CssScopeNative :: 0
 CssScopeWeb :: 1
@@ -520,9 +521,15 @@ CssCheckLayoutTarget :: (p: *CssParser, name: string, grid_only: bool) {
     }
 }
 
+// A declaration only the browser applies. A plain native parse refuses it;
+// the diagnostics parse reports it, and export and formatting keep it.
 CssPassWebDeclaration :: (p: *CssParser) -> s32 {
+    if p.native_only {
+        p.cursor = p.pending_name_cursor
+        CssFail(p, "this declaration is applied only by the browser; read a shared sheet with CssSheetParseWithDiagnostics")
+        return -1
+    }
     p.cursor = p.pending_end
-    p.web_declarations += 1
     return CssScopeWeb
 }
 

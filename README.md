@@ -62,8 +62,11 @@ with signature `(context: *void, issue: CssIssue) -> void`. Each issue supplies
 its origin, item kind, name, reason and `web_only` flag. Copy any text you need
 after the callback returns. Imported issues use the paths from the host's
 resolver. Set `options.strict = true` to collect the same issues and reject the
-sheet. The ordinary `CssSheetParse` preserves its fail-fast behavior and browser
-export support. `CssSheetBuild` and installation still validate values after
+sheet. The plain `CssSheetParse` reads native sheets and fails fast: a
+browser-only declaration is an error there, never skipped silently. Read a
+sheet shared with the browser export through `CssSheetParseWithDiagnostics`,
+which keeps the native rules and reports each browser-only declaration with
+`web_only` set. Packs are native, so `css_tool pack` refuses one too. `CssSheetBuild` and installation still validate values after
 resolving custom properties in the chosen environment.
 
 ## The subset
@@ -83,26 +86,95 @@ context, so descendant and child combinators (` `, `>`, `+`, `~`), `:not()`,
 widget its own class (`.card .title` becomes `Text.card-title`), or set a
 class or state from the frame.
 
-Properties: `color`, `background` (a color or a two-stop
-`linear-gradient`), `background-color`, `border`, `border-color`,
-`border-width`, `border-style` (`solid` or `none`), `border-radius`,
-`outline-color`, `opacity` (number or percentage), `padding` (opposite sides
-must match),
-`padding-inline`, `padding-block`, `gap`, `row-gap`, `column-gap`,
-`grid-template-columns`, `display`, `flex`, `flex-direction`, `flex-wrap`,
-`flex-basis`, `flex-grow`, `flex-shrink`, `justify-content`, `align-items`,
-`align-self`,
-`font-size`, `font-family`, `font-weight`, `font-style`,
-`letter-spacing`, `width`, `height`, `min-height`, `min-block-size`, `min-width`,
-`max-width`, `max-height`, `margin` and its sides, `overflow`, `text-align`, `line-height`,
-`translate`, `-kryon-material` (`lightfield`, `flat`, `glass`),
-`-kryon-icon-size`, `-kryon-font-role` (`inherit`, `control`, `body`,
-`heading`, `code`), `-kryon-elevation` (`none`, `rest`, `raised`, `floating`),
-`-kryon-motion-duration`, `-kryon-motion-multiplier`,
-`-kryon-motion-easing` (`inherit`, `standard`, `linear`, `instant`) and
-`-kryon-motion-reduced` (`reduce`, `no-preference`). The web document host
-also uses browser-only declarations such as `text-transform`. Each native
-widget uses the fields its paint and layout implement.
+Properties a native sheet reads, generated from the parser's own catalog
+(`src/parser/catalog.zi`); every example parses on its target in the tests.
+Anything else is browser-only or an error.
+
+<!-- properties:start -->
+| Property | Applies to | Example | Values |
+| --- | --- | --- | --- |
+| `color` | `*` | `#203040` | color, var(), color-mix() |
+| `background` | `*` | `linear-gradient(#ffffff, #eeeeee)` | color or a two-stop vertical linear-gradient |
+| `background-color` | `*` | `rgb(10 20 30)` | color |
+| `border` | `*` | `1px solid #ccddee` | width, solid or none, color |
+| `border-color` | `*` | `hsl(200 50% 40%)` | color |
+| `border-width` | `*` | `1px` | length |
+| `border-style` | `*` | `solid` | solid or none |
+| `border-radius` | `*` | `calc(4px + 0.25rem)` | one length |
+| `outline-color` | `*` | `#38bdf8` | color (focus ring) |
+| `opacity` | `*` | `80%` | number or percentage |
+| `box-shadow` | `Card` | `0 1px 3px #0003` | none, or shadows: elevation raised (blur <= 8px) or floating |
+| `padding` | `*` | `4px 8px` | 1-4 lengths; opposite sides equal |
+| `padding-inline` | `*` | `clamp(8px, 2vw, 20px)` | length |
+| `padding-block` | `*` | `0.5em` | length |
+| `gap` | `*` | `8px 12px` | normal or 1-2 lengths (row, column) |
+| `row-gap` | `*` | `4px` | normal or length |
+| `column-gap` | `*` | `max(8px, 1vw)` | normal or length |
+| `width` | `Column` | `240px` | auto or a positive static length |
+| `height` | `Row` | `48px` | auto or a positive static length |
+| `min-width` | `Column` | `120px` | static length |
+| `max-width` | `Column` | `calc(50rem - 100px)` | static length or none |
+| `max-height` | `Column` | `320px` | static length or none |
+| `min-inline-size` | `Grid` | `100px` | static length |
+| `max-inline-size` | `Grid` | `none` | static length or none |
+| `max-block-size` | `Row` | `200px` | static length or none |
+| `min-height` | `Button` | `44px` | length |
+| `min-block-size` | `Button` | `2.75rem` | length |
+| `margin` | `Column` | `0 auto` | 1-4 static lengths or auto |
+| `margin-top` | `Column` | `8px` | static length or auto |
+| `margin-right` | `Column` | `auto` | static length or auto |
+| `margin-bottom` | `Column` | `1rem` | static length or auto |
+| `margin-left` | `Row` | `auto` | static length or auto |
+| `margin-inline` | `Grid` | `16px` | 1-2 static lengths or auto |
+| `margin-block` | `Grid` | `8px 4px` | 1-2 static lengths or auto |
+| `margin-inline-start` | `Row` | `4px` | static length or auto |
+| `margin-inline-end` | `Row` | `auto` | static length or auto |
+| `overflow` | `Column` | `hidden` | visible, hidden or clip |
+| `text-align` | `Text` | `center` | start, left, center, end or right |
+| `display` | `Row` | `flex` | flex (Row, Column) or grid (Grid) |
+| `flex-direction` | `Row` | `row-reverse` | row, column and their -reverse |
+| `flex-wrap` | `Row` | `wrap` | wrap or nowrap |
+| `justify-content` | `Row` | `space-between` | normal, flex-start, center, flex-end, space-between, -around, -evenly |
+| `align-items` | `Row` | `center` | start, center, end, stretch, normal |
+| `align-self` | `Text` | `flex-end` | auto, start, center, end, stretch |
+| `flex` | `Column` | `1` | none, auto, initial, or grow [shrink] [basis] |
+| `flex-basis` | `Text` | `120px` | auto or a static length |
+| `flex-grow` | `Text` | `2` | number |
+| `flex-shrink` | `Text` | `0` | number |
+| `grid-template-columns` | `Grid` | `repeat(3, minmax(0, 1fr))` | 1fr, repeat(N, 1fr), repeat(auto-fit, minmax(LENGTH, 1fr)) |
+| `font` | `Text` | `italic 600 15px/1.5 system-ui, sans-serif` | [style] [weight] size[/line-height] families |
+| `font-family` | `Text` | `"Inter", sans-serif` | first family; generic families keep the theme face, monospace is code |
+| `font-size` | `Text` | `clamp(14px, 1vw + 10px, 18px)` | length |
+| `font-weight` | `Text` | `bold` | normal, bold or 1-1000 |
+| `font-style` | `Text` | `italic` | normal, italic or oblique |
+| `letter-spacing` | `Text` | `-0.02em` | normal or a signed length |
+| `line-height` | `Text` | `1.5` | normal, number, percentage or length |
+| `translate` | `*` | `2px 4px` | x [y] lengths |
+| `transition` | `Button` | `background-color 180ms ease-out` | native properties, durations, easing, delay |
+| `transition-property` | `Button` | `color` | native properties or all |
+| `transition-duration` | `Button` | `120ms` | duration |
+| `transition-timing-function` | `Button` | `ease-in-out` | keyword or cubic-bezier() |
+| `transition-delay` | `Button` | `40ms` | duration |
+| `transition-behavior` | `Button` | `normal` | normal |
+| `animation` | `Button` | `pulse 1s infinite` | name, duration, easing, delay, count, direction, fill |
+| `animation-name` | `Button` | `pulse` | @keyframes name |
+| `animation-duration` | `Button` | `1s` | duration |
+| `animation-timing-function` | `Button` | `linear` | keyword or cubic-bezier() |
+| `animation-delay` | `Button` | `0s` | duration |
+| `animation-iteration-count` | `Button` | `infinite` | number or infinite |
+| `animation-direction` | `Button` | `alternate` | normal, reverse, alternate, alternate-reverse |
+| `animation-fill-mode` | `Button` | `both` | none, forwards, backwards, both |
+| `animation-play-state` | `Button` | `running` | running or paused |
+| `-kryon-material` | `*` | `glass` | lightfield, flat or glass |
+| `-kryon-icon-size` | `*` | `20px` | length |
+| `-kryon-font-role` | `*` | `code` | inherit, control, body, heading, code |
+| `-kryon-elevation` | `*` | `floating` | none, rest, raised, floating |
+| `-kryon-motion-duration` | `*` | `150ms` | duration |
+| `-kryon-motion-multiplier` | `*` | `1.5` | number |
+| `-kryon-motion-easing` | `*` | `standard` | inherit, standard, linear, instant |
+| `-kryon-motion-reduced` | `*` | `reduce` | reduce or no-preference |
+<!-- properties:end -->
+
 - `box-shadow` selects a Kryon elevation role: `none` clears it, a shadow
   whose largest blur is at most 8px is `raised` and a softer one `floating`
   (the widgets that draw elevation, such as Card and Modal, use their own

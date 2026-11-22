@@ -109,7 +109,6 @@ CssSheet :: struct {
     frame_count: s32
     // Count of rules or keyframes blocks containing browser-only motion.
     motion_unsupported: s32
-    web_declarations: s32
     diagnostic: [256]u8
     diagnostic_length: s32
     failed: bool
@@ -134,7 +133,6 @@ CssSheetReset :: (sheet: *CssSheet) {
     sheet.keyframes_count = 0
     sheet.frame_count = 0
     sheet.motion_unsupported = 0
-    sheet.web_declarations = 0
     sheet.diagnostic_length = 0
     sheet.failed = false
 }
@@ -392,7 +390,6 @@ CssSheetTake :: (sheet: *CssSheet, p: *CssParser) {
             .expr = p.rule_exprs[index].expr}
         sheet.expr_count += 1
     }
-    sheet.web_declarations += p.web_declarations
     if p.motion.transition.unsupported || p.motion.animation.unsupported { sheet.motion_unsupported += 1 }
     sheet.rules[sheet.rule_count] = entry
     sheet.rule_count += 1
@@ -436,6 +433,7 @@ CssSheetParseSource :: (sheet: *CssSheet, source: string, path: string, resolve:
     CssBegin(p, source, path)
     p.diagnostics = diagnostics
     p.collect_issues = collect
+    p.native_only = !collect
     p.report_path = path
     while true {
         status: s32 = CssStep(p)

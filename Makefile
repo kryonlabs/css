@@ -68,6 +68,7 @@ style-packs: $(CSS_TOOL)
 	@for pack in $(STYLE_PACKS); do $(CSS_TOOL) pack $$pack || exit 1; done
 
 style-pack-check: $(CSS_TOOL)
+	$(CSS_TOOL) properties-check README.md
 	@for pack in $(STYLE_PACKS); do $(CSS_TOOL) pack-check $$pack || exit 1; done
 	@for pack in $(STYLE_PACKS); do $(CSS_TOOL) format-check styles/$$pack.css || exit 1; done
 	@echo "Style pack modules match and are formatted: $(STYLE_PACKS)"

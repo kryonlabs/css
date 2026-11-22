@@ -10,12 +10,16 @@
 //   css_tool pack-file NAME IN.css OUT.zi   compile a standalone pack
 //   css_tool pack-check NAME          fail when src/style_pack_NAME.zi is
 //                                     not what `pack` would write
+//   css_tool properties FILE.md       write the property catalog's table
+//                                     between FILE's properties markers
+//   css_tool properties-check FILE.md fail when that table is stale
 //
 // Apps import this package without running its Makefile, so compiled packs
 // are committed and `make style-pack-check` keeps them equal to their CSS.
 #import "byte_text_linux"
 #import "c_string"
 #import "file_linux"
+#import "std/text_tools"
 #import "css_parser"
 #import "css_sheet"
 #import "css_format"
@@ -340,9 +344,6 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
             }
         }
     }
-    if sheet.web_declarations > 0 {
-        return Fail(path, "packs are native tables; web document properties belong in web sheets")
-    }
     output_length = 0
     typeface_count = 0
     title: string = Title(pack)
@@ -525,6 +526,27 @@ ValidName :: (name: string) -> bool {
     return true
 }
 
+PropertiesStart :: "<!-- properties:start -->\n"
+PropertiesEnd :: "<!-- properties:end -->"
+
+// FILE with the property catalog's table between its markers, written to
+// output_bytes; false when FILE has no markers.
+PropertiesInto :: (file: string) -> bool {
+    start := cast(s32)TextFind(file, PropertiesStart, 0)
+    if start < 0 { return false }
+    head := start + cast(s32)PropertiesStart.count
+    end := cast(s32)TextFind(file, PropertiesEnd, head)
+    if end < 0 { return false }
+    output_length = 0
+    ok := Emit(file[0:head]) && Emit("| Property | Applies to | Example | Values |\n| --- | --- | --- | --- |\n")
+    for index: cast(s32)0..CssCatalogCount - 1 {
+        entry := CssCatalogEntryAt(index)
+        ok = ok && Emit("| `") && Emit(entry.name) && Emit("` | `") && Emit(entry.target) && Emit("` | `") &&
+            Emit(entry.sample) && Emit("` | ") && Emit(entry.values) && Emit(" |\n")
+    }
+    return ok && Emit(file[end:])
+}
+
 Argument :: (argv: **s8, index: s32) -> string {
     return TextFromCString(cast(*u8)argv[index])
 }
@@ -532,10 +554,21 @@ Argument :: (argv: **s8, index: s32) -> string {
 #program_export
 main :: (argc: s32, argv: **s8) -> s32 {
     if argc < 3 {
-        WriteText(2, "usage: css_tool export IN.css OUT.css | check [--strict] FILE.css | format FILE.css | format-check FILE.css | pack NAME | pack-file NAME IN.css OUT.zi | pack-check NAME\n")
+        WriteText(2, "usage: css_tool export IN.css OUT.css | check [--strict] FILE.css | format FILE.css | format-check FILE.css | pack NAME | pack-file NAME IN.css OUT.zi | pack-check NAME | properties FILE.md | properties-check FILE.md\n")
         return 2
     }
     mode: string = Argument(argv, 1)
+    if mode == "properties" || mode == "properties-check" {
+        path: string = Argument(argv, 2)
+        count: s32 = ReadFile(path)
+        if count < 0 { return Fail(path, "cannot read") }
+        source: string = TextView(source_bytes[:count])
+        if !PropertiesInto(source) { return Fail(path, "has no property table markers") }
+        if TextView(output_bytes[:output_length]) == source { return 0 }
+        if mode == "properties-check" { return Fail(path, "property table is stale; run `css_tool properties`") }
+        if !WriteFile(path, output_bytes[:output_length]) { return Fail(path, "cannot write") }
+        return 0
+    }
     if mode == "check" {
         strict: bool = Argument(argv, 2) == "--strict"
         index: s32 = ifx strict then 3 else 2

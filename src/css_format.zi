@@ -43,6 +43,9 @@ CssFormatParse :: (source: string, result: *CssFormatResult) -> CssFormatCounts 
         status: s32 = CssStep(p)
         if status == cast(s32)CssStatusRule {
             counts.rules += 1
+            for index: cast(s32)0..p.declaration_count - 1 {
+                if p.declarations[index].scope == CssScopeWeb { counts.web += 1 }
+            }
             rule: StyleRule = p.rule
             hash = CssFormatMix(hash, cast(u32)rule.selector.kind)
             hash = CssFormatMix(hash, cast(u32)rule.selector.class_name)
@@ -98,7 +101,6 @@ CssFormatParse :: (source: string, result: *CssFormatResult) -> CssFormatCounts 
             CssProvideImport(p, "", CssPendingImport(p, name[:]))
         } else if status == cast(s32)CssStatusDone {
             counts.ok = true
-            counts.web = p.web_declarations
             counts.checksum = hash
             return counts
         } else if status == cast(s32)CssStatusError {

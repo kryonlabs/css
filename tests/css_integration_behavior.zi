@@ -89,7 +89,6 @@ Row.actions {
 
 Row.sized {
   width: 132.5PX /* fractional logical pixels */;
-  width: calc(100% - 2rem);
 }
 
 Text.dashboard { color: #ddecff; }

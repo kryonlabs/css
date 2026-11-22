@@ -1,6 +1,6 @@
 // Part of the css_parser module: declarations. Each native property lowers
-// to fields of Kryon's StyleData; web document properties (such as margin
-// and unsupported sizing values) style the web document host and
+// to fields of Kryon's StyleData; web document properties (such as
+// box-shadow and grid placement) style the web document host and
 // are skipped by native hosts. Anything else is an error.
 
 CssScopeNative :: 0
@@ -515,13 +515,9 @@ CssPassWebDeclaration :: (p: *CssParser) -> s32 {
     return CssScopeWeb
 }
 
-css_web_properties: [22]string = .[
-    "min-width", "max-width", "max-height",
-    "margin", "margin-top", "margin-right", "margin-bottom", "margin-left", "margin-inline",
-    "margin-block", "text-align", "text-decoration",
-    "text-transform", "white-space", "cursor", "box-shadow",
-    "grid-template-rows", "grid-column", "grid-row", "overflow",
-    "z-index", "visibility"];
+css_web_properties: [10]string = .[
+    "text-decoration", "text-transform", "white-space", "cursor", "box-shadow",
+    "grid-template-rows", "grid-column", "grid-row", "z-index", "visibility"];
 
 // Properties the web document host applies and native hosts skip: browser
 // layout and text features Kryon lays out in code.
@@ -733,6 +729,8 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         return CssScopeMotion
     } else if CssFlexProperty(name) {
         return CssApplyFlexProperty(p, name, end)
+    } else if CssBoxProperty(name) {
+        return CssApplyBoxProperty(p, name, end)
     } else if CssWebProperty(name) {
         return CssPassWebDeclaration(p)
     } else if name.length >= 2 && name.bytes[0] == #char "-" && name.bytes[1] == #char "-" {

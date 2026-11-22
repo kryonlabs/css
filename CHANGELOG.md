@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Lower margin, min/max width, max height, overflow and text-align to native box styles. Packs use one rule layout; a pack in an older layout is refused as stale.
+
 - Resolve flex direction, wrapping, sizing, gaps and alignment from stylesheets and compiled packs.
 
 - Add recoverable native stylesheet diagnostics and `css_tool check --strict`

@@ -21,6 +21,7 @@ using MotionEasing;
 using FontStyle;
 using LineHeightUnit;
 using StyleField;
+using StyleBoxField;
 
 parsed_sheet: CssSheet;
 compiled_sheet: CssSheet;
@@ -74,21 +75,10 @@ Packs :: () {
 }
 
 PackedFields :: () {
-    words: [47]u32
+    words: [CssRuleWords]u32
     words[0] = cast(u32)StyleKindText()
     words[13] = CssLayerUnlayered
-    words[15] = cast(u32)StyleLineHeight
-    words[35] = 0x3fa00000
-    pack: CssCompiledSheet
-    pack.file = "compiled.css"
-    pack.rules = words[:42]
-    CssSheetReset(*compiled_sheet)
-    Check(CssSheetLoad(*compiled_sheet, pack), "previous pack loads")
-    old: StyleData = compiled_sheet.rules[0].rule.style
-    Check(old.line_height == 1.25 && old.line_height_unit == cast(LineHeightUnit)LineHeightFactor,
-        "previous pack retains factor semantics")
-
-    words[15] |= cast(u32)StyleRowGap | cast(u32)StyleColumnGap |
+    words[15] = cast(u32)StyleLineHeight | cast(u32)StyleRowGap | cast(u32)StyleColumnGap |
         cast(u32)StyleFontWeight | cast(u32)StyleFontStyle
     words[35] = 0x41c00000
     words[42] = 0x40800000
@@ -96,7 +86,17 @@ PackedFields :: () {
     words[44] = 650
     words[45] = cast(u32)FontStyleItalic
     words[46] = cast(u32)LineHeightLength
+    words[59] = cast(u32)StyleBoxMaxWidth | cast(u32)StyleBoxMarginLeft | cast(u32)StyleBoxClipChildren
+    words[61] = 0x44160000
+    words[63] = 1
+    words[68] = 0xbf800000
+    pack: CssCompiledSheet
+    pack.file = "compiled.css"
     pack.rule_words = 47
+    pack.rules = words[:47]
+    CssSheetReset(*compiled_sheet)
+    Check(!CssSheetLoad(*compiled_sheet, pack), "a pack in an older rule layout is refused as stale")
+    pack.rule_words = CssRuleWords
     pack.rules = words[:]
     CssSheetReset(*compiled_sheet)
     Check(CssSheetLoad(*compiled_sheet, pack), "current pack loads")
@@ -104,20 +104,26 @@ PackedFields :: () {
     Check(style.row_gap == 4.0 && style.column_gap == 12.0 &&
         style.font_weight == 650 && style.font_style == cast(FontStyle)FontStyleItalic &&
         style.line_height == 24.0 && style.line_height_unit == cast(LineHeightUnit)LineHeightLength,
-        "current pack preserves new typed fields")
+        "current pack preserves typed fields")
+    box := compiled_sheet.rules[0].rule.box
+    Check(box.max_width == 600.0 && box.clip_children && box.margin_left == -1.0 &&
+        box.fields == (cast(u32)StyleBoxMaxWidth | cast(u32)StyleBoxMarginLeft | cast(u32)StyleBoxClipChildren),
+        "current pack preserves box fields and auto margins")
 }
 
 PackedMotion :: () {
-    words: [47]u32
+    words: [CssRuleWords]u32
     words[0] = cast(u32)StyleKindText()
     words[13] = CssLayerUnlayered
     words[14] = 1
     words[15] = cast(u32)StyleForeground
     words[17] = 0x2076c059
-    condition: [10]u32 = u32.[1, 0, 0x17fff, 0, 0, 0, 0, 0, 0, 0]
+    condition: [CssConditionWords]u32
+    condition[0] = 1
+    condition[2] = 0x17fff
     pack: CssCompiledSheet
     pack.file = "compiled-motion.css"
-    pack.rule_words = 47
+    pack.rule_words = CssRuleWords
     pack.rules = words[:]
     pack.conditions = condition[:]
     CssSheetReset(*compiled_sheet)
@@ -132,10 +138,10 @@ PackedMotion :: () {
     CssSheetReset(*compiled_sheet)
     Check(CssSheetLoad(*compiled_sheet, pack), "pack without motion bits loads")
     Check(CssSheetBuild(*compiled_sheet, env, null, *compiled_rules) && compiled_rules.count == 1,
-        "old compiled mask matches reduce")
+        "a mask without motion bits matches reduce")
     env.reduced_motion = false
     Check(CssSheetBuild(*compiled_sheet, env, null, *compiled_rules) && compiled_rules.count == 1,
-        "old compiled mask matches no-preference")
+        "a mask without motion bits matches no-preference")
 }
 
 Resolved :: (kind: s32) -> StyleData {

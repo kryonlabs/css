@@ -87,15 +87,16 @@ must match),
 `flex-basis`, `flex-grow`, `flex-shrink`, `justify-content`, `align-items`,
 `align-self`,
 `font-size`, `font-family`, `font-weight`, `font-style`,
-`letter-spacing`, `width`, `height`, `min-height`, `min-block-size`, `line-height`,
+`letter-spacing`, `width`, `height`, `min-height`, `min-block-size`, `min-width`,
+`max-width`, `max-height`, `margin` and its sides, `overflow`, `text-align`, `line-height`,
 `translate`, `-kryon-material` (`lightfield`, `flat`, `glass`),
 `-kryon-icon-size`, `-kryon-font-role` (`inherit`, `control`, `body`,
 `heading`, `code`), `-kryon-elevation` (`none`, `rest`, `raised`, `floating`),
 `-kryon-motion-duration`, `-kryon-motion-multiplier`,
 `-kryon-motion-easing` (`inherit`, `standard`, `linear`, `instant`) and
 `-kryon-motion-reduced` (`reduce`, `no-preference`). The web document host
-also uses browser-only declarations such as `margin`. Each native widget uses
-the fields its paint and layout implement.
+also uses browser-only declarations such as `box-shadow`. Each native widget
+uses the fields its paint and layout implement.
 
 - `gap` takes one value for both axes or two values in row, column order.
   `row-gap` and `column-gap` cascade independently. Gaps take `normal`
@@ -110,6 +111,17 @@ the fields its paint and layout implement.
   values, including zero, percentages, intrinsic keywords, `var()` and
   `calc()`, are browser-only and are skipped by native layout. Browser export
   keeps both sets of values. Native packs accept the native subset.
+- `Row`, `Column` and `Grid` read `min-width`, `max-width` and `max-height`
+  (`px`, `rem`, `0`, and `none` for maxima, with the logical `-inline-size` and
+  `-block-size` aliases), margins (`margin` with one to four values, each side,
+  `margin-inline`, `margin-block`; `px`, `rem`, `0` or `auto`) and `overflow`
+  (`visible`, `hidden` or `clip`). Margins move the container inside the slot
+  its parent places; `auto` inline margins share the free width, so
+  `max-width: 1200px; margin: 0 auto` centers a column. `overflow: hidden`
+  clips descendants. `Text`, `Heading`, `ParagraphText` and `Link` read
+  `text-align` (`start`, `left`, `center`, `end`, `right`). Negative margins,
+  percentages and `overflow: auto` or `scroll` are browser-only; native
+  scrolling is `Scroll.Draw`.
 - `Grid` supports `1fr`, `minmax(0, 1fr)`, `repeat(N, 1fr)`,
   `repeat(N, minmax(0, 1fr))` and `repeat(auto-fit, minmax(LENGTH, 1fr))`.
   `N` is 1–1024 and `LENGTH` is a positive `px` or `rem` length. The

@@ -268,6 +268,7 @@ CssReadAtRule :: (p: *CssParser) -> bool {
 CssReadRuleBody :: (p: *CssParser) -> bool {
     p.template = StyleData.{}
     p.flex_template = StyleFlexData.{}
+    p.box_template = StyleBoxData.{}
     p.motion = CssRuleMotion.{}
     p.rule_ref_count = 0
     p.declaration_count = 0
@@ -306,6 +307,7 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
         }
         previous: StyleData
         previous_flex: StyleFlexData
+        previous_box: StyleBoxData
         motion: CssRuleMotion
         refs: [24]CssLocalRef
         ref_count: s32 = p.rule_ref_count
@@ -314,6 +316,7 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
         if collect {
             previous = p.template
             previous_flex = p.flex_template
+            previous_box = p.box_template
             motion = p.motion
             for index: cast(s32)0..ref_count - 1 { refs[index] = p.rule_refs[index] }
         }
@@ -327,6 +330,7 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
             CssReportFailure(p, origin, CssIssueKind.Declaration, TextView(head.name.bytes[:head.name.length]))
             p.template = previous
             p.flex_template = previous_flex
+            p.box_template = previous_box
             p.motion = motion
             p.rule_ref_count = ref_count
             p.name_count = name_count
@@ -350,6 +354,7 @@ CssYieldSelector :: (p: *CssParser) {
     p.rule.order = p.rule_total
     p.rule.style = p.template
     p.rule.flex = p.flex_template
+    p.rule.box = p.box_template
     p.rule_total += 1
     p.selector_next += 1
     p.status = cast(s32)CssStatusRule

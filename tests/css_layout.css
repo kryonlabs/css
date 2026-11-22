@@ -54,3 +54,24 @@ Text.secondary-filter {
     flex-wrap: nowrap;
   }
 }
+
+Column.page {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+Column.inset {
+  margin: 4px 6px 8px;
+  overflow: hidden;
+}
+
+Row.bounded {
+  min-width: 300px;
+  max-height: 24px;
+}
+
+@media (max-width: 820px) {
+  Column.page { max-width: none; margin-inline: 1rem; }
+}
+
+Text.centered { text-align: center; }

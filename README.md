@@ -51,7 +51,9 @@ Hosts without imports pass `CssNoImports`.
 Build the CLI with `make build/tools/css_tool`. Run `build/tools/css_tool check app.css`
 to list issues with filename, line, byte column, item name and reason. The command
 reports each recoverable issue it encounters, including browser-only declarations
-and media conditions. A rejected selector or at-rule skips its entire block.
+and media conditions, with what native Kryon does instead. A rejected selector or
+at-rule skips its entire block. The check exits with status 1 when it skipped
+anything natively; browser-only declarations alone leave it at 0.
 `build/tools/css_tool check --strict app.css` exits with status 1 if any issue is
 reported. Both modes exit with status 1 when the stylesheet cannot be recovered.
 The CLI checks the given source and treats imports as empty sheets.

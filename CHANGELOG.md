@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- HTML type selectors that are one Kryon widget match it natively: `a` (Link), `p` (ParagraphText), `button`, `input` (TextField), `textarea` (TextArea), `select` (Dropdown), `img` (Image) and `body` (App). Headings, tables, `label` and plain containers fail with the native form (`h2`: every heading level is Heading, give each level a class). Declarations only the browser applies, and common web properties Kryon has no native form of (`position` and its offsets, `backdrop-filter`, named grid areas, `box-sizing`, `aspect-ratio`, `object-fit`, `overflow-x`/`-y`, `place-items`, `appearance`, `float`), now say what native Kryon does instead: `z-index`, `cursor`, `display: none` and `inline-*`, unequal grid tracks, and sizes in `min()` with a percentage among them. `css_tool check` exits with status 1 when it skipped anything natively, and stays at 0 for browser-only declarations alone.
+
 - Compiled packs store each rule sparse: a four-word mask of which of its 116 words are set, then only those words. The Material pack shrinks the app starter's portable bundle by 96,289 bytes (4,105,197 to 4,008,908). A pack carries `compiled.rule_count`; one without it is refused as stale, and `css_tool` regenerates it.
 
 - Builds on Kryon 02cc10e6, the Kryon whose starter uses the container Card and slot-free TitleBar, so an app pinning both resolves one Kryon.

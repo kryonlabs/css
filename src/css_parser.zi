@@ -476,6 +476,8 @@ CssParser :: struct {
     collect_issues: bool
     // A plain native parse: browser-only declarations are errors there.
     native_only: bool
+    // Why the current declaration is browser-only, when it has a reason.
+    web_reason: string
     issue_count: s32
     report_path: string
     statement_origin: CssCursor

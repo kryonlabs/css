@@ -158,8 +158,9 @@ CssReadOneCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
         name: CssName = CssReadName(p)
         if CssFailed(p) { return false }
         kind: s32 = CssKindValue(name)
+        if kind == -999999 { kind = CssHtmlKind(name) }
         if kind == -999999 {
-            CssFailName(p, "unknown widget type", name, "")
+            CssFailName(p, "unknown widget type", name, CssHtmlHint(name))
             return false
         }
         pending.selector.kind = kind
@@ -190,7 +191,7 @@ CssReadSelectorParts :: (p: *CssParser, pending: *CssPendingSelector) -> s32 {
                 return -1
             }
             if pending.selector.class_name != 0 {
-                CssFail(p, "one class per selector in Kryon CSS")
+                CssFail(p, "one class per selector in Kryon CSS: a widget carries one class, so give it one that names the combination, as .delta-up")
                 return -1
             }
             pending.selector.class_name = CssClassId(name)

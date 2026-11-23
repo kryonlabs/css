@@ -461,9 +461,11 @@ CssReadRuleBody :: (p: *CssParser) -> bool {
             for index: cast(s32)0..expr_count - 1 { p.rule_exprs[index] = exprs[index] }
             CssClearFailure(p)
         } else if collect && scope == CssScopeWeb {
+            reason: string = ifx p.web_reason.count > 0 then p.web_reason else "declaration is applied only by the browser"
             CssReportIssue(p, origin, CssIssueKind.Declaration, TextView(head.name.bytes[:head.name.length]),
-                "declaration is applied only by the browser", true)
+                reason, true)
         }
+        p.web_reason = ""
         CssFinishDeclaration(p)
     }
     return false

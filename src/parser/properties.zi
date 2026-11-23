@@ -234,7 +234,7 @@ CssReadPadding :: (p: *CssParser, end: s32, property: CssName) {
     inline: CssValue = values.values[0]
     if values.count >= 2 { inline = values.values[1] }
     if values.count >= 3 && !CssSameValue(values.values[2], block) {
-        CssFail(p, "Kryon pads top and bottom equally; use padding-block")
+        CssFail(p, "Kryon pads top and bottom equally, and left and right; write padding: VERTICAL HORIZONTAL")
         return
     }
     if values.count == 4 && !CssSameValue(values.values[3], inline) {
@@ -528,11 +528,22 @@ CssCheckLayoutTarget :: (p: *CssParser, name: string, grid_only: bool) {
     }
 }
 
-// A declaration only the browser applies. A plain native parse refuses it;
+// A declaration only the browser applies, with why when REASON or an
+// earlier step of the declaration says. A plain native parse refuses it;
 // the diagnostics parse reports it, and export and formatting keep it.
-CssPassWebDeclaration :: (p: *CssParser) -> s32 {
+CssPassWebDeclaration :: (p: *CssParser, reason: string = "") -> s32 {
+    if reason.count > 0 { p.web_reason = reason }
     if p.native_only {
         p.cursor = p.pending_name_cursor
+        if p.web_reason.count > 0 && !CssFailed(p) {
+            p.diagnostic_length = 0
+            CssDiagnosticAppend(p, "this declaration is applied only by the browser: ")
+            CssDiagnosticAppend(p, p.web_reason)
+            CssDiagnosticAt(p)
+            p.status = cast(s32)CssStatusError
+            p.web_reason = ""
+            return -1
+        }
         CssFail(p, "this declaration is applied only by the browser; read a shared sheet with CssSheetParseWithDiagnostics")
         return -1
     }
@@ -540,9 +551,60 @@ CssPassWebDeclaration :: (p: *CssParser) -> s32 {
     return CssScopeWeb
 }
 
+// Properties only the browser applies, each with what native Kryon does
+// instead ("" when there is nothing to add).
 css_web_properties: [9]string = .[
     "text-decoration", "text-transform", "white-space", "cursor",
     "grid-template-rows", "grid-column", "grid-row", "z-index", "visibility"];
+css_web_reasons: [9]string = .[
+    "", "the browser changes the case; natively, write the text in the case it shows", "",
+    "the browser sets the pointer shape; natively, it follows the widget kind",
+    "native Grid rows take the height of their tallest child",
+    "native Grid places each child in the next cell; a span is applied only by the browser",
+    "native Grid places each child in the next cell; a span is applied only by the browser",
+    "native paint follows the tree: a later sibling paints above an earlier one, and Popup, Menu and Modal paint above the page",
+    "to hide a widget natively, leave it out of the frame"];
+
+CssWebReason :: (name: CssName) -> string {
+    for index: cast(s32)0..cast(s32)css_web_properties.count - 1 {
+        if CssNameEquals(name, css_web_properties[index]) { return css_web_reasons[index] }
+    }
+    return ""
+}
+
+// Common web properties Kryon has no native form of, each with the native
+// way to get the effect.
+css_refused_properties: [19]string = .[
+    "position", "top", "right", "bottom", "left", "inset", "inset-inline", "inset-block",
+    "backdrop-filter", "grid-template-areas", "grid-area", "box-sizing", "aspect-ratio",
+    "object-fit", "overflow-x", "overflow-y", "place-items", "appearance", "float"];
+css_refused_reasons: [19]string = .[
+    ": containers place every child; a Popup, Menu or Modal floats above the page",
+    ": offsets need position, which is not native; use margin, gap or the container's justify-content and align-items",
+    ": offsets need position, which is not native; use margin, gap or the container's justify-content and align-items",
+    ": offsets need position, which is not native; use margin, gap or the container's justify-content and align-items",
+    ": offsets need position, which is not native; use margin, gap or the container's justify-content and align-items",
+    ": offsets need position, which is not native; use margin, gap or the container's justify-content and align-items",
+    ": offsets need position, which is not native; use margin, gap or the container's justify-content and align-items",
+    ": offsets need position, which is not native; use margin, gap or the container's justify-content and align-items",
+    ": nothing blurs what lies behind a widget; use a translucent background color",
+    ": native Grid places children in order into equal tracks; nest Rows and Columns for a page layout",
+    ": native Grid places children in order into equal tracks; nest Rows and Columns for a page layout",
+    ": native width and height are the outer box, padding and border inside, as with border-box",
+    ": give the widget both a width and a height",
+    ": an Image takes stretch, contain or cover from Image.Props.fit",
+    ": overflow: hidden clips both axes, and a Scroll scrolls its content",
+    ": overflow: hidden clips both axes, and a Scroll scrolls its content",
+    ": write align-items, and justify-content on a Row or Column",
+    ": native controls draw from their style, never as platform controls",
+    ": a Row places children side by side; margin-left: auto pushes one to the end"];
+
+CssRefusedReason :: (name: CssName) -> string {
+    for index: cast(s32)0..cast(s32)css_refused_properties.count - 1 {
+        if CssNameEquals(name, css_refused_properties[index]) { return css_refused_reasons[index] }
+    }
+    return ""
+}
 
 // Properties the web document host applies and native hosts skip: browser
 // layout and text features Kryon lays out in code.
@@ -722,7 +784,10 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         p.template.percent &= ~cast(u32)StyleMinHeight
     } else if CssNameEquals(name, "width") || CssNameEquals(name, "height") {
         extent, percent, native := CssReadNativeSize(p, end)
-        if !native { return ifx CssFailed(p) then -1 else CssPassWebDeclaration(p) }
+        if !native {
+            return ifx CssFailed(p) then -1 else CssPassWebDeclaration(p,
+                "native width and height take auto, a px, rem or em length (also in calc(), min(), max() or clamp()) or a percentage alone; for min(560px, 100%) write width: 100% with max-width: 560px")
+        }
         if percent && !CssPercentTarget(p) { return -1 }
         CssCheckLayoutTarget(p, TextView(name.bytes[:name.length]), false)
         field := ifx CssNameEquals(name, "width") then cast(u32)StyleWidth else cast(u32)StyleHeight
@@ -736,7 +801,8 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         if !native || CssFailed(p) {
             p.status = status
             p.diagnostic_length = 0
-            return CssPassWebDeclaration(p)
+            return CssPassWebDeclaration(p,
+                "native Grid tracks are equal: 1fr, repeat(N, 1fr) or repeat(auto-fit, minmax(LENGTH, 1fr)); for a fixed side column use a Row with a fixed-width child and a flex: 1 child")
         }
         CssCheckLayoutTarget(p, "grid-template-columns", true)
         p.template.fields |= cast(u32)StyleGridTracks
@@ -808,14 +874,14 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
     } else if CssTransformProperty(name) {
         return CssApplyTransform(p, name, end)
     } else if CssWebProperty(name) {
-        return CssPassWebDeclaration(p)
+        return CssPassWebDeclaration(p, CssWebReason(name))
     } else if name.length >= 2 && name.bytes[0] == #char "-" && name.bytes[1] == #char "-" {
         p.cursor = p.pending_name_cursor
         CssFail(p, "custom properties belong in :root")
         return -1
     } else {
         p.cursor = p.pending_name_cursor
-        CssFailName(p, "unknown property", name, "")
+        CssFailName(p, "unknown property", name, CssRefusedReason(name))
         return -1
     }
     if !CssEndValue(p, end, name) { return -1 }

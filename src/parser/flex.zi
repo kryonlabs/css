@@ -142,6 +142,11 @@ CssApplyFlexProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
                 CssFlexTarget(p, name, CssNameEquals(word, "grid"))
                 return CssScopeNative
             }
+            p.web_reason = "native containers are display: flex (Row, Column) or display: grid (Grid)"
+            if CssNameEquals(word, "none") { p.web_reason = "to hide a widget natively, leave it out of the frame" }
+            if word.length >= 6 && CssNameEquals(CssName.{bytes = word.bytes, length = 6}, "inline") {
+                p.web_reason = "native layout has no inline flow; a Row places its children side by side"
+            }
             valid = false
         } else if CssNameEquals(name, "flex-direction") {
             flex.direction = CssFlexDirectionValue(word)

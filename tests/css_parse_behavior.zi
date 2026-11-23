@@ -75,6 +75,15 @@ Values :: () {
     // sheet is read with CssSheetParseWithDiagnostics, which reports it.
     ParseFails("Button { width: 50vw; color: red; }", "applied only by the browser", "browser-only size refused natively")
     ParseFails("Button { text-transform: uppercase; }", "applied only by the browser", "browser-only property refused natively")
+    ParseFails("Button { z-index: 2; }", "applied only by the browser: native paint follows the tree", "z-index says how native paint stacks")
+    ParseFails("Row { display: none; }", "to hide a widget natively, leave it out of the frame", "display: none")
+    ParseFails("Row { display: inline-flex; }", "native layout has no inline flow", "inline display")
+    ParseFails("Grid { grid-template-columns: 240px minmax(0, 1fr); }", "native Grid tracks are equal", "unequal grid tracks")
+    ParseFails("Row { position: absolute; }", "unknown property 'position': containers place every child", "position")
+    ParseFails("Row { inset: 0; }", "offsets need position", "inset")
+    ParseFails("Row { backdrop-filter: blur(8px); }", "nothing blurs what lies behind", "backdrop-filter")
+    ParseFails("Grid { grid-area: main; }", "native Grid places children in order", "grid-area")
+    ParseFails("Row { padding: 8px 12px 10px; }", "write padding: VERTICAL HORIZONTAL", "unequal block padding")
     if Builds("Column:hover { transform: translateY(-2px) scale(1.05); } Button { rotate: 45deg; scale: 1.1 0.9; transform-origin: left 25%; transition: transform 150ms linear; } Text { transform: rotate(90deg) scale(2, 1) translate(4px, 0); }",
         "transforms") {
         lifted := Rule(0).box
@@ -282,6 +291,17 @@ Selectors :: () {
     ParseFails("Button:nth-child(2) { color: red; }", "selector function", "selector function")
     ParseFails("Butt0n { color: red; }", "unknown widget type", "widget name")
     ParseFails("Button.a.b { color: red; }", "one class per selector", "two classes")
+    if Builds("a { color: red; } p { color: red; } input { color: red; } textarea { color: red; } select { color: red; } button { color: red; } img { opacity: 0.5; } body { color: red; }",
+        "HTML element selectors") {
+        Check(test_rules.count == 8 && Rule(0).selector.kind == StyleKindLink() &&
+            Rule(1).selector.kind == StyleKindParagraphText() && Rule(2).selector.kind == StyleKindTextField() &&
+            Rule(3).selector.kind == StyleKindTextArea() && Rule(4).selector.kind == StyleKindDropdown() &&
+            Rule(5).selector.kind == StyleKindButton() && Rule(6).selector.kind == StyleKindImage() &&
+            Rule(7).selector.kind == StyleKindApp(), "HTML elements match their Kryon widget kinds")
+    }
+    ParseFails("h2 { color: red; }", "unknown widget type 'h2': every heading level is Heading", "heading element")
+    ParseFails("td { color: red; }", "unknown widget type 'td': a table is a TableView", "table element")
+    ParseFails("div { color: red; }", "containers are Row, Column and Grid", "container element")
     ParseFails("Button:hover:focus { color: red; }", "one state pseudo-class per selector", "two states")
     ParseFails("Button[tone^=Acc] { color: red; }", "only '=' attribute matches", "attribute operator")
 }

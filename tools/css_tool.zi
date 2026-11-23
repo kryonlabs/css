@@ -85,7 +85,11 @@ EmptyImport :: (name: string) -> CssImportAnswer {
     return answer
 }
 
+// Issues a check skipped natively; browser-only ones are not counted.
+skipped_issues: s32 = 0;
+
 PrintIssue :: (context: *void, issue: CssIssue) {
+    if !issue.web_only { skipped_issues += 1 }
     output_length = 0
     unused EmitNumber(issue.line)
     unused Emit(":")
@@ -110,8 +114,10 @@ PrintIssue :: (context: *void, issue: CssIssue) {
 
 CheckSheet :: (path: string, source: string, strict: bool) -> s32 {
     CssSheetReset(*sheet)
+    skipped_issues = 0
     diagnostics: CssDiagnostics = .{.report = PrintIssue, .strict = strict}
-    return ifx CssSheetParseWithDiagnostics(*sheet, source, path, EmptyImport, diagnostics) then 0 else 1
+    if !CssSheetParseWithDiagnostics(*sheet, source, path, EmptyImport, diagnostics) { return 1 }
+    return ifx skipped_issues > 0 then 1 else 0
 }
 
 // Generated module text ------------------------------------------------

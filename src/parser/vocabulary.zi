@@ -21,6 +21,39 @@ CssClassId :: (name: CssName) -> s32 {
     return cast(s32)hash
 }
 
+// HTML elements that are one Kryon widget kind, so a web stylesheet's type
+// selectors match natively too.
+CssHtmlKind :: (name: CssName) -> s32 {
+    if CssNameEquals(name, "a") { return StyleKindLink() }
+    if CssNameEquals(name, "p") { return StyleKindParagraphText() }
+    if CssNameEquals(name, "button") { return StyleKindButton() }
+    if CssNameEquals(name, "input") { return StyleKindTextField() }
+    if CssNameEquals(name, "textarea") { return StyleKindTextArea() }
+    if CssNameEquals(name, "select") { return StyleKindDropdown() }
+    if CssNameEquals(name, "img") { return StyleKindImage() }
+    if CssNameEquals(name, "body") { return StyleKindApp() }
+    return -999999
+}
+
+css_html_tables: [7]string = .["table", "thead", "tbody", "tfoot", "tr", "td", "th"];
+css_html_containers: [13]string = .["div", "section", "main", "header", "footer", "nav", "aside",
+    "article", "form", "ul", "ol", "li", "span"];
+
+// What an HTML element with no single Kryon kind is natively.
+CssHtmlHint :: (name: CssName) -> string {
+    if name.length == 2 && name.bytes[0] == #char "h" && name.bytes[1] >= #char "1" && name.bytes[1] <= #char "6" {
+        return ": every heading level is Heading; give each level a class, as Heading.title"
+    }
+    for element: css_html_tables {
+        if CssNameEquals(name, element) { return ": a table is a TableView, or a Grid of cells with a class" }
+    }
+    if CssNameEquals(name, "label") { return ": a field label is Text; give it a class, as Text.label" }
+    for element: css_html_containers {
+        if CssNameEquals(name, element) { return ": containers are Row, Column and Grid; give the element a class" }
+    }
+    return ""
+}
+
 CssKindValue :: (name: CssName) -> s32 {
     if CssNameEquals(name, "*") || CssNameEquals(name, "Any") {
         return StyleKindAny()

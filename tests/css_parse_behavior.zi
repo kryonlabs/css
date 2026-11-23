@@ -45,13 +45,13 @@ Values :: () {
         Check(style.border == cast(u32)0x00ff00ff, "hsl")
         Check(style.focus == cast(u32)0xaabbccff, "short hex")
     }
-    if Builds("Button { background: linear-gradient(to bottom, #000000, #ffffff); translate: 3px 4px; border: 2px solid #ff0000; border-radius: 6px; opacity: 0.5; -kryon-material: glass; -kryon-icon-size: 20px; font-size: 1.5rem; letter-spacing: 1px; }",
+    if Builds("Button { background: linear-gradient(to bottom, #000000, #ffffff); -kryon-content-offset: 3px 4px; border: 2px solid #ff0000; border-radius: 6px; opacity: 0.5; -kryon-material: glass; -kryon-icon-size: 20px; font-size: 1.5rem; letter-spacing: 1px; }",
         "shorthands") {
         style: StyleData = Rule(0).style
         Check(style.background == cast(u32)0x000000ff && style.background_end == cast(u32)0xffffffff,
             "gradient")
         Check(Has(style, cast(u32)StyleBackgroundEnd), "gradient end marked")
-        Check(style.offset_x == 3.0 && style.offset_y == 4.0, "translate")
+        Check(style.offset_x == 3.0 && style.offset_y == 4.0, "content offset")
         Check(style.border_width == 2.0 && style.border == cast(u32)0xff0000ff, "border shorthand")
         Check(style.radius == 6.0 && style.opacity == 0.5, "radius and opacity")
         Check(cast(s32)style.material == cast(s32)MaterialGlass, "material")
@@ -75,6 +75,13 @@ Values :: () {
     // sheet is read with CssSheetParseWithDiagnostics, which reports it.
     ParseFails("Button { width: 50vw; color: red; }", "applied only by the browser", "browser-only size refused natively")
     ParseFails("Button { text-transform: uppercase; }", "applied only by the browser", "browser-only property refused natively")
+    if Builds("Button:hover { translate: 0 -2px; } Text { translate: 4px; } Row { translate: none; }", "translate property") {
+        Check((Rule(0).box.fields & cast(u32)StyleBoxTranslate) != 0 && Rule(0).box.translate[0] == 0.0 &&
+            Rule(0).box.translate[1] == -2.0 && Rule(1).box.translate[0] == 4.0 && Rule(1).box.translate[1] == 0.0 &&
+            (Rule(2).box.fields & cast(u32)StyleBoxTranslate) != 0 && Rule(2).box.translate[1] == 0.0 &&
+            (Rule(0).style.fields & cast(u32)StyleContentOffset) == 0, "translate moves the whole box, not a part")
+    }
+    ParseFails("Button { translate: 10% 0; }", "percentages are browser-only", "translate percentage")
     ParseFails("Button { z-index: 2; }", "applied only by the browser: native paint follows the tree", "z-index says how native paint stacks")
     ParseFails("Row { display: none; }", "to hide a widget natively, leave it out of the frame", "display: none")
     ParseFails("Row { display: inline-flex; }", "native layout has no inline flow", "inline display")

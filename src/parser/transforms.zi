@@ -1,11 +1,11 @@
-// transform, scale, rotate and transform-origin as box fields. A transform
+// transform, translate, scale, rotate and transform-origin as box fields. A transform
 // is a list of translate(), scale() and rotate() functions and their X and
 // Y forms; it is kept as one translation, one rotation and one x and y
 // scale, which Kryon applies at paint time about the origin and eases when
 // a transition names it. Skew, matrix and 3D functions, and a list that
 // shears, stay with the browser.
 
-css_transform_properties: [4]string = .["transform", "scale", "rotate", "transform-origin"];
+css_transform_properties: [5]string = .["transform", "translate", "scale", "rotate", "transform-origin"];
 
 CssTransformProperty :: (name: CssName) -> bool {
     for property: css_transform_properties {
@@ -245,7 +245,22 @@ CssApplyTransform :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         saved := p.cursor
         none := CssNameEquals(CssReadName(p), "none")
         if !none { p.cursor = saved }
-        if CssNameEquals(name, "scale") {
+        if CssNameEquals(name, "translate") {
+            // translate: x [y]; it moves the whole box after rotate, scale
+            // and transform, so the origin does not matter.
+            box.translate = float32.[0.0, 0.0]
+            if !none {
+                first, ok := CssReadTransformValue(p, 0)
+                valid = ok
+                box.translate[0] = cast(float32)first
+                if ok && CssMoreValue(p, end) {
+                    second, more := CssReadTransformValue(p, 0)
+                    valid = more
+                    box.translate[1] = cast(float32)second
+                }
+            }
+            box.fields |= cast(u32)StyleBoxTranslate
+        } else if CssNameEquals(name, "scale") {
             box.scale = float32.[1.0, 1.0]
             if !none {
                 first, ok := CssReadTransformValue(p, 1)

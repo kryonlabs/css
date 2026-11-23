@@ -123,7 +123,7 @@ css_declarations: [26]string = .["color: #102030", "color: red", "color: var(--i
     "background: linear-gradient(#000000, #ffffff)", "border-color: hsl(120 50% 50%)",
     "border: 1px solid red", "border-radius: 4px", "padding: 2px 4px", "padding-inline: 0.5rem",
     "padding-block: var(--pad)", "gap: 3px", "font-size: 1.25rem", "font-family: \"Inter\", sans-serif",
-    "opacity: 0.5", "translate: 1px 2px", "outline-color: #abc", "-kryon-material: glass",
+    "opacity: 0.5", "-kryon-content-offset: 1px 2px", "outline-color: #abc", "-kryon-material: glass",
     "-kryon-icon-size: 16px", "letter-spacing: 1px", "width: 20px", "margin-inline: 4px",
     "transition: color 150ms", "border-width: var(--pad)", "opacity: var(--n)"];
 

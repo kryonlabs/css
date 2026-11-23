@@ -935,7 +935,7 @@ style_pack_lightfield_typefaces_count :: 0;
 #program_export
 StylePackLightfield :: () -> CssCompiledSheet {
     compiled: CssCompiledSheet
-    compiled.rule_words = 116
+    compiled.rule_words = 118
     compiled.rule_count = 252
     compiled.rules = style_pack_lightfield_rules[0:style_pack_lightfield_rules_count]
     compiled.refs = style_pack_lightfield_refs[0:style_pack_lightfield_refs_count]

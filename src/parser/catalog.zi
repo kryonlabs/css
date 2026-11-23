@@ -10,7 +10,7 @@ CssCatalogEntry :: struct {
     values: string
 }
 
-CssCatalogCount :: 92
+CssCatalogCount :: 93
 
 css_catalog_0: [10]CssCatalogEntry = .[
     .{"color", "*", "#203040", "color, var(), color-mix()"},
@@ -79,7 +79,7 @@ css_catalog_5: [10]CssCatalogEntry = .[
     .{"font-style", "Text", "italic", "normal, italic or oblique"},
     .{"letter-spacing", "Text", "-0.02em", "normal or a signed length"},
     .{"line-height", "Text", "1.5", "normal, number, percentage or length"},
-    .{"translate", "*", "2px 4px", "x [y] lengths"},
+    .{"-kryon-content-offset", "*", "2px 4px", "x [y] lengths: a widget part's offset or metric"},
     .{"transition", "Button", "background-color 180ms ease-out", "native properties, durations, easing, delay"},
     .{"transition-property", "Button", "color", "native properties or all"},
     .{"transition-duration", "Button", "120ms", "duration"}];
@@ -118,9 +118,10 @@ css_catalog_8: [10]CssCatalogEntry = .[
     .{"outline-offset", "Button", "2px", "signed length outside the edge"},
     .{"background-image", "Row", "linear-gradient(to right, #111827, #374151)", "none or linear-gradient()"},
     .{"transform", "Column", "translateY(-2px) scale(1.02)", "none, or translate(), scale() and rotate() with their X and Y forms"},
-    .{"scale", "Button", "1.05", "none, or one or two numbers or percentages"}];
+    .{"translate", "Column", "0 -2px", "none, or x [y] lengths; moves the whole box"}];
 
-css_catalog_9: [2]CssCatalogEntry = .[
+css_catalog_9: [3]CssCatalogEntry = .[
+    .{"scale", "Button", "1.05", "none, or one or two numbers or percentages"},
     .{"rotate", "Text", "-3deg", "none or an angle"},
     .{"transform-origin", "Column", "left top", "left, center, right, top, bottom, lengths or percentages"}];
 

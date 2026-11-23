@@ -359,8 +359,10 @@ CssReadBackground :: (p: *CssParser, end: s32, property: CssName) {
     unused CssEndValue(p, end, property)
 }
 
-// translate: x [y].
-CssReadTranslate :: (p: *CssParser, end: s32, property: CssName) {
+// -kryon-content-offset: x [y], a widget part's offset or metric (a
+// NavigationBar panel's width, a Segment's label padding); the standard
+// translate property moves the whole box instead (transforms.zi).
+CssReadContentOffset :: (p: *CssParser, end: s32, property: CssName) {
     values: CssLengths = CssReadLengths(p, end, cast(s32)CssFieldOffsetX, 2, property)
     if CssFailed(p) { return }
     if values.count == 0 {
@@ -826,8 +828,8 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         value: CssValue = CssReadField(p, cast(s32)CssFieldLineHeight)
         if !value.ok { return -1 }
         if !CssSetNonnegative(p, cast(s32)CssFieldLineHeight, value, name) { return -1 }
-    } else if CssNameEquals(name, "translate") {
-        CssReadTranslate(p, end, name)
+    } else if CssNameEquals(name, "-kryon-content-offset") {
+        CssReadContentOffset(p, end, name)
         return ifx CssFailed(p) then -1 else CssScopeNative
     } else if CssNameEquals(name, "-kryon-icon-size") {
         value: CssValue = CssReadField(p, cast(s32)CssFieldIconSize)

@@ -117,6 +117,9 @@ Column.hoverlift { background: #444444; }
 Column.hoverlift:hover { transform: translateY(-2px); }
 Column.eased { background: #555555; transition: transform 100ms linear; }
 Column.eased:hover { transform: translateX(10px); }
+Column.raised { background: #666666; }
+Column.raised:hover { translate: 0 -2px; }
+Column.spun { background: #777777; rotate: 90deg; translate: 10px 0; }
 
 Column.side { width: 120px; }
 Column.grow { flex: 1; }

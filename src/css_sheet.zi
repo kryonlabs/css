@@ -938,11 +938,11 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // and box data, the percent masks of the style, flex and box fields, then
 // the per-side border widths and colors, the outline width and offset, the
 // selector's tree context, the box gradient, and the transform with its
-// origin and transition. The count is the pack format: a pack written
+// origin and transition, and the translate property. The count is the pack format: a pack written
 // with another one is stale and css_tool regenerates it. Most words of a
 // rule are zero, so a pack stores each rule as CssRuleMaskWords words with
 // one bit for each rule word, then only the words whose bit is set.
-CssRuleWords :: 116
+CssRuleWords :: 118
 CssRuleMaskWords :: 4
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
@@ -1168,6 +1168,7 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         entry.rule.box.transform_origin = float32.[CssWordFloat(w[109]), CssWordFloat(w[110])]
         entry.rule.box.transform_seconds = CssWordFloat(w[111])
         for part: 0..3 { entry.rule.box.transform_timing[part] = cast(u8)w[112 + part] }
+        entry.rule.box.translate = float32.[CssWordFloat(w[116]), CssWordFloat(w[117])]
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

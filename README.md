@@ -154,7 +154,7 @@ Anything else is browser-only or an error.
 | `font-style` | `Text` | `italic` | normal, italic or oblique |
 | `letter-spacing` | `Text` | `-0.02em` | normal or a signed length |
 | `line-height` | `Text` | `1.5` | normal, number, percentage or length |
-| `translate` | `*` | `2px 4px` | x [y] lengths |
+| `-kryon-content-offset` | `*` | `2px 4px` | x [y] lengths: a widget part's offset or metric |
 | `transition` | `Button` | `background-color 180ms ease-out` | native properties, durations, easing, delay |
 | `transition-property` | `Button` | `color` | native properties or all |
 | `transition-duration` | `Button` | `120ms` | duration |
@@ -187,6 +187,7 @@ Anything else is browser-only or an error.
 | `outline-offset` | `Button` | `2px` | signed length outside the edge |
 | `background-image` | `Row` | `linear-gradient(to right, #111827, #374151)` | none or linear-gradient() |
 | `transform` | `Column` | `translateY(-2px) scale(1.02)` | none, or translate(), scale() and rotate() with their X and Y forms |
+| `translate` | `Column` | `0 -2px` | none, or x [y] lengths; moves the whole box |
 | `scale` | `Button` | `1.05` | none, or one or two numbers or percentages |
 | `rotate` | `Text` | `-3deg` | none or an angle |
 | `transform-origin` | `Column` | `left top` | left, center, right, top, bottom, lengths or percentages |
@@ -395,8 +396,8 @@ Button.notice {
 }
 
 @keyframes appear {
-  from { opacity: 0; translate: 0 4px; }
-  to { opacity: 1; translate: 0 0; }
+  from { opacity: 0; -kryon-content-offset: 0 4px; }
+  to { opacity: 1; -kryon-content-offset: 0 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

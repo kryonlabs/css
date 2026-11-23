@@ -190,27 +190,27 @@
     padding-block: 0;
     gap: var(--space-3);
     -kryon-icon-size: 80px;
-    translate: 96px 56px;
+    -kryon-content-offset: 96px 56px;
     opacity: 1;
     -kryon-material: var(--default);
   }
 
   NavigationBar[role=Panel] {
-    translate: 340px 0;
+    -kryon-content-offset: 340px 0;
     -kryon-icon-size: 128px;
     padding-block: 58px;
   }
 
   NavigationBar[role=Row] {
     -kryon-icon-size: 58px;
-    translate: 0 22px;
+    -kryon-content-offset: 0 22px;
     padding-inline: 36px;
     padding-block: 36px;
   }
 
   NavigationBar[role=Action] {
     -kryon-icon-size: 34px;
-    translate: 180px 16px;
+    -kryon-content-offset: 180px 16px;
     padding-inline: 92px;
     padding-block: 36px;
     gap: 8px;
@@ -218,7 +218,7 @@
 
   NavigationBar[role=Divider] {
     -kryon-icon-size: 48px;
-    translate: 0 8px;
+    -kryon-content-offset: 0 8px;
     padding-block: 12px;
     gap: 8px;
   }
@@ -235,7 +235,7 @@
     gap: 4px;
     font-size: var(--font-md);
     -kryon-icon-size: 24px;
-    translate: 8px 0;
+    -kryon-content-offset: 8px 0;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -271,7 +271,7 @@
     border-width: var(--border-size);
     padding-inline: 72px;
     -kryon-icon-size: 48px;
-    translate: 168px 0;
+    -kryon-content-offset: 168px 0;
     gap: var(--space-2);
     opacity: 1;
     -kryon-material: var(--default);
@@ -339,7 +339,7 @@
     padding-inline: 2px;
     padding-block: 2px;
     -kryon-icon-size: 30px;
-    translate: 72px 180px;
+    -kryon-content-offset: 72px 180px;
     gap: var(--space-2);
     opacity: 1;
     -kryon-material: var(--default);
@@ -354,7 +354,7 @@
     border-width: var(--border-none);
     padding-inline: var(--space-3);
     padding-block: 7px;
-    translate: 20px 0;
+    -kryon-content-offset: 20px 0;
     font-size: var(--font-sm);
     opacity: 1;
     -kryon-material: var(--default);
@@ -411,7 +411,7 @@
     border-color: var(--border);
     padding-inline: 12px;
     gap: 4px;
-    translate: 180px 0;
+    -kryon-content-offset: 180px 0;
   }
 
   Menu[role=Context] {
@@ -430,7 +430,7 @@
     border-width: var(--border-none);
     padding-inline: var(--space-3);
     padding-block: var(--space-2);
-    translate: 88px 30px;
+    -kryon-content-offset: 88px 30px;
     font-size: var(--font-sm);
     opacity: 1;
     -kryon-material: var(--default);
@@ -465,7 +465,7 @@
     padding-inline: 12px;
     gap: 4px;
     -kryon-icon-size: 32px;
-    translate: 60px 0;
+    -kryon-content-offset: 60px 0;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -539,7 +539,7 @@
     gap: 4px;
     -kryon-icon-size: 36px;
     padding-block: 2px;
-    translate: 20px 28px;
+    -kryon-content-offset: 20px 28px;
   }
 
   ColorPickerSwatch {
@@ -566,7 +566,7 @@
     border-width: var(--border-size);
     padding-inline: var(--space-2);
     padding-block: var(--space-2);
-    translate: 0 8px;
+    -kryon-content-offset: 0 8px;
     gap: var(--space-2);
     opacity: 1;
     -kryon-material: var(--default);
@@ -582,7 +582,7 @@
     padding-inline: var(--space-3);
     padding-block: var(--space-2);
     -kryon-icon-size: 30px;
-    translate: 0 30px;
+    -kryon-content-offset: 0 30px;
     font-size: var(--font-sm);
     opacity: 1;
     -kryon-material: var(--default);
@@ -630,7 +630,7 @@
     padding-block: 7px;
     gap: 2px;
     -kryon-icon-size: 16px;
-    translate: 18px 28px;
+    -kryon-content-offset: 18px 28px;
     font-size: var(--font-sm);
     opacity: 1;
     -kryon-material: var(--default);
@@ -677,7 +677,7 @@
     padding-inline: var(--space-3);
     padding-block: var(--space-2);
     -kryon-icon-size: 28px;
-    translate: 0 28px;
+    -kryon-content-offset: 0 28px;
     font-size: var(--font-sm);
     opacity: 1;
     -kryon-material: var(--default);
@@ -732,7 +732,7 @@
     padding-inline: 8px;
     gap: 4px;
     -kryon-icon-size: 3px;
-    translate: 36px 5px;
+    -kryon-content-offset: 36px 5px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -749,7 +749,7 @@
     border-width: 2px;
     padding-inline: 3px;
     -kryon-icon-size: 32px;
-    translate: 34px 12px;
+    -kryon-content-offset: 34px 12px;
     opacity: 0.10;
     -kryon-material: var(--default);
   }
@@ -960,7 +960,7 @@
     padding-inline: 12px;
     gap: 4px;
     -kryon-icon-size: 32px;
-    translate: 60px 0;
+    -kryon-content-offset: 60px 0;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1051,14 +1051,14 @@
     padding-inline: 24px;
     padding-block: 6px;
     gap: 8px;
-    translate: 120px 0;
+    -kryon-content-offset: 120px 0;
   }
 
   Toolbar[role=BottomAction] {
     padding-inline: 10px;
     gap: 12px;
     -kryon-icon-size: 24px;
-    translate: 16px 6px;
+    -kryon-content-offset: 16px 6px;
   }
 
   Modal {
@@ -1090,7 +1090,7 @@
     padding-block: 18px;
     gap: 24px;
     -kryon-icon-size: 280px;
-    translate: 420px 58px;
+    -kryon-content-offset: 420px 58px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1101,7 +1101,7 @@
     padding-inline: 24px;
     padding-block: 18px;
     -kryon-icon-size: 48px;
-    translate: 0 14px;
+    -kryon-content-offset: 0 14px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1113,7 +1113,7 @@
     padding-block: 160px;
     gap: 18px;
     -kryon-icon-size: 38px;
-    translate: 0 18px;
+    -kryon-content-offset: 0 18px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1128,7 +1128,7 @@
     padding-inline: 24px;
     gap: 8px;
     -kryon-icon-size: 44px;
-    translate: 88px 150px;
+    -kryon-content-offset: 88px 150px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1163,7 +1163,7 @@
     padding-block: 16px;
     gap: 6px;
     -kryon-icon-size: 20px;
-    translate: 120px 96px;
+    -kryon-content-offset: 120px 96px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1201,7 +1201,7 @@
     padding-inline: 12px;
     gap: 12px;
     -kryon-icon-size: 48px;
-    translate: 48px 0;
+    -kryon-content-offset: 48px 0;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1225,7 +1225,7 @@
     padding-inline: 12px;
     padding-block: 12px;
     gap: 20px;
-    translate: 300px 112px;
+    -kryon-content-offset: 300px 112px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1259,7 +1259,7 @@
     padding-inline: 7px;
     gap: 8px;
     -kryon-icon-size: 19px;
-    translate: 0 34px;
+    -kryon-content-offset: 0 34px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1277,7 +1277,7 @@
     padding-inline: 6px;
     gap: 12px;
     -kryon-icon-size: 16px;
-    translate: 0 28px;
+    -kryon-content-offset: 0 28px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1292,7 +1292,7 @@
     background: var(--transparent);
     color: var(--text);
     border-color: var(--transparent);
-    translate: 0 28px;
+    -kryon-content-offset: 0 28px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1315,7 +1315,7 @@
     border-radius: var(--radius-sm);
     border-width: var(--border-size);
     padding-inline: 6px;
-    translate: 0 30px;
+    -kryon-content-offset: 0 30px;
     font-size: var(--font-sm);
     opacity: 1;
     -kryon-material: var(--default);
@@ -1345,7 +1345,7 @@
     background: var(--transparent);
     color: var(--text);
     border-color: var(--transparent);
-    translate: 32px 0;
+    -kryon-content-offset: 32px 0;
     font-size: var(--font-sm);
     opacity: 1;
     -kryon-material: var(--default);
@@ -1371,7 +1371,7 @@
     border-color: var(--border-soft);
     border-width: var(--border-size);
     padding-inline: 5px;
-    translate: 0 8px;
+    -kryon-content-offset: 0 8px;
     opacity: 1;
     -kryon-material: var(--default);
   }
@@ -1765,7 +1765,7 @@
     gap: 8px;
     font-size: var(--font-md);
     -kryon-material: flat;
-    translate: 24px 16px;
+    -kryon-content-offset: 24px 16px;
   }
 
   Dropdown:hover {
@@ -1803,7 +1803,7 @@
     border-color: var(--border);
     padding-block: 4px;
     gap: 4px;
-    translate: 0 16px;
+    -kryon-content-offset: 0 16px;
   }
 
   Dropdown[role=Option] {
@@ -1815,7 +1815,7 @@
     -kryon-icon-size: 8px;
     padding-block: 2px;
     gap: 2px;
-    translate: 8px 0;
+    -kryon-content-offset: 8px 0;
   }
 
   Dropdown[role=Option]:hover {
@@ -1848,7 +1848,7 @@
     padding-block: 6px;
     gap: 14px;
     -kryon-icon-size: 8px;
-    translate: 36px 28px;
+    -kryon-content-offset: 36px 28px;
     opacity: 1;
   }
 
@@ -1908,7 +1908,7 @@
     padding-inline: 16px;
     padding-block: 8px;
     gap: 20px;
-    translate: 5px 42px;
+    -kryon-content-offset: 5px 42px;
     opacity: 1;
     -kryon-material: var(--default);
   }

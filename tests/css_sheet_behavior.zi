@@ -80,6 +80,32 @@ CssCutPack :: (pack: CssCompiledSheet) -> CssCompiledSheet {
     return cut
 }
 
+// The packs' part metrics stay content offsets now that translate moves
+// the whole box: the NavigationBar panel, the Modal panel and a Segment's
+// label padding.
+PackMetricRule :: (kind: s32, x: float32, y: float32) -> bool {
+    for index: cast(s32)0..compiled_rules.count - 1 {
+        rule := compiled_rules.items[index]
+        if rule.selector.kind != kind || (rule.style.fields & cast(u32)StyleContentOffset) == 0 { continue }
+        if rule.style.offset_x == x && rule.style.offset_y == y { return true }
+    }
+    return false
+}
+
+PackMetrics :: () {
+    CssSheetReset(*compiled_sheet)
+    Check(CssSheetLoad(*compiled_sheet, StylePackClassic()) &&
+        CssSheetBuild(*compiled_sheet, CssDefaultEnvironment(), null, *compiled_rules), "classic pack builds")
+    Check(PackMetricRule(StyleKindNavigationBar(), 340.0, 0.0), "the NavigationBar panel stays 340 wide")
+    Check(PackMetricRule(StyleKindModal(), 420.0, 58.0), "the Modal panel stays 420")
+    Check(PackMetricRule(StyleKindSegment(), 20.0, 0.0), "a Segment's label padding stays 20")
+    moved := false
+    for index: cast(s32)0..compiled_rules.count - 1 {
+        if (compiled_rules.items[index].box.fields & cast(u32)StyleBoxTranslate) != 0 { moved = true }
+    }
+    Check(!moved, "no pack metric became a visual translate")
+}
+
 PackedFields :: () {
     words: [CssRuleWords]u32
     words[0] = cast(u32)StyleKindText()
@@ -456,6 +482,7 @@ main :: () -> s32 {
     TransformOptIn()
     Packs()
     PackedFields()
+    PackMetrics()
     PackedMotion()
     AppOverPack()
     AtomicInstall()

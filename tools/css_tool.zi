@@ -458,6 +458,7 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         for part: box.transform_origin { Word(FloatBits(part)) }
         Word(FloatBits(box.transform_seconds))
         for part: box.transform_timing { Word(cast(u32)part) }
+        for part: box.translate { Word(FloatBits(part)) }
         if word_count - rule_start != CssRuleWords || word_count + CssRuleMaskWords > cast(s32)words.count {
             return Fail(path, "the rule layout does not match CssRuleWords")
         }

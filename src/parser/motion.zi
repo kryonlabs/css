@@ -12,7 +12,7 @@ CssAnimatedProperty :: (name: CssName) -> u32 {
     if CssNameEquals(name, "border-width") { return cast(u32)StyleBorderWidth }
     if CssNameEquals(name, "border-radius") { return cast(u32)StyleRadius }
     if CssNameEquals(name, "opacity") { return cast(u32)StyleOpacity }
-    if CssNameEquals(name, "translate") { return cast(u32)StyleContentOffset }
+    if CssNameEquals(name, "-kryon-content-offset") { return cast(u32)StyleContentOffset }
     return 0
 }
 
@@ -62,7 +62,8 @@ CssTime :: (number: CssNumber, seconds: *float64) -> bool {
 CssTransitionProperty :: (word: CssName, fields: *u32) -> bool {
     if CssNameEquals(word, "none") { fields.* = 0 }
     else if CssNameEquals(word, "all") { fields.* = CssAnimatedFields() | cast(u32)CssTransformField }
-    else if CssNameEquals(word, "transform") || CssNameEquals(word, "scale") || CssNameEquals(word, "rotate") {
+    else if CssNameEquals(word, "transform") || CssNameEquals(word, "translate") || CssNameEquals(word, "scale") ||
+        CssNameEquals(word, "rotate") {
         fields.* = cast(u32)CssTransformField
     } else {
         fields.* = CssAnimatedProperty(word)
@@ -336,8 +337,12 @@ CssReadKeyframeStyle :: (p: *CssParser, track: *CssParsedKeyframes) -> StyleData
         if !head.ok { break }
         if CssAnimatedProperty(head.name) == 0 {
             if CssCollectIssues(p) {
+                reason := "property cannot be animated by native keyframes"
+                if CssTransformProperty(head.name) {
+                    reason = "native transforms ease through transition (transition: translate 200ms), not @keyframes"
+                }
                 CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, TextView(head.name.bytes[:head.name.length]),
-                    "property cannot be animated by native keyframes", true)
+                    reason, true)
             }
             track.unsupported = true
         } else {

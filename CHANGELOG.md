@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Builds on Kryon 02cc10e6, the Kryon whose starter uses the container Card and slot-free TitleBar, so an app pinning both resolves one Kryon.
+
 - `transform`, `transform-origin`, `scale` and `rotate` are known browser-only declarations: a shared sheet keeps them for the DOM export and a plain native parse refuses them with the reason, instead of failing on an unknown property.
 
 - `linear-gradient()` takes any angle (`deg`, `turn`, `rad`, `grad`) or `to` a side or corner, and two to six color stops with `%` positions, in `background` and `background-image`; Row, Column and Grid paint them, other widgets a top-to-bottom gradient of the first and last colors (`css_tool check` says so). Radial, conic and repeating gradients are refused natively with the reason. The pack format is 101 words a rule. Pins Kryon d0711324.

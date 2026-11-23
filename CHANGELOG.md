@@ -6,7 +6,7 @@
 
 - Compiled packs store each rule sparse: a four-word mask of which of its 116 words are set, then only those words. The Material pack shrinks the app starter's portable bundle by 96,289 bytes (4,105,197 to 4,008,908). A pack carries `compiled.rule_count`; one without it is refused as stale, and `css_tool` regenerates it.
 
-- Builds on Kryon 02cc10e6, the Kryon whose starter uses the container Card and slot-free TitleBar, so an app pinning both resolves one Kryon.
+- Builds on Kryon 8056d131, which paints CSS transforms and carries the starter this package's packs were measured with, so an app pinning both resolves one Kryon.
 
 - `transform` (translate, scale and rotate functions with their X and Y forms), `scale`, `rotate` and `transform-origin` are native: Kryon applies them at paint time on every host to Row, Column, Grid, Button, Card, Text, Heading, Link and Image and to what they contain, with `:hover` and `:active` following the pointer, and `transition: transform …` eases them. They are opt-in paint code: the app calls `PaintTransformInstall()` (kryon/paint_transform) once, and `CssSheetInstall` refuses a sheet that sets a transform until it has, with that instruction. Skew, `matrix()`, 3D functions, `translate()` percentages and shearing lists fail a plain native parse with the reason. The pack format is 116 words a rule. Pins Kryon fdd70c4b.
 

@@ -21,8 +21,11 @@ TextWidget :: #import "kryon/text";
 #import "kryon/text_style"
 #import "kryon/Theme"
 #import "kryon/tree"
+#import "kryon/tree_input"
 #import "kryon/Frame"
 #import "kryon/paint_queue"
+#import "kryon/paint_transform"
+#import "kryon/frame_motion"
 
 using ButtonState;
 using ElevationRole;
@@ -577,6 +580,55 @@ Gradients :: () {
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "gradient frame")
 }
 
+TransformFrame :: (key: u64, class_name: string, bounds: Rectangle, text: bool) -> CssButtonRasterState {
+    unused CssButtonRasterReset()
+    BeginFrame(integration_session, key, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    box := Layout.Draw(integration_session, .{.key = key + 1, .class_name = StyleClass(class_name), .bounds = bounds})
+    if text { TextWidget.Draw(integration_session, .{.key = key + 2, .text = "Save"}) }
+    Check(box.opened && End(integration_session), "close transformed box")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "transformed frame")
+    return CssButtonRasterSample()
+}
+
+// A transform moves, scales and turns what a container and its children
+// paint, about the center of its box, and layout stays where it was.
+Transforms :: () {
+    Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install transform styles")
+    moved := TransformFrame(520, "lifted", .{20.0, 40.0, 100.0, 50.0}, false)
+    Check(moved.fill_count == 1 && moved.triangle_count == 0 && Near(moved.fill_bounds, 24.0, 37.0, 100.0, 50.0),
+        "a translation shifts the box on the host's own rasterizer")
+    grown := TransformFrame(530, "grown", .{100.0, 100.0, 40.0, 20.0}, false)
+    Check(grown.fill_count == 0 && grown.triangle_count == 1 && Near(grown.triangle_bounds, 80.0, 90.0, 80.0, 40.0),
+        "scale(2) doubles the box about its center, drawn as triangles")
+    turned := TransformFrame(540, "turned", .{200.0, 100.0, 40.0, 20.0}, true)
+    box := turned.triangle_bounds
+    Check(turned.triangle_count == 1 && box.x > 209.9 && box.x < 210.1 && box.y > 89.9 && box.y < 90.1 &&
+        box.width > 19.9 && box.width < 20.1 && box.height > 39.9 && box.height < 40.1,
+        "rotate: 90deg turns the box about its center")
+    Check(turned.rotated_count == 1 && turned.rotation == 90.0 && turned.rotated_x >= 220 &&
+        turned.rotated_x <= 230 && turned.rotated_y == 90 && turned.text_count == 0,
+        "a child's text turns with its container")
+    plain := TransformFrame(550, "hoverlift", .{20.0, 200.0, 100.0, 40.0}, false)
+    Check(Near(plain.fill_bounds, 20.0, 200.0, 100.0, 40.0), "no transform without hover")
+    unused TreePointerUpdate(integration_session, PointerFrame.{50.0, 220.0, false, false, false})
+    hovered := TransformFrame(550, "hoverlift", .{20.0, 200.0, 100.0, 40.0}, false)
+    Check(Near(hovered.fill_bounds, 20.0, 198.0, 100.0, 40.0), "a container under the pointer takes its :hover transform")
+    unused TreePointerUpdate(integration_session, PointerFrame.{390.0, 290.0, false, false, false})
+    // A transition eases the change: nothing at its start, half way at half
+    // its time, and the whole move once it has run.
+    SetFrameMotionTime(integration_session, 1.0)
+    still := TransformFrame(560, "eased", .{20.0, 250.0, 100.0, 30.0}, false)
+    unused TreePointerUpdate(integration_session, PointerFrame.{50.0, 260.0, false, false, false})
+    started := TransformFrame(560, "eased", .{20.0, 250.0, 100.0, 30.0}, false)
+    SetFrameMotionTime(integration_session, 1.05)
+    midway := TransformFrame(560, "eased", .{20.0, 250.0, 100.0, 30.0}, false)
+    SetFrameMotionTime(integration_session, 1.2)
+    done := TransformFrame(560, "eased", .{20.0, 250.0, 100.0, 30.0}, false)
+    Check(still.fill_bounds.x == 20.0 && started.fill_bounds.x == 20.0 && midway.fill_bounds.x == 25.0 &&
+        done.fill_bounds.x == 30.0, "transition: transform eases the hover move over its time")
+    unused TreePointerUpdate(integration_session, PointerFrame.{390.0, 290.0, false, false, false})
+}
+
 fluid_sheet: CssSheet;
 
 fluid_css :: #string CSS
@@ -682,6 +734,7 @@ main :: () -> s32 {
     if !SessionValid(integration_session) { integration_session = SessionOpen() }
     Integration()
     LayoutIntegration()
+    PaintTransformInstall()
     LayoutSizing()
     ViewportGrid()
     ResponsiveFlex(550.0, true)
@@ -694,6 +747,7 @@ main :: () -> s32 {
     SideBorders()
     ContextSelectors()
     Gradients()
+    Transforms()
     FluidValues()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }

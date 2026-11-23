@@ -61,8 +61,10 @@ CssTime :: (number: CssNumber, seconds: *float64) -> bool {
 
 CssTransitionProperty :: (word: CssName, fields: *u32) -> bool {
     if CssNameEquals(word, "none") { fields.* = 0 }
-    else if CssNameEquals(word, "all") { fields.* = CssAnimatedFields() }
-    else {
+    else if CssNameEquals(word, "all") { fields.* = CssAnimatedFields() | cast(u32)CssTransformField }
+    else if CssNameEquals(word, "transform") || CssNameEquals(word, "scale") || CssNameEquals(word, "rotate") {
+        fields.* = cast(u32)CssTransformField
+    } else {
         fields.* = CssAnimatedProperty(word)
         if fields.* == 0 { return false }
     }
@@ -70,7 +72,7 @@ CssTransitionProperty :: (word: CssName, fields: *u32) -> bool {
 }
 
 CssReadTransitionItem :: (p: *CssParser, end: s32, value: *CssTransition) -> bool {
-    value.* = CssTransition.{.fields = CssAnimatedFields(), .curve = CssEase(), .set = true}
+    value.* = CssTransition.{.fields = CssAnimatedFields() | cast(u32)CssTransformField, .curve = CssEase(), .set = true}
     times: s32 = 0
     timing: bool = false
     property: bool = false
@@ -206,7 +208,9 @@ CssReadMotionTiming :: (p: *CssParser, curve: *CssCurve) -> bool {
 }
 
 CssTransitionLonghand :: (p: *CssParser, name: CssName, end: s32, value: *CssTransition) -> bool {
-    if !value.set { value.* = CssTransition.{.fields = CssAnimatedFields(), .curve = CssEase(), .set = true} }
+    if !value.set {
+        value.* = CssTransition.{.fields = CssAnimatedFields() | cast(u32)CssTransformField, .curve = CssEase(), .set = true}
+    }
     if CssNameEquals(name, "transition-property") {
         if !CssTransitionProperty(CssReadName(p), *value.fields) { return false }
         while CssMoreValue(p, end) {
@@ -263,6 +267,14 @@ CssAnimationLonghand :: (p: *CssParser, name: CssName, end: s32, value: *CssAnim
     return !CssMoreValue(p, end)
 }
 
+// A curve control value in hundredths, as the box keeps a transform's easing.
+CssCurveByte :: (value: float32) -> u8 {
+    scaled := value * 100.0 + 0.5
+    if scaled <= 0.0 { return 0 }
+    if scaled >= 255.0 { return 255 }
+    return cast(u8)scaled
+}
+
 CssReadMotionProperty :: (p: *CssParser, name: CssName, end: s32) -> bool {
     text: string = TextView(name.bytes[:name.length])
     transition: bool = CssNameEquals(name, "transition")
@@ -281,6 +293,15 @@ CssReadMotionProperty :: (p: *CssParser, name: CssName, end: s32) -> bool {
         if !ok || CssFailed(p) { value = CssTransition.{.set = true, .unsupported = true} }
         p.motion.transition = value
         unsupported = !ok || CssFailed(p)
+        // The transform eases over the transition that names it; one that
+        // leaves it out, or `none`, stops an earlier rule's.
+        p.box_template.fields |= cast(u32)StyleBoxTransformMotion
+        p.box_template.transform_seconds = 0.0
+        if !unsupported && (value.fields & cast(u32)CssTransformField) != 0 {
+            p.box_template.transform_seconds = cast(float32)value.seconds
+            p.box_template.transform_timing = u8.[CssCurveByte(value.curve.x1), CssCurveByte(value.curve.y1),
+                CssCurveByte(value.curve.x2), CssCurveByte(value.curve.y2)]
+        }
     } else {
         value: CssAnimation = p.motion.animation
         ok: bool

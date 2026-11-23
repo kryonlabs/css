@@ -1,6 +1,7 @@
 #import "css_parser"
 #import "kryon/style"
 #import "kryon/style_sheet"
+#import "kryon/paint_matrix"
 #import "kryon/drawing_props"
 #import "kryon/control_props"
 Theme :: #import "kryon/theme";
@@ -885,6 +886,16 @@ CssSheetInstallColors :: (sheet: *CssSheet) -> bool {
 #program_export
 CssSheetInstall :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides) -> bool {
     if !CssSheetPrepareInstall(sheet, env, overrides) { return false }
+    // Transforms are opt-in paint code: a sheet that sets one says how to
+    // turn them on, where it would otherwise paint nothing.
+    if paint_node_transform == null {
+        for index: cast(s32)0..css_install_rules.count - 1 {
+            if (css_install_rules.items[index].box.fields & cast(u32)StyleBoxTransformSets) != 0 {
+                CssSheetFail(sheet, "the sheet sets a transform; call PaintTransformInstall() from kryon/paint_transform once before installing it")
+                return false
+            }
+        }
+    }
     previous: StyleRules
     if css_sheet_has_motion { previous = ActiveStyleRules() }
     if !CssSheetInstallRules(sheet) { return false }
@@ -926,10 +937,10 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // One rule: selector, paint and text fields, sizes and grid tracks, flex
 // and box data, the percent masks of the style, flex and box fields, then
 // the per-side border widths and colors, the outline width and offset, the
-// selector's tree context, and the box gradient. The count is the pack
-// format: a pack written with another one is stale and css_tool
-// regenerates it.
-CssRuleWords :: 101
+// selector's tree context, the box gradient, and the transform with its
+// origin and transition. The count is the pack format: a pack written
+// with another one is stale and css_tool regenerates it.
+CssRuleWords :: 116
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
 // and high linear forms as px, vw and vh.
@@ -1111,6 +1122,12 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         entry.rule.box.gradient_count = cast(s32)w[90]
         for stop: 0..5 { entry.rule.box.gradient_stops[stop] = CssWordFloat(w[91 + stop]) }
         for stop: 0..3 { entry.rule.box.gradient_colors[stop] = w[97 + stop] }
+        for part: 0..4 { entry.rule.box.transform[part] = CssWordFloat(w[101 + part]) }
+        entry.rule.box.rotate = CssWordFloat(w[106])
+        entry.rule.box.scale = float32.[CssWordFloat(w[107]), CssWordFloat(w[108])]
+        entry.rule.box.transform_origin = float32.[CssWordFloat(w[109]), CssWordFloat(w[110])]
+        entry.rule.box.transform_seconds = CssWordFloat(w[111])
+        for part: 0..3 { entry.rule.box.transform_timing[part] = cast(u8)w[112 + part] }
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

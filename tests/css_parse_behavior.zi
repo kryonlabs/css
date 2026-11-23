@@ -75,8 +75,26 @@ Values :: () {
     // sheet is read with CssSheetParseWithDiagnostics, which reports it.
     ParseFails("Button { width: 50vw; color: red; }", "applied only by the browser", "browser-only size refused natively")
     ParseFails("Button { text-transform: uppercase; }", "applied only by the browser", "browser-only property refused natively")
-    ParseFails("Column:hover { transform: translateY(-2px); }", "transform, scale and rotate are browser-only", "transform")
-    ParseFails("Button { rotate: 45deg; }", "transform, scale and rotate are browser-only", "rotate")
+    if Builds("Column:hover { transform: translateY(-2px) scale(1.05); } Button { rotate: 45deg; scale: 1.1 0.9; transform-origin: left 25%; transition: transform 150ms linear; } Text { transform: rotate(90deg) scale(2, 1) translate(4px, 0); }",
+        "transforms") {
+        lifted := Rule(0).box
+        Check((lifted.fields & cast(u32)StyleBoxTransform) != 0 && lifted.transform[0] == 0.0 &&
+            lifted.transform[1] == -2.0 && lifted.transform[2] == 0.0 && lifted.transform[3] == 1.05 &&
+            lifted.transform[4] == 1.05, "translate then scale")
+        button := Rule(1).box
+        Check(button.rotate == 45.0 && button.scale[0] == 1.1 && button.scale[1] == 0.9 &&
+            button.transform_origin[0] == 0.0 && button.transform_origin[1] == 25.0 &&
+            (button.percent & (cast(u32)StyleBoxOriginX | cast(u32)StyleBoxOriginY)) ==
+            (cast(u32)StyleBoxOriginX | cast(u32)StyleBoxOriginY) && button.transform_seconds == 0.15 &&
+            (button.fields & cast(u32)StyleBoxTransformMotion) != 0, "rotate, scale, origin and transition")
+        turned := Rule(2).box
+        Check(turned.transform[2] == 90.0 && turned.transform[3] == 2.0 && turned.transform[4] == 1.0 &&
+            turned.transform[0] > -0.001 && turned.transform[0] < 0.001 && turned.transform[1] == 8.0,
+            "rotate, scale and translate compose into one translation, turn and scale")
+    }
+    ParseFails("Column { transform: skewX(10deg); }", "skew, matrix and 3D transforms are browser-only", "skew")
+    ParseFails("Column { transform: scale(2, 1) rotate(30deg); }", "this transform shears", "shear")
+    ParseFails("Column { transform: translate(50%, 0); }", "translate() percentages are browser-only", "translate percent")
     if Builds("Button { padding: 4px 8px; }", "padding pair") {
         Check(Rule(0).style.padding_y == 4.0 && Rule(0).style.padding_x == 8.0, "padding block inline")
     }

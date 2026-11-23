@@ -110,6 +110,14 @@ Text.quiet:not(:hover) { color: #040404; }
 Column.sunrise { background: linear-gradient(90deg, #000000, #ffffff); }
 Column.bands { background: linear-gradient(#ff0000, #00ff00, #0000ff); }
 
+Column.lifted { background: #111111; transform: translate(4px, -3px); }
+Column.grown { background: #222222; transform: scale(2); }
+Column.turned { background: #333333; rotate: 90deg; }
+Column.hoverlift { background: #444444; }
+Column.hoverlift:hover { transform: translateY(-2px); }
+Column.eased { background: #555555; transition: transform 100ms linear; }
+Column.eased:hover { transform: translateX(10px); }
+
 Column.side { width: 120px; }
 Column.grow { flex: 1; }
 Row.push { width: 50px; margin-left: auto; }

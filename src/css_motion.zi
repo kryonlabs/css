@@ -71,7 +71,7 @@ Install :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverrides = nu
         if !transition.set && !animation.set { continue }
         rule: *StyleRule = *entry.rule
         rules[count] = .{.selector = rule.selector, .state = rule.state, .layer = rule.layer,
-            .order = rule.order, .transition_set = transition.set, .transition_fields = ifx transition.unsupported then cast(u32)0 else transition.fields,
+            .order = rule.order, .transition_set = transition.set, .transition_fields = ifx transition.unsupported then cast(u32)0 else transition.fields & ~cast(u32)CssTransformField,
             .transition_seconds = transition.seconds, .transition_delay = transition.delay,
             .transition_timing = Timing(transition.curve), .animation_set = animation.set,
             .animation = AnimationFor(animation, sheet, env)}

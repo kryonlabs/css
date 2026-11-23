@@ -1,0 +1,285 @@
+// transform, scale, rotate and transform-origin as box fields. A transform
+// is a list of translate(), scale() and rotate() functions and their X and
+// Y forms; it is kept as one translation, one rotation and one x and y
+// scale, which Kryon applies at paint time about the origin and eases when
+// a transition names it. Skew, matrix and 3D functions, and a list that
+// shears, stay with the browser.
+
+css_transform_properties: [4]string = .["transform", "scale", "rotate", "transform-origin"];
+
+CssTransformProperty :: (name: CssName) -> bool {
+    for property: css_transform_properties {
+        if CssNameEquals(name, property) { return true }
+    }
+    return false
+}
+
+// A transition names the transform through this bit of its fields; the
+// motion rules never see it.
+CssTransformField :: 2147483648
+
+CssTransformAbs :: (value: float64) -> float64 {
+    return ifx value < 0.0 then -value else value
+}
+
+// One argument of a transform function: a length (kind 0), a number or
+// percentage (1) or an angle in degrees (2).
+CssReadTransformValue :: (p: *CssParser, kind: s32) -> (value: float64, ok: bool) {
+    CssSkipSpace(p)
+    if kind == 2 {
+        angle := CssReadGradientAngle(p)
+        return angle, !CssFailed(p)
+    }
+    if kind == 1 {
+        number := CssReadNumber(p)
+        if CssFailed(p) || !number.ok { return 0.0, false }
+        if number.percent { return number.value / 100.0, true }
+        return number.value, number.unit.length == 0
+    }
+    percentage, percent := CssReadPercent(p)
+    if percent {
+        unused percentage
+        CssFail(p, "translate() percentages are browser-only; use px, rem or em")
+        return 0.0, false
+    }
+    length, ok := CssReadStaticLength(p)
+    return cast(float64)length, ok
+}
+
+CssTransformArguments :: struct {
+    first: float64
+    second: float64
+    // -1 after a failure.
+    count: s32
+}
+
+// The one or two arguments of a function, past its '(' and through its ')'.
+CssReadTransformArguments :: (p: *CssParser, kind: s32, most: s32) -> CssTransformArguments {
+    failed: CssTransformArguments = .{.count = -1}
+    first, ok := CssReadTransformValue(p, kind)
+    if !ok { return failed }
+    result: CssTransformArguments = .{.first = first, .count = 1}
+    CssSkipSpace(p)
+    if CssAtByte(p, #char ",") {
+        CssAdvance(p, 1)
+        next, more := CssReadTransformValue(p, kind)
+        if !more || most < 2 { return failed }
+        result.second = next
+        result.count = 2
+        CssSkipSpace(p)
+    }
+    if !CssAtByte(p, #char ")") { return failed }
+    CssAdvance(p, 1)
+    return result
+}
+
+// The list as translation x and y, rotation in degrees and scale x and y.
+CssReadTransformList :: (p: *CssParser, end: s32) -> (values: [5]float32, ok: bool) {
+    identity: [5]float32 = .[0.0, 0.0, 0.0, 1.0, 1.0]
+    CssSkipSpace(p)
+    saved := p.cursor
+    if CssNameEquals(CssReadName(p), "none") && !CssMoreValue(p, end) { return identity, true }
+    p.cursor = saved
+    // The product of the functions read so far, x' = a*x + c*y + tx.
+    a: float64 = 1.0
+    b: float64 = 0.0
+    c: float64 = 0.0
+    d: float64 = 1.0
+    tx: float64 = 0.0
+    ty: float64 = 0.0
+    turn: float64 = 0.0
+    count: s32 = 0
+    while CssMoreValue(p, end) {
+        fa: float64 = 1.0
+        fb: float64 = 0.0
+        fc: float64 = 0.0
+        fd: float64 = 1.0
+        fx: float64 = 0.0
+        fy: float64 = 0.0
+        given: CssTransformArguments = .{.count = -1}
+        if CssAtFunction(p, "translate") {
+            given = CssReadTransformArguments(p, 0, 2)
+            fx = given.first
+            fy = given.second
+        } else if CssAtFunction(p, "translatex") {
+            given = CssReadTransformArguments(p, 0, 1)
+            fx = given.first
+        } else if CssAtFunction(p, "translatey") {
+            given = CssReadTransformArguments(p, 0, 1)
+            fy = given.first
+        } else if CssAtFunction(p, "scale") {
+            given = CssReadTransformArguments(p, 1, 2)
+            fa = given.first
+            fd = ifx given.count == 2 then given.second else given.first
+        } else if CssAtFunction(p, "scalex") {
+            given = CssReadTransformArguments(p, 1, 1)
+            fa = given.first
+        } else if CssAtFunction(p, "scaley") {
+            given = CssReadTransformArguments(p, 1, 1)
+            fd = given.first
+        } else if CssAtFunction(p, "rotate") {
+            given = CssReadTransformArguments(p, 2, 1)
+            radians := given.first * 3.14159265358979 / 180.0
+            fa = Cos(radians)
+            fb = Sin(radians)
+            fc = -fb
+            fd = fa
+            turn += given.first
+        } else {
+            CssFail(p, "native transforms take translate(), scale() and rotate() and their X and Y forms; skew, matrix and 3D transforms are browser-only")
+            return identity, false
+        }
+        if given.count < 0 {
+            if !CssFailed(p) { CssFail(p, "expected one or two values in the transform function") }
+            return identity, false
+        }
+        na := a * fa + c * fb
+        nb := b * fa + d * fb
+        nc := a * fc + c * fd
+        nd := b * fc + d * fd
+        tx = a * fx + c * fy + tx
+        ty = b * fx + d * fy + ty
+        a = na
+        b = nb
+        c = nc
+        d = nd
+        count += 1
+    }
+    if count == 0 {
+        CssFail(p, "expected none or a transform function")
+        return identity, false
+    }
+    // A turn by the summed angle after a scale along x and y: what is left
+    // off the diagonal once the turn is taken out is shear.
+    radians := turn * 3.14159265358979 / 180.0
+    cosine := Cos(radians)
+    sine := Sin(radians)
+    if CssTransformAbs(cosine * b - sine * a) > 0.0001 || CssTransformAbs(cosine * c + sine * d) > 0.0001 {
+        CssFail(p, "this transform shears, which is browser-only; write rotate() before a scale() of one axis")
+        return identity, false
+    }
+    values: [5]float32 = .[cast(float32)tx, cast(float32)ty, cast(float32)turn,
+        cast(float32)(cosine * a + sine * b), cast(float32)(cosine * d - sine * c)]
+    return values, true
+}
+
+// transform-origin: up to two of left, center, right, top, bottom, a length
+// or a percentage; an axis left out is the center.
+CssReadTransformOrigin :: (p: *CssParser, end: s32, box: *StyleBoxData) -> bool {
+    x: float32 = 50.0
+    y: float32 = 50.0
+    x_percent := true
+    y_percent := true
+    seen_x := false
+    for step: 0..1 {
+        if !CssMoreValue(p, end) { break }
+        CssSkipSpace(p)
+        if CssNameStart(CssPeek(p, 0)) && !CssAtLengthExpression(p) {
+            word := CssReadName(p)
+            if CssNameEquals(word, "left") { x = 0.0; x_percent = true; seen_x = true }
+            else if CssNameEquals(word, "right") { x = 100.0; x_percent = true; seen_x = true }
+            else if CssNameEquals(word, "top") { y = 0.0; y_percent = true }
+            else if CssNameEquals(word, "bottom") { y = 100.0; y_percent = true }
+            else if CssNameEquals(word, "center") { if step == 0 { seen_x = true } }
+            else {
+                CssFail(p, "transform-origin takes left, center, right, top, bottom, a length or a percentage")
+                return false
+            }
+            continue
+        }
+        percentage, percent := CssReadPercent(p)
+        value := percentage
+        if !percent {
+            length, ok := CssReadStaticLength(p)
+            if !ok {
+                if !CssFailed(p) { CssFail(p, "transform-origin takes a static length or a percentage") }
+                return false
+            }
+            value = length
+        }
+        if !seen_x {
+            x = value
+            x_percent = percent
+            seen_x = true
+        } else {
+            y = value
+            y_percent = percent
+        }
+    }
+    box.transform_origin[0] = x
+    box.transform_origin[1] = y
+    box.fields |= cast(u32)StyleBoxOriginX | cast(u32)StyleBoxOriginY
+    box.percent = CssPercentBit(box.percent, cast(u32)StyleBoxOriginX, x_percent)
+    box.percent = CssPercentBit(box.percent, cast(u32)StyleBoxOriginY, y_percent)
+    return true
+}
+
+// Nodes the paint transform pass styles: containers, buttons, cards, text,
+// links and images.
+CssTransformTarget :: (p: *CssParser, name: CssName) {
+    if !CssCollectIssues(p) { return }
+    for index: cast(s32)0..p.selector_count - 1 {
+        kind := p.selectors[index].selector.kind
+        if kind == StyleKindAny() || kind == StyleKindRow() || kind == StyleKindColumn() || kind == StyleKindGrid() ||
+            kind == StyleKindButton() || kind == StyleKindCard() || kind == StyleKindText() ||
+            kind == StyleKindHeading() || kind == StyleKindLink() || kind == StyleKindImage() { continue }
+        CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, TextView(name.bytes[:name.length]),
+            "transforms paint on Row, Column, Grid, Button, Card, Text, Heading, Link and Image", false)
+        return
+    }
+}
+
+CssApplyTransform :: (p: *CssParser, name: CssName, end: s32) -> s32 {
+    status := p.status
+    box := p.box_template
+    valid := true
+    if CssNameEquals(name, "transform") {
+        values, ok := CssReadTransformList(p, end)
+        box.transform = values
+        box.fields |= cast(u32)StyleBoxTransform
+        valid = ok
+    } else if CssNameEquals(name, "transform-origin") {
+        valid = CssReadTransformOrigin(p, end, *box)
+    } else {
+        CssSkipSpace(p)
+        saved := p.cursor
+        none := CssNameEquals(CssReadName(p), "none")
+        if !none { p.cursor = saved }
+        if CssNameEquals(name, "scale") {
+            box.scale = float32.[1.0, 1.0]
+            if !none {
+                first, ok := CssReadTransformValue(p, 1)
+                valid = ok
+                box.scale = float32.[cast(float32)first, cast(float32)first]
+                if ok && CssMoreValue(p, end) {
+                    second, more := CssReadTransformValue(p, 1)
+                    valid = more
+                    box.scale[1] = cast(float32)second
+                }
+            }
+            box.fields |= cast(u32)StyleBoxScale
+        } else {
+            box.rotate = 0.0
+            if !none {
+                angle, ok := CssReadTransformValue(p, 2)
+                valid = ok
+                box.rotate = cast(float32)angle
+            }
+            box.fields |= cast(u32)StyleBoxRotate
+        }
+    }
+    if !valid || CssFailed(p) || CssMoreValue(p, end) {
+        // A plain native parse keeps the reason; a shared sheet leaves the
+        // declaration to the browser.
+        if p.native_only {
+            if !CssFailed(p) { CssFailName(p, "invalid value for", name, "") }
+            return -1
+        }
+        p.status = status
+        p.diagnostic_length = 0
+        return CssPassWebDeclaration(p)
+    }
+    CssTransformTarget(p, name)
+    p.box_template = box
+    return CssScopeNative
+}

@@ -184,6 +184,10 @@ Anything else is browser-only or an error.
 | `outline-width` | `Button` | `3px` | length, thin, medium or thick |
 | `outline-offset` | `Button` | `2px` | signed length outside the edge |
 | `background-image` | `Row` | `linear-gradient(to right, #111827, #374151)` | none or linear-gradient() |
+| `transform` | `Column` | `translateY(-2px) scale(1.02)` | none, or translate(), scale() and rotate() with their X and Y forms |
+| `scale` | `Button` | `1.05` | none, or one or two numbers or percentages |
+| `rotate` | `Text` | `-3deg` | none or an angle |
+| `transform-origin` | `Column` | `left top` | left, center, right, top, bottom, lengths or percentages |
 <!-- properties:end -->
 
 - `box-shadow` selects a Kryon elevation role: `none` clears it, a shadow
@@ -197,7 +201,25 @@ Anything else is browser-only or an error.
   natively. `linear-gradient()` takes an angle or `to` a side or corner and
   two to six stops with `%` positions; Row, Column and Grid paint all of
   them, other widgets a top-to-bottom gradient of the first and last colors.
-  Radial, conic and repeating gradients and `transform` are browser-only.
+  Radial, conic and repeating gradients are browser-only.
+
+- `transform` takes `translate()`, `scale()` and `rotate()` and their X and Y
+  forms in any order that does not shear, and `scale`, `rotate` and
+  `transform-origin` are read too. Kryon applies them when it paints, on
+  every host, about the origin (the center of the box unless set), to the
+  widget and everything inside it; layout and pointer hit areas keep the
+  untransformed box. Row, Column, Grid, Button, Card, Text, Heading, Link
+  and Image take transforms, with `:hover` and `:active` following the
+  pointer, and `transition: transform 150ms` (or `all`) eases a change. A
+  transform rule matches its node by type, class, id and state; an ancestor
+  or `:first-child` in its selector does not apply. A whole-pixel
+  translation paints exactly as without it; a scale or rotation draws boxes
+  as triangles, text at the nearest whole font size and images scaled and
+  turned. `translate()` percentages, skew, `matrix()` and 3D functions are
+  browser-only. Transforms are opt-in paint code: the app imports
+  `kryon/paint_transform` and calls `PaintTransformInstall()` once before
+  its first frame, and `CssSheetInstall` refuses a sheet that sets a
+  transform until it has.
 
 - `gap` takes one value for both axes or two values in row, column order.
   `row-gap` and `column-gap` cascade independently. Gaps take `normal`
@@ -401,7 +423,7 @@ media conditions, layer priority and source order.
 
 `sheet.motion_unsupported` counts rule entries and keyframes blocks containing
 browser-only motion in parsed and packed sheets. This includes properties
-such as `transform`, `steps()` timing, unequal transition timings, multiple
+such as `filter`, `steps()` timing, unequal transition timings, multiple
 animations and `var()` in keyframes. Supported declarations in a mixed
 keyframe still animate. The browser exporter preserves the original motion
 declarations and `@keyframes` source. `css_tool pack-file NAME IN.css OUT.zi`

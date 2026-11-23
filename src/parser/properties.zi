@@ -544,11 +544,6 @@ css_web_properties: [9]string = .[
     "text-decoration", "text-transform", "white-space", "cursor",
     "grid-template-rows", "grid-column", "grid-row", "z-index", "visibility"];
 
-CssTransformProperty :: (name: CssName) -> bool {
-    return CssNameEquals(name, "transform") || CssNameEquals(name, "transform-origin") ||
-        CssNameEquals(name, "scale") || CssNameEquals(name, "rotate")
-}
-
 // Properties the web document host applies and native hosts skip: browser
 // layout and text features Kryon lays out in code.
 CssWebProperty :: (name: CssName) -> bool {
@@ -811,15 +806,7 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
     } else if CssBorderSideOf(name) >= 0 {
         return CssApplyBorderSide(p, name, end)
     } else if CssTransformProperty(name) {
-        // A transform moves a whole widget and its children where they
-        // paint. Kryon's paint queue has no such offset yet, and the
-        // `translate` property already shifts a widget's content.
-        if p.native_only {
-            p.cursor = p.pending_name_cursor
-            CssFail(p, "transform, scale and rotate are browser-only: Kryon paints widgets where layout puts them; move a box with margins")
-            return -1
-        }
-        return CssPassWebDeclaration(p)
+        return CssApplyTransform(p, name, end)
     } else if CssWebProperty(name) {
         return CssPassWebDeclaration(p)
     } else if name.length >= 2 && name.bytes[0] == #char "-" && name.bytes[1] == #char "-" {

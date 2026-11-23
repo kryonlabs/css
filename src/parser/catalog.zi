@@ -10,7 +10,7 @@ CssCatalogEntry :: struct {
     values: string
 }
 
-CssCatalogCount :: 88
+CssCatalogCount :: 92
 
 css_catalog_0: [10]CssCatalogEntry = .[
     .{"color", "*", "#203040", "color, var(), color-mix()"},
@@ -108,7 +108,7 @@ css_catalog_7: [10]CssCatalogEntry = .[
     .{"-kryon-motion-easing", "*", "standard", "inherit, standard, linear, instant"},
     .{"-kryon-motion-reduced", "*", "reduce", "reduce or no-preference"}];
 
-css_catalog_8: [8]CssCatalogEntry = .[
+css_catalog_8: [10]CssCatalogEntry = .[
     .{"border-top", "Column", "1px solid #d0d7de", "one side, as border; also -right, -bottom, -left and the block/inline-start/end sides"},
     .{"border-bottom-width", "Row", "thick", "length, thin, medium or thick; every side has -width"},
     .{"border-left-color", "Column", "var(--kryon-accent)", "color; every side has -color"},
@@ -116,7 +116,13 @@ css_catalog_8: [8]CssCatalogEntry = .[
     .{"outline", "Button", "2px solid #38bdf8", "[width] [solid, auto or none] [color]: the focus ring"},
     .{"outline-width", "Button", "3px", "length, thin, medium or thick"},
     .{"outline-offset", "Button", "2px", "signed length outside the edge"},
-    .{"background-image", "Row", "linear-gradient(to right, #111827, #374151)", "none or linear-gradient()"}];
+    .{"background-image", "Row", "linear-gradient(to right, #111827, #374151)", "none or linear-gradient()"},
+    .{"transform", "Column", "translateY(-2px) scale(1.02)", "none, or translate(), scale() and rotate() with their X and Y forms"},
+    .{"scale", "Button", "1.05", "none, or one or two numbers or percentages"}];
+
+css_catalog_9: [2]CssCatalogEntry = .[
+    .{"rotate", "Text", "-3deg", "none or an angle"},
+    .{"transform-origin", "Column", "left top", "left, center, right, top, bottom, lengths or percentages"}];
 
 CssCatalogEntryAt :: (index: s32) -> CssCatalogEntry {
     row := index % 10
@@ -129,5 +135,6 @@ CssCatalogEntryAt :: (index: s32) -> CssCatalogEntry {
     if block == 5 { return css_catalog_5[row] }
     if block == 6 { return css_catalog_6[row] }
     if block == 7 { return css_catalog_7[row] }
-    return css_catalog_8[row]
+    if block == 8 { return css_catalog_8[row] }
+    return css_catalog_9[row]
 }

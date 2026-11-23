@@ -4,7 +4,7 @@
 
 - Builds on Kryon 02cc10e6, the Kryon whose starter uses the container Card and slot-free TitleBar, so an app pinning both resolves one Kryon.
 
-- `transform`, `transform-origin`, `scale` and `rotate` are known browser-only declarations: a shared sheet keeps them for the DOM export and a plain native parse refuses them with the reason, instead of failing on an unknown property.
+- `transform` (translate, scale and rotate functions with their X and Y forms), `scale`, `rotate` and `transform-origin` are native: Kryon applies them at paint time on every host to Row, Column, Grid, Button, Card, Text, Heading, Link and Image and to what they contain, with `:hover` and `:active` following the pointer, and `transition: transform …` eases them. They are opt-in paint code: the app calls `PaintTransformInstall()` (kryon/paint_transform) once, and `CssSheetInstall` refuses a sheet that sets a transform until it has, with that instruction. Skew, `matrix()`, 3D functions, `translate()` percentages and shearing lists fail a plain native parse with the reason. The pack format is 116 words a rule. Pins Kryon fdd70c4b.
 
 - `linear-gradient()` takes any angle (`deg`, `turn`, `rad`, `grad`) or `to` a side or corner, and two to six color stops with `%` positions, in `background` and `background-image`; Row, Column and Grid paint them, other widgets a top-to-bottom gradient of the first and last colors (`css_tool check` says so). Radial, conic and repeating gradients are refused natively with the reason. The pack format is 101 words a rule. Pins Kryon d0711324.
 

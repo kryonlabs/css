@@ -319,7 +319,7 @@ DiagnosticExpectation :: struct {
     web_only: bool
 }
 
-DiagnosticIssueCount :: 15
+DiagnosticIssueCount :: 14
 
 ObserveIssue :: (context: *void, issue: CssIssue) {
     diagnostic_expectations: [DiagnosticIssueCount]DiagnosticExpectation = .[
@@ -333,7 +333,6 @@ ObserveIssue :: (context: *void, issue: CssIssue) {
         .{14, 1, CssIssueKind.AtRule, "@supports", false},
         .{15, 1, CssIssueKind.AtRule, "@media", true},
         .{16, 8, CssIssueKind.Declaration, "width", true},
-        .{16, 22, CssIssueKind.Declaration, "transition", true},
         .{16, 48, CssIssueKind.Declaration, "height", true},
         .{17, 41, CssIssueKind.Declaration, "text-transform", true},
         .{18, 8, CssIssueKind.Declaration, "font-family", true},
@@ -417,7 +416,28 @@ Capacity :: () {
     Check(Contains(Diagnostic(), "more than 512 rules apply at once"), "over 512 says why")
 }
 
+// Transforms are opt-in paint code: without PaintTransformInstall a sheet
+// that sets one refuses to install and says how to turn them on, and the
+// sheet installed before it stays.
+TransformOptIn :: () {
+    CssSheetReset(*test_sheet)
+    Check(CssSheetParse(*test_sheet, "Text { color: #010203; }", "plain.css", CssNoImports) &&
+        CssSheetInstall(*test_sheet, CssDefaultEnvironment(), null), "a sheet without transforms installs")
+    CssSheetReset(*test_sheet)
+    Check(CssSheetParse(*test_sheet, "Column:hover { transform: translateY(-2px); }", "lift.css", CssNoImports),
+        "a transform parses")
+    Check(!CssSheetInstall(*test_sheet, CssDefaultEnvironment(), null) &&
+        Contains(Diagnostic(), "call PaintTransformInstall() from kryon/paint_transform"),
+        "installing it without transforms on says how to turn them on")
+    Check(Resolved(StyleKindText()).foreground == cast(u32)0x010203ff, "the earlier sheet stays installed")
+    CssSheetReset(*test_sheet)
+    Check(CssSheetParse(*test_sheet, "Column { transition: transform 150ms; transform-origin: left top; }",
+        "ease.css", CssNoImports) && CssSheetInstall(*test_sheet, CssDefaultEnvironment(), null),
+        "a transition or origin alone needs no transforms")
+}
+
 main :: () -> s32 {
+    TransformOptIn()
     Packs()
     PackedFields()
     PackedMotion()

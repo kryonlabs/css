@@ -83,6 +83,12 @@ Column.card {
   padding: 10px;
 }
 
+Column.half { width: 50%; height: 25%; }
+Column.limited { max-width: 30%; min-width: 10%; }
+Column.half-tall { height: 50%; }
+Row.share { min-height: 50%; max-height: 80%; }
+Text.quarter { flex: 0 0 25%; }
+
 Column.side { width: 120px; }
 Column.grow { flex: 1; }
 Row.push { width: 50px; margin-left: auto; }

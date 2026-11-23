@@ -922,10 +922,11 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // Compiled sheets ---------------------------------------------------------
 // The pack compiler writes these arrays; loading them skips parsing.
 
-// One rule: selector, paint and text fields, sizes and grid tracks, then
-// flex and box data. The count is the pack format: a pack written with
-// another one is stale and css_tool regenerates it.
-CssRuleWords :: 69
+// One rule: selector, paint and text fields, sizes and grid tracks, flex
+// and box data, then the percent masks of the style, flex and box fields.
+// The count is the pack format: a pack written with another one is stale
+// and css_tool regenerates it.
+CssRuleWords :: 72
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
 // and high linear forms as px, vw and vh.
@@ -1087,6 +1088,9 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
             .clip_children = w[63] != 0, .text_align = cast(s32)w[64],
             .margin_top = CssWordFloat(w[65]), .margin_right = CssWordFloat(w[66]),
             .margin_bottom = CssWordFloat(w[67]), .margin_left = CssWordFloat(w[68])}
+        style.percent = w[69]
+        entry.rule.flex.percent = w[70]
+        entry.rule.box.percent = w[71]
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

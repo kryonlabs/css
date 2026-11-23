@@ -419,20 +419,25 @@ CssReadTypeface :: (p: *CssParser, end: s32) {
 
 // The native Row/Column model uses a positive outer size or its usual auto
 // size. Try only a single literal; every other value stays intact for the DOM.
-CssReadNativeSize :: (p: *CssParser, end: s32) -> (extent: float32, native: bool) {
+CssReadNativeSize :: (p: *CssParser, end: s32) -> (extent: float32, percent: bool, native: bool) {
     status := p.status
     CssSkipSpace(p)
     origin := p.cursor
     keyword := CssReadName(p)
-    if CssNameEquals(keyword, "auto") && !CssMoreValue(p, end) { return 0.0, true }
+    if CssNameEquals(keyword, "auto") && !CssMoreValue(p, end) { return 0.0, false, true }
+    p.cursor = origin
+    percentage, percent := CssReadPercent(p)
+    if percent && percentage > 0.0 && !CssMoreValue(p, end) { return percentage, true, true }
     p.cursor = origin
     length, ok := CssReadStaticLength(p)
-    if ok && length > 0.0 && !CssMoreValue(p, end) { return length, true }
-    // The declaration span was already validated. Number/name scanning may
-    // reject valid browser syntax (for example an exponent or escaped unit).
+    if ok && length > 0.0 && !CssMoreValue(p, end) { return length, false, true }
+    // A plain native parse keeps the reason. Otherwise the declaration span
+    // was already validated: number/name scanning may reject valid browser
+    // syntax (for example an exponent or escaped unit).
+    if p.native_only && CssFailed(p) { return 0.0, false, false }
     p.status = status
     p.diagnostic_length = 0
-    return 0.0, false
+    return 0.0, false, false
 }
 
 // Equal flexible tracks and auto-fit for native Grid. Keep other valid CSS
@@ -671,20 +676,29 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         p.cursor = p.pending_end
         return CssScopeNative
     } else if CssNameEquals(name, "min-height") || CssNameEquals(name, "min-block-size") {
+        origin := p.cursor
+        percentage, percent := CssReadPercent(p)
+        if percent && !CssMoreValue(p, end) {
+            if !CssPercentTarget(p) { return -1 }
+            p.template.min_height = percentage
+            p.template.fields |= cast(u32)StyleMinHeight
+            p.template.percent |= cast(u32)StyleMinHeight
+            return CssScopeNative
+        }
+        p.cursor = origin
         value: CssValue = CssReadField(p, cast(s32)CssFieldMinHeight)
         if !value.ok { return -1 }
         if !CssSetNonnegative(p, cast(s32)CssFieldMinHeight, value, name) { return -1 }
+        p.template.percent &= ~cast(u32)StyleMinHeight
     } else if CssNameEquals(name, "width") || CssNameEquals(name, "height") {
-        extent, native := CssReadNativeSize(p, end)
-        if !native { return CssPassWebDeclaration(p) }
+        extent, percent, native := CssReadNativeSize(p, end)
+        if !native { return ifx CssFailed(p) then -1 else CssPassWebDeclaration(p) }
+        if percent && !CssPercentTarget(p) { return -1 }
         CssCheckLayoutTarget(p, TextView(name.bytes[:name.length]), false)
-        if CssNameEquals(name, "width") {
-            p.template.fields |= cast(u32)StyleWidth
-            p.template.width = extent
-        } else {
-            p.template.fields |= cast(u32)StyleHeight
-            p.template.height = extent
-        }
+        field := ifx CssNameEquals(name, "width") then cast(u32)StyleWidth else cast(u32)StyleHeight
+        if field == cast(u32)StyleWidth { p.template.width = extent } else { p.template.height = extent }
+        p.template.fields |= field
+        p.template.percent = CssPercentBit(p.template.percent, field, percent)
         return CssScopeNative
     } else if CssNameEquals(name, "grid-template-columns") {
         status := p.status

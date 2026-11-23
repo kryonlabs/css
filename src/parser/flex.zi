@@ -53,13 +53,16 @@ CssFlexAlignValue :: (word: CssName) -> s32 {
     return -1
 }
 
-CssFlexBasisValue :: (number: CssNumber) -> (value: float32, ok: bool) {
-    if !number.ok || number.percent || number.value < 0.0 { return 0.0, false }
+// A basis in logical pixels or, with `percent`, as a percentage of the
+// container's inner main size.
+CssFlexBasisValue :: (number: CssNumber) -> (value: float32, percent: bool, ok: bool) {
+    if !number.ok || number.value < 0.0 { return 0.0, false, false }
+    if number.percent { return cast(float32)number.value, true, true }
     if CssNameEquals(number.unit, "px") || (number.unit.length == 0 && number.value == 0.0) {
-        return cast(float32)number.value, true
+        return cast(float32)number.value, false, true
     }
-    if CssNameEquals(number.unit, "rem") { return cast(float32)(number.value * CssRemPixels), true }
-    return 0.0, false
+    if CssNameEquals(number.unit, "rem") { return cast(float32)(number.value * CssRemPixels), false, true }
+    return 0.0, false, false
 }
 
 CssFlexShorthand :: (p: *CssParser, end: s32, flex: *StyleFlexData) -> bool {
@@ -68,6 +71,7 @@ CssFlexShorthand :: (p: *CssParser, end: s32, flex: *StyleFlexData) -> bool {
     flex.grow = 1.0
     flex.shrink = 1.0
     flex.basis = -1.0
+    flex.percent &= ~cast(u32)StyleFlexBasis
     if CssNameEquals(word, "auto") { return !CssMoreValue(p, end) }
     if CssNameEquals(word, "none") {
         flex.grow = 0.0; flex.shrink = 0.0
@@ -90,12 +94,13 @@ CssFlexShorthand :: (p: *CssParser, end: s32, flex: *StyleFlexData) -> bool {
             continue
         }
         if basis_seen { return false }
-        basis, ok := CssFlexBasisValue(number)
+        basis, percent, ok := CssFlexBasisValue(number)
         if !ok {
             if number.ok || !CssNameEquals(CssReadName(p), "auto") { return false }
             basis = -1.0
         }
         flex.basis = basis
+        flex.percent = CssPercentBit(flex.percent, cast(u32)StyleFlexBasis, percent)
         basis_seen = true
     }
     return factors > 0 || basis_seen
@@ -122,8 +127,9 @@ CssApplyFlexProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         }
     } else if CssNameEquals(name, "flex-basis") {
         number := CssReadNumber(p)
-        basis, ok := CssFlexBasisValue(number)
+        basis, percent, ok := CssFlexBasisValue(number)
         flex.basis = basis
+        flex.percent = CssPercentBit(flex.percent, cast(u32)StyleFlexBasis, percent)
         valid = ok
         if !number.ok && CssNameEquals(CssReadName(p), "auto") { flex.basis = -1.0; valid = true }
         field = cast(u32)StyleFlexBasis

@@ -1,7 +1,8 @@
-// Native box declarations: min/max sizes, margins and overflow of Row,
-// Column and Grid containers, and text-align of Text. They are stored apart
-// from paint fields; Layout reads them when it places a container in its
-// parent's slot, and Text when it lines up its lines.
+// Native box declarations: min/max sizes (lengths or percentages of the
+// parent), margins and overflow of Row, Column and Grid containers, and
+// text-align of Text. They are stored apart from paint fields; Layout reads
+// them when it places a container in its parent's slot, and Text when it
+// lines up its lines.
 
 css_box_properties: [17]string = .["min-width", "max-width", "max-height",
     "min-inline-size", "max-inline-size", "max-block-size", "margin", "margin-top",
@@ -45,6 +46,14 @@ CssBoxLength :: (p: *CssParser, keyword: string, sentinel: float32) -> (value: f
     return length, true
 }
 
+// A min or max size: a box length or a percentage of the parent.
+CssBoxSize :: (p: *CssParser, keyword: string, sentinel: float32) -> (value: float32, percent: bool, ok: bool) {
+    percentage, percent := CssReadPercent(p)
+    if percent { return percentage, true, true }
+    value, ok := CssBoxLength(p, keyword, sentinel)
+    return value, false, ok
+}
+
 // Up to `most` margins (lengths or auto) in CSS shorthand order.
 CssBoxMargins :: (p: *CssParser, end: s32, most: s32) -> (values: [4]float32, count: s32) {
     margins: [4]float32
@@ -72,21 +81,28 @@ CssApplyBoxProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
     box := p.box_template
     valid := true
     text := false
+    percent := false
     if CssNameEquals(name, "min-width") || CssNameEquals(name, "min-inline-size") {
-        value, ok := CssBoxLength(p, "", 0.0)
+        value, relative, ok := CssBoxSize(p, "", 0.0)
         box.min_width = value
         box.fields |= cast(u32)StyleBoxMinWidth
+        box.percent = CssPercentBit(box.percent, cast(u32)StyleBoxMinWidth, relative)
         valid = ok
+        percent = relative
     } else if CssNameEquals(name, "max-width") || CssNameEquals(name, "max-inline-size") {
-        value, ok := CssBoxLength(p, "none", -1.0)
+        value, relative, ok := CssBoxSize(p, "none", -1.0)
         box.max_width = value
         box.fields |= cast(u32)StyleBoxMaxWidth
+        box.percent = CssPercentBit(box.percent, cast(u32)StyleBoxMaxWidth, relative)
         valid = ok
+        percent = relative
     } else if CssNameEquals(name, "max-height") || CssNameEquals(name, "max-block-size") {
-        value, ok := CssBoxLength(p, "none", -1.0)
+        value, relative, ok := CssBoxSize(p, "none", -1.0)
         box.max_height = value
         box.fields |= cast(u32)StyleBoxMaxHeight
+        box.percent = CssPercentBit(box.percent, cast(u32)StyleBoxMaxHeight, relative)
         valid = ok
+        percent = relative
     } else if CssNameEquals(name, "overflow") {
         word := CssReadName(p)
         box.clip_children = CssNameEquals(word, "hidden") || CssNameEquals(word, "clip")
@@ -140,6 +156,7 @@ CssApplyBoxProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         p.diagnostic_length = 0
         return CssPassWebDeclaration(p)
     }
+    if percent && !CssPercentTarget(p) { return -1 }
     CssBoxTarget(p, name, text)
     p.box_template = box
     return CssScopeNative

@@ -110,15 +110,15 @@ Anything else is browser-only or an error.
 | `gap` | `*` | `8px 12px` | normal or 1-2 lengths (row, column) |
 | `row-gap` | `*` | `4px` | normal or length |
 | `column-gap` | `*` | `max(8px, 1vw)` | normal or length |
-| `width` | `Column` | `240px` | auto or a positive static length |
-| `height` | `Row` | `48px` | auto or a positive static length |
-| `min-width` | `Column` | `120px` | static length |
-| `max-width` | `Column` | `calc(50rem - 100px)` | static length or none |
-| `max-height` | `Column` | `320px` | static length or none |
-| `min-inline-size` | `Grid` | `100px` | static length |
-| `max-inline-size` | `Grid` | `none` | static length or none |
-| `max-block-size` | `Row` | `200px` | static length or none |
-| `min-height` | `Button` | `44px` | length |
+| `width` | `Column` | `50%` | auto, a positive static length or a percentage |
+| `height` | `Row` | `48px` | auto, a positive static length or a percentage |
+| `min-width` | `Column` | `120px` | static length or percentage |
+| `max-width` | `Column` | `calc(50rem - 100px)` | static length, percentage or none |
+| `max-height` | `Column` | `80%` | static length, percentage or none |
+| `min-inline-size` | `Grid` | `100px` | static length or percentage |
+| `max-inline-size` | `Grid` | `none` | static length, percentage or none |
+| `max-block-size` | `Row` | `200px` | static length, percentage or none |
+| `min-height` | `Button` | `44px` | length; a percentage on Row, Column and Grid |
 | `min-block-size` | `Button` | `2.75rem` | length |
 | `margin` | `Column` | `0 auto` | 1-4 static lengths or auto |
 | `margin-top` | `Column` | `8px` | static length or auto |
@@ -138,7 +138,7 @@ Anything else is browser-only or an error.
 | `align-items` | `Row` | `center` | start, center, end, stretch, normal |
 | `align-self` | `Text` | `flex-end` | auto, start, center, end, stretch |
 | `flex` | `Column` | `1` | none, auto, initial, or grow [shrink] [basis] |
-| `flex-basis` | `Text` | `120px` | auto or a static length |
+| `flex-basis` | `Text` | `25%` | auto, a static length or a percentage |
 | `flex-grow` | `Text` | `2` | number |
 | `flex-shrink` | `Text` | `0` | number |
 | `grid-template-columns` | `Grid` | `repeat(3, minmax(0, 1fr))` | 1fr, repeat(N, 1fr), repeat(auto-fit, minmax(LENGTH, 1fr)) |

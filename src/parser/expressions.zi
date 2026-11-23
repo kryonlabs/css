@@ -64,7 +64,7 @@ CssReadExprLiteral :: (p: *CssParser) -> CssLengthExpr {
         return result
     }
     if number.percent {
-        CssFail(p, "percentages are not native lengths; use px, rem, em, vw or vh")
+        CssFail(p, "percentages are native only alone in width, height, min-/max- sizes and flex-basis; use px, rem, em, vw or vh")
         return result
     }
     value: CssLinear
@@ -228,6 +228,39 @@ CssReadLengthExpr :: (p: *CssParser) -> CssLengthExpr {
         result.value.number = false
     }
     return result
+}
+
+// `N%` alone: a percentage of the parent's content box, which layout
+// resolves. Anything else leaves the cursor where it was.
+CssReadPercent :: (p: *CssParser) -> (percentage: float32, ok: bool) {
+    CssSkipSpace(p)
+    origin := p.cursor
+    status := p.status
+    number := CssReadNumber(p)
+    if !CssFailed(p) && number.ok && number.percent && number.value >= 0.0 {
+        return cast(float32)number.value, true
+    }
+    p.cursor = origin
+    p.status = status
+    p.diagnostic_length = 0
+    return 0.0, false
+}
+
+// Set or clear one field's percent bit.
+CssPercentBit :: (mask: u32, field: u32, percent: bool) -> u32 {
+    return ifx percent then mask | field else mask & ~field
+}
+
+// Only a native container resolves a percentage of its parent.
+CssPercentTarget :: (p: *CssParser) -> bool {
+    for index: cast(s32)0..p.selector_count - 1 {
+        kind := p.selectors[index].selector.kind
+        if kind == StyleKindAny() || kind == StyleKindRow() || kind == StyleKindColumn() ||
+            kind == StyleKindGrid() { continue }
+        CssFail(p, "percentage sizes apply to native Row, Column and Grid; use px, rem, em, vw or vh")
+        return false
+    }
+    return true
 }
 
 // A length in logical pixels where the native value is fixed: calc(),

@@ -8,6 +8,8 @@
 #import "kryon/control_props"
 
 using StyleField;
+using StyleBoxField;
+using StyleFlexField;
 using ButtonTone;
 using MaterialKind;
 using ElevationRole;
@@ -69,7 +71,7 @@ Values :: () {
     }
     // A plain native parse refuses what only the browser applies; a shared
     // sheet is read with CssSheetParseWithDiagnostics, which reports it.
-    ParseFails("Button { width: 20%; color: red; }", "applied only by the browser", "browser-only size refused natively")
+    ParseFails("Button { width: 50vw; color: red; }", "applied only by the browser", "browser-only size refused natively")
     ParseFails("Button { text-transform: uppercase; }", "applied only by the browser", "browser-only property refused natively")
     if Builds("Button { padding: 4px 8px; }", "padding pair") {
         Check(Rule(0).style.padding_y == 4.0 && Rule(0).style.padding_x == 8.0, "padding block inline")
@@ -120,7 +122,19 @@ NativeAuthoring :: () {
         "has an invalid value", "negative logical size from token")
     BuildFails("Button { min-block-size: var(--size, -1px); }",
         "has an invalid value", "negative logical size from used fallback")
-    ParseFails("Button { min-block-size: 50%; }", "percentages are not native lengths", "relative logical size")
+    ParseFails("Button { min-block-size: 50%; }", "percentage sizes apply to native Row, Column and Grid",
+        "percent size of a control")
+    if Builds("Column { width: 50%; max-width: 75%; min-height: 10%; flex-basis: 20%; } Grid { width: 300px; max-width: 30rem; }",
+        "percent sizes") {
+        column: StyleRule = Rule(0)
+        Check(column.style.width == 50.0 && column.style.min_height == 10.0 &&
+            column.style.percent == (cast(u32)StyleWidth | cast(u32)StyleMinHeight), "percent face sizes")
+        Check(column.box.max_width == 75.0 && column.box.percent == cast(u32)StyleBoxMaxWidth, "percent box size")
+        Check(column.flex.basis == 20.0 && column.flex.percent == cast(u32)StyleFlexBasis, "percent basis")
+        grid: StyleRule = Rule(1)
+        Check(grid.style.percent == 0 && grid.box.percent == 0 && grid.box.max_width == 480.0, "lengths stay pixels")
+    }
+    ParseFails("Column { width: calc(100% - 2rem); }", "percentages are native only alone", "percent in calc")
     ParseFails("Button { color: hwb(0, 10%, 20%); }", "hwb() uses spaces", "HWB comma syntax")
     ParseFails("Button { color: hwb(0 10 20%); }", "expected a percentage", "HWB percentage subset")
     ParseFails("Button { color: hsl(10% 50% 50%); }", "a hue needs an angle", "invalid hue percentage")
@@ -212,7 +226,7 @@ Diagnostics :: () {
     ParseFails("Button { color: red !important; }", "!important is outside Kryon CSS", "important")
     ParseFails("Button { gap: 4; }", "a length needs a unit", "unitless length")
     ParseFails("Button { gap: 2vmin; }", "is outside Kryon CSS; use px, rem, em, vw or vh", "unknown length unit")
-    ParseFails("Button { gap: 50%; }", "percentages are not native lengths", "percent")
+    ParseFails("Button { gap: 50%; }", "percentages are native only alone", "percent")
     ParseFails("Button.a { & .b { color: red; } }", "a nested combinator is outside Kryon CSS", "nested combinator")
     ParseFails("Button.a { &.b { color: red; } }", "repeats a class, id, attribute or state", "nested second class")
     ParseFails("Button.a { &:hover { &:focus { color: red; } } }", "nested rules are outside Kryon CSS", "nesting twice")

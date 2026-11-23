@@ -440,6 +440,42 @@ FillLayout :: () {
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "fill frame")
 }
 
+// Percent sizes refer to the parent's content box, through the packed
+// sheet; a percent height in a content-sized parent is auto, and a percent
+// flex-basis is a share of the row's inner width.
+PercentLayout :: () {
+    Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install percent styles")
+    BeginFrame(integration_session, cast(u64)508, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    shell := Layout.Draw(integration_session, .{.key = 901, .bounds = .{0.0, 0.0, 400.0, 300.0}})
+    half := Layout.Draw(integration_session, .{.key = 902, .class_name = StyleClass("half")})
+    Check(shell.opened && Near(half.bounds, 0.0, 0.0, 200.0, 75.0), "width: 50% and height: 25% of the parent")
+    Check(End(integration_session), "close half")
+    limited := Layout.Draw(integration_session, .{.key = 903, .class_name = StyleClass("limited"),
+        .bounds = .{height = 20.0}})
+    Check(Near(limited.bounds, 0.0, 75.0, 120.0, 20.0), "max-width: 30% caps the auto width")
+    Check(End(integration_session), "close limited")
+    loose := Layout.Draw(integration_session, .{.key = 904})
+    tall := Layout.Draw(integration_session, .{.key = 905, .class_name = StyleClass("half-tall")})
+    unused BoxWidget.Draw(integration_session, .{.key = 906, .bounds = .{height = 10.0}})
+    Check(loose.opened && tall.opened && End(integration_session), "close half-tall")
+    Check(TreeSubmittedBounds(integration_session, tall.node).height == 10.0,
+        "a percent height in a content-sized parent sizes to content")
+    Check(End(integration_session), "close loose")
+    share := Layout.Row(integration_session, .{.key = 907, .class_name = StyleClass("share"),
+        .bounds = .{height = 260.0}})
+    Check(share.bounds.height == 240.0, "max-height: 80% caps a declared height")
+    Check(End(integration_session), "close share")
+    Check(End(integration_session), "close percent shell")
+    items: [2]Layout.FlexItem = .[.{.kind = StyleKindText(), .class_name = StyleClass("quarter"),
+        .width = 50.0, .height = 20.0}, .{.width = 30.0, .height = 20.0}]
+    placed: [2]Layout.FlexPlacement
+    row := Layout.Row(integration_session, .{.key = 908, .bounds = .{0.0, 0.0, 400.0, 0.0}}, items[:], placed[:])
+    Check(row.opened && placed[0].bounds.width == 100.0 && placed[1].bounds.width == 30.0,
+        "flex: 0 0 25% is a quarter of the row")
+    Check(End(integration_session), "close basis row")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "percent frame")
+}
+
 fluid_sheet: CssSheet;
 
 fluid_css :: #string CSS
@@ -553,6 +589,7 @@ main :: () -> s32 {
     ResponsiveBox(1200.0)
     PaintedBox()
     FillLayout()
+    PercentLayout()
     FluidValues()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }

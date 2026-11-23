@@ -699,6 +699,15 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         CssClearBorderSides(p, true, false)
         return ifx CssFailed(p) then -1 else CssScopeNative
     } else if CssNameEquals(name, "border-radius") {
+        CssSkipSpace(p)
+        origin := p.cursor
+        percentage, percent := CssReadPercent(p)
+        unused percentage
+        p.cursor = origin
+        if percent {
+            CssFail(p, "a percentage radius is not native; border-radius: 999px rounds a pill, and a square into a circle")
+            return -1
+        }
         CssReadSymmetric(p, end, cast(s32)CssFieldRadius, name, 4)
         CssCheckRoundedSides(p, name)
         return ifx CssFailed(p) then -1 else CssScopeNative
@@ -759,10 +768,15 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         return ifx CssFailed(p) then -1 else CssScopeNative
     } else if CssNameEquals(name, "font") || CssNameEquals(name, "box-shadow") {
         status := p.status
-        native := ifx CssNameEquals(name, "font") then CssApplyFontShorthand(p, end) else CssApplyBoxShadow(p, end)
+        shadow := CssNameEquals(name, "box-shadow")
+        native := ifx shadow then CssApplyBoxShadow(p, end) else CssApplyFontShorthand(p, end)
         if !native || CssFailed(p) {
             p.status = status
             p.diagnostic_length = 0
+            if shadow {
+                return CssPassWebDeclaration(p,
+                    "native box-shadow takes none or shadows of px, rem or em lengths and a color, written out rather than through var(), and paints the elevation of the largest blur")
+            }
             return CssPassWebDeclaration(p)
         }
         p.cursor = p.pending_end

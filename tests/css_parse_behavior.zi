@@ -84,6 +84,8 @@ Values :: () {
     ParseFails("Row { backdrop-filter: blur(8px); }", "nothing blurs what lies behind", "backdrop-filter")
     ParseFails("Grid { grid-area: main; }", "native Grid places children in order", "grid-area")
     ParseFails("Row { padding: 8px 12px 10px; }", "write padding: VERTICAL HORIZONTAL", "unequal block padding")
+    ParseFails("Button { border-radius: 50%; }", "border-radius: 999px rounds a pill", "percentage radius")
+    ParseFails("Row { box-shadow: var(--shadow); }", "native box-shadow takes none or shadows", "box-shadow through var()")
     if Builds("Column:hover { transform: translateY(-2px) scale(1.05); } Button { rotate: 45deg; scale: 1.1 0.9; transform-origin: left 25%; transition: transform 150ms linear; } Text { transform: rotate(90deg) scale(2, 1) translate(4px, 0); }",
         "transforms") {
         lifted := Rule(0).box

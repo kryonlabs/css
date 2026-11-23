@@ -201,7 +201,7 @@ CssReadSelectorParts :: (p: *CssParser, pending: *CssPendingSelector) -> s32 {
             if CssFailed(p) { return -1 }
         } else if byte == #char ":" {
             if CssPeek(p, 1) == #char ":" {
-                CssFail(p, "pseudo-elements are outside Kryon CSS")
+                CssFail(p, "pseudo-elements are outside Kryon CSS; draw the extra part as its own widget")
                 return -1
             }
             CssAdvance(p, 1)

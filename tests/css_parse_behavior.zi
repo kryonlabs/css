@@ -75,6 +75,8 @@ Values :: () {
     // sheet is read with CssSheetParseWithDiagnostics, which reports it.
     ParseFails("Button { width: 50vw; color: red; }", "applied only by the browser", "browser-only size refused natively")
     ParseFails("Button { text-transform: uppercase; }", "applied only by the browser", "browser-only property refused natively")
+    ParseFails("Column:hover { transform: translateY(-2px); }", "transform, scale and rotate are browser-only", "transform")
+    ParseFails("Button { rotate: 45deg; }", "transform, scale and rotate are browser-only", "rotate")
     if Builds("Button { padding: 4px 8px; }", "padding pair") {
         Check(Rule(0).style.padding_y == 4.0 && Rule(0).style.padding_x == 8.0, "padding block inline")
     }

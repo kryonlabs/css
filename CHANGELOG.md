@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `transform`, `transform-origin`, `scale` and `rotate` are known browser-only declarations: a shared sheet keeps them for the DOM export and a plain native parse refuses them with the reason, instead of failing on an unknown property.
+
 - `linear-gradient()` takes any angle (`deg`, `turn`, `rad`, `grad`) or `to` a side or corner, and two to six color stops with `%` positions, in `background` and `background-image`; Row, Column and Grid paint them, other widgets a top-to-bottom gradient of the first and last colors (`css_tool check` says so). Radial, conic and repeating gradients are refused natively with the reason. The pack format is 101 words a rule. Pins Kryon d0711324.
 
 - Selectors take tree context natively: one ancestor by class or id (`.card Text`), the parent (`.card > Text`), `:first-child`, and `:not(.class)` or `:not(:state)`, also in nested `&` rules, and the DOM export writes them as browser selectors. `:last-child`, `:nth-child()`, typed or second ancestors and sibling combinators fail with the native idiom. The pack format is 87 words a rule. Pins Kryon 56777c65.

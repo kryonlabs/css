@@ -13,7 +13,8 @@ CssScopeMotion :: 3
 CssFieldKind :: (field: s32) -> s32 {
     if field == cast(s32)CssFieldBackground || field == cast(s32)CssFieldBackgroundEnd ||
         field == cast(s32)CssFieldForeground || field == cast(s32)CssFieldBorder ||
-        field == cast(s32)CssFieldFocus {
+        field == cast(s32)CssFieldFocus ||
+        (field >= cast(s32)CssFieldBorderTopColor && field <= cast(s32)CssFieldBorderLeftColor) {
         return cast(s32)CssValueColor
     }
     if field == cast(s32)CssFieldOpacity { return cast(s32)CssValueNumber }
@@ -67,8 +68,33 @@ CssFieldBit :: (field: s32) -> u32 {
     return 0
 }
 
-// Store one value in a style. Installation uses this to fill var() results.
-CssStyleSet :: (style: *StyleData, field: s32, color: u32, number: float32, material: s32) {
+// Per-side borders and the outline live in the box data.
+CssBoxSet :: (box: *StyleBoxData, field: s32, color: u32, number: float32) {
+    if field <= cast(s32)CssFieldBorderLeftWidth {
+        side := field - cast(s32)CssFieldBorderTopWidth
+        box.border_widths[side] = number
+        box.fields |= cast(u32)StyleBoxBorderTop << cast(u32)side
+    } else if field <= cast(s32)CssFieldBorderLeftColor {
+        side := field - cast(s32)CssFieldBorderTopColor
+        box.border_colors[side] = color
+        box.fields |= cast(u32)StyleBoxBorderTopColor << cast(u32)side
+    } else if field == cast(s32)CssFieldOutlineWidth {
+        box.outline_width = number
+        box.fields |= cast(u32)StyleBoxOutlineWidth
+    } else {
+        box.outline_offset = number
+        box.fields |= cast(u32)StyleBoxOutlineOffset
+    }
+}
+
+// Store one value in a rule's style or box. Installation uses this to fill
+// var() results.
+CssStyleSet :: (style: *StyleData, box: *StyleBoxData, field: s32, color: u32, number: float32,
+    material: s32) {
+    if field >= cast(s32)CssFieldBorderTopWidth {
+        CssBoxSet(box, field, color, number)
+        return
+    }
     style.fields |= CssFieldBit(field)
     if field == cast(s32)CssFieldBackground { style.background = color }
     else if field == cast(s32)CssFieldBackgroundEnd { style.background_end = color }
@@ -143,7 +169,7 @@ CssSetValue :: (p: *CssParser, field: s32, value: CssValue) {
         p.rule_ref_count = kept
     }
     CssKeepViewportExpr(p, field, value.viewport)
-    CssStyleSet(*p.template, field, value.color, value.number, value.material)
+    CssStyleSet(*p.template, *p.box_template, field, value.color, value.number, value.material)
 }
 
 CssReadField :: (p: *CssParser, field: s32) -> CssValue {
@@ -233,7 +259,9 @@ CssReadSymmetric :: (p: *CssParser, end: s32, field: s32, property: CssName, mos
 }
 
 // border: width, 'solid' or 'none', and color, in any order.
-CssReadBorder :: (p: *CssParser, end: s32, property: CssName) {
+// border or one side of it: a width (a length, thin, medium or thick), solid
+// or none, and a color, in any order.
+CssReadBorder :: (p: *CssParser, end: s32, property: CssName, width_field: s32, color_field: s32) {
     have_width: bool = false
     have_color: bool = false
     none: bool = false
@@ -244,6 +272,17 @@ CssReadBorder :: (p: *CssParser, end: s32, property: CssName) {
             word: CssName = CssReadName(p)
             if CssFailed(p) { return }
             if CssNameEquals(word, "solid") { continue }
+            keyword := CssBorderKeywordWidth(word)
+            if keyword >= 0.0 {
+                if have_width {
+                    CssFail(p, "a border takes one width")
+                    return
+                }
+                width: CssValue = .{.ref = -1, .ok = true, .number = keyword}
+                CssSetValue(p, width_field, width)
+                have_width = true
+                continue
+            }
             if CssNameEquals(word, "none") {
                 none = true
                 continue
@@ -263,22 +302,22 @@ CssReadBorder :: (p: *CssParser, end: s32, property: CssName) {
         }
         if CssIsDigit(byte) || byte == #char "." || byte == #char "-" || byte == #char "+" {
             if have_width {
-                CssFail(p, "border takes one width")
+                CssFail(p, "a border takes one width")
                 return
             }
-            value: CssValue = CssReadField(p, cast(s32)CssFieldBorderWidth)
+            value: CssValue = CssReadField(p, width_field)
             if !value.ok { return }
-            CssSetValue(p, cast(s32)CssFieldBorderWidth, value)
+            CssSetValue(p, width_field, value)
             have_width = true
             continue
         }
         if have_color {
-            CssFail(p, "border takes one color")
+            CssFail(p, "a border takes one color")
             return
         }
         color: CssValue = CssReadColor(p, true)
         if !color.ok { return }
-        CssSetValue(p, cast(s32)CssFieldBorder, color)
+        CssSetValue(p, color_field, color)
         have_color = true
     }
     if CssFailed(p) { return }
@@ -289,7 +328,7 @@ CssReadBorder :: (p: *CssParser, end: s32, property: CssName) {
         }
         zero: CssValue
         zero.ref = -1
-        CssSetValue(p, cast(s32)CssFieldBorderWidth, zero)
+        CssSetValue(p, width_field, zero)
         return
     }
     if !have_width && !have_color { CssFailName(p, "expected a width or color for", property, "") }
@@ -586,12 +625,16 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         value: CssValue = CssReadColor(p, true)
         if !value.ok { return -1 }
         CssSetValue(p, cast(s32)CssFieldBorder, value)
+        CssClearBorderSides(p, false, true)
     } else if CssNameEquals(name, "outline-color") {
         value: CssValue = CssReadColor(p, true)
         if !value.ok { return -1 }
         CssSetValue(p, cast(s32)CssFieldFocus, value)
+    } else if CssOutlineProperty(name) {
+        return CssApplyOutline(p, name, end)
     } else if CssNameEquals(name, "border") {
-        CssReadBorder(p, end, name)
+        CssReadBorder(p, end, name, cast(s32)CssFieldBorderWidth, cast(s32)CssFieldBorder)
+        CssClearBorderSides(p, true, true)
         return ifx CssFailed(p) then -1 else CssScopeNative
     } else if CssNameEquals(name, "border-style") {
         word: CssName = CssReadName(p)
@@ -600,15 +643,18 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
             zero: CssValue
             zero.ref = -1
             CssSetValue(p, cast(s32)CssFieldBorderWidth, zero)
+            CssClearBorderSides(p, true, false)
         } else if !CssNameEquals(word, "solid") {
             CssFail(p, "Kryon borders are solid or none")
             return -1
         }
     } else if CssNameEquals(name, "border-width") {
         CssReadSymmetric(p, end, cast(s32)CssFieldBorderWidth, name, 4)
+        CssClearBorderSides(p, true, false)
         return ifx CssFailed(p) then -1 else CssScopeNative
     } else if CssNameEquals(name, "border-radius") {
         CssReadSymmetric(p, end, cast(s32)CssFieldRadius, name, 4)
+        CssCheckRoundedSides(p, name)
         return ifx CssFailed(p) then -1 else CssScopeNative
     } else if CssNameEquals(name, "opacity") {
         value: CssValue = CssReadField(p, cast(s32)CssFieldOpacity)
@@ -773,6 +819,8 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         return CssApplyFlexProperty(p, name, end)
     } else if CssBoxProperty(name) {
         return CssApplyBoxProperty(p, name, end)
+    } else if CssBorderSideOf(name) >= 0 {
+        return CssApplyBorderSide(p, name, end)
     } else if CssWebProperty(name) {
         return CssPassWebDeclaration(p)
     } else if name.length >= 2 && name.bytes[0] == #char "-" && name.bytes[1] == #char "-" {

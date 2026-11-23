@@ -319,7 +319,7 @@ DiagnosticExpectation :: struct {
     web_only: bool
 }
 
-DiagnosticIssueCount :: 14
+DiagnosticIssueCount :: 15
 
 ObserveIssue :: (context: *void, issue: CssIssue) {
     diagnostic_expectations: [DiagnosticIssueCount]DiagnosticExpectation = .[
@@ -336,7 +336,8 @@ ObserveIssue :: (context: *void, issue: CssIssue) {
         .{16, 22, CssIssueKind.Declaration, "transition", true},
         .{16, 48, CssIssueKind.Declaration, "height", true},
         .{17, 41, CssIssueKind.Declaration, "text-transform", true},
-        .{18, 8, CssIssueKind.Declaration, "font-family", true}]
+        .{18, 8, CssIssueKind.Declaration, "font-family", true},
+        .{19, 38, CssIssueKind.Declaration, "border-left", true}]
     count: *s32 = cast(*s32)context
     index: s32 = <<count
     <<count = index + 1

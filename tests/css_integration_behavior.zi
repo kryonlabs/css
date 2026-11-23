@@ -476,6 +476,35 @@ PercentLayout :: () {
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "percent frame")
 }
 
+// Per-side borders paint square bands over the uniform border, and a
+// focused widget's ring takes the outline width and offset of its rule.
+SideBorders :: () {
+    Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install border styles")
+    BeginFrame(integration_session, cast(u64)509, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    before := PendingPaintCount(integration_session)
+    ruled := Layout.Draw(integration_session, .{.key = 951, .class_name = StyleClass("ruled"),
+        .bounds = .{10.0, 20.0, 100.0, 50.0}})
+    Check(ruled.opened && End(integration_session), "close ruled")
+    Check(PendingPaintCount(integration_session) == before + 4, "four side bands")
+    top := PendingPaintAt(integration_session, before)
+    bottom := PendingPaintAt(integration_session, before + 1)
+    left := PendingPaintAt(integration_session, before + 2)
+    right := PendingPaintAt(integration_session, before + 3)
+    Check(Near(top.bounds, 10.0, 20.0, 100.0, 1.0) && ColorIs(top.color, cast(u32)0x101010ff),
+        "a side without its own border takes the uniform one")
+    Check(Near(bottom.bounds, 10.0, 68.0, 100.0, 2.0) && ColorIs(bottom.color, cast(u32)0xff0000ff),
+        "border-bottom paints its own band")
+    Check(Near(left.bounds, 10.0, 21.0, 4.0, 47.0) && ColorIs(left.color, cast(u32)0x00ff00ff),
+        "side longhands set the left band between top and bottom")
+    Check(Near(right.bounds, 109.0, 21.0, 1.0, 47.0), "the right band keeps the uniform width")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "border frame")
+    ring := FocusRingFor(StyleKindButton(), 0, StyleClass("ringed"), Rectangle.{10.0, 10.0, 80.0, 30.0}, 6.0)
+    Check(Near(ring.bounds, 5.0, 5.0, 90.0, 40.0) && ring.width == 3.0 && ring.radius == 11.0,
+        "outline width and offset size the focus ring")
+    plain := FocusRingFor(StyleKindButton(), 0, 0, Rectangle.{10.0, 10.0, 80.0, 30.0}, 6.0)
+    Check(Near(plain.bounds, 8.0, 8.0, 84.0, 34.0) && plain.width == 2.0, "without an outline the ring is 2px")
+}
+
 fluid_sheet: CssSheet;
 
 fluid_css :: #string CSS
@@ -590,6 +619,7 @@ main :: () -> s32 {
     PaintedBox()
     FillLayout()
     PercentLayout()
+    SideBorders()
     FluidValues()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }

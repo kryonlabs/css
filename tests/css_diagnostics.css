@@ -16,3 +16,4 @@ Row.fixture > Text { color: red; }
 Text { width: 100vw; transition: transform 1s; height: 24px; }
 @keyframes flash { from { opacity: 0.2; text-transform: none; } to { opacity: 1; } }
 Text { font-family: "Inter", sans-serif; }
+Column.rounded { border-radius: 8px; border-left: 4px solid #ff0000; }

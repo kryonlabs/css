@@ -89,6 +89,18 @@ Column.half-tall { height: 50%; }
 Row.share { min-height: 50%; max-height: 80%; }
 Text.quarter { flex: 0 0 25%; }
 
+Column.ruled {
+  border: 1px solid #101010;
+  border-bottom: 2px solid #ff0000;
+  border-left-width: 4px;
+  border-left-color: #00ff00;
+}
+
+Button.ringed:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+
 Column.side { width: 120px; }
 Column.grow { flex: 1; }
 Row.push { width: 50px; margin-left: auto; }

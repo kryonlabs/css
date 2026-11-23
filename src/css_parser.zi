@@ -129,6 +129,18 @@ CssField :: enum {
     CssFieldColumnGap :: 26
     CssFieldFontWeight :: 27
     CssFieldFontStyle :: 28
+    // Box fields: per-side border widths and colors (top, right, bottom,
+    // left) and a focused widget's outline.
+    CssFieldBorderTopWidth :: 29
+    CssFieldBorderRightWidth :: 30
+    CssFieldBorderBottomWidth :: 31
+    CssFieldBorderLeftWidth :: 32
+    CssFieldBorderTopColor :: 33
+    CssFieldBorderRightColor :: 34
+    CssFieldBorderBottomColor :: 35
+    CssFieldBorderLeftColor :: 36
+    CssFieldOutlineWidth :: 37
+    CssFieldOutlineOffset :: 38
 }
 
 // Rules outside every @layer outrank layered ones, as in CSS.
@@ -596,6 +608,7 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
 #load "parser/properties.zi";
 #load "parser/flex.zi";
 #load "parser/box.zi";
+#load "parser/borders.zi";
 #load "parser/visual.zi";
 #load "parser/catalog.zi";
 #load "parser/media.zi";

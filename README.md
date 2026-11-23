@@ -96,7 +96,7 @@ Anything else is browser-only or an error.
 | `color` | `*` | `#203040` | color, var(), color-mix() |
 | `background` | `*` | `linear-gradient(#ffffff, #eeeeee)` | color or a two-stop vertical linear-gradient |
 | `background-color` | `*` | `rgb(10 20 30)` | color |
-| `border` | `*` | `1px solid #ccddee` | width, solid or none, color |
+| `border` | `*` | `1px solid #ccddee` | width (or thin, medium, thick), solid or none, color |
 | `border-color` | `*` | `hsl(200 50% 40%)` | color |
 | `border-width` | `*` | `1px` | length |
 | `border-style` | `*` | `solid` | solid or none |
@@ -173,6 +173,13 @@ Anything else is browser-only or an error.
 | `-kryon-motion-multiplier` | `*` | `1.5` | number |
 | `-kryon-motion-easing` | `*` | `standard` | inherit, standard, linear, instant |
 | `-kryon-motion-reduced` | `*` | `reduce` | reduce or no-preference |
+| `border-top` | `Column` | `1px solid #d0d7de` | one side, as border; also -right, -bottom, -left and the block/inline-start/end sides |
+| `border-bottom-width` | `Row` | `thick` | length, thin, medium or thick; every side has -width |
+| `border-left-color` | `Column` | `var(--kryon-accent)` | color; every side has -color |
+| `border-inline-start-style` | `Grid` | `none` | solid or none; every side has -style |
+| `outline` | `Button` | `2px solid #38bdf8` | [width] [solid, auto or none] [color]: the focus ring |
+| `outline-width` | `Button` | `3px` | length, thin, medium or thick |
+| `outline-offset` | `Button` | `2px` | signed length outside the edge |
 <!-- properties:end -->
 
 - `box-shadow` selects a Kryon elevation role: `none` clears it, a shadow

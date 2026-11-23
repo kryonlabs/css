@@ -666,7 +666,7 @@ CssTokenFits :: (token: CssToken, field: s32) -> bool {
         (token.kind == cast(s32)CssTokenNumber && token.number == 0.0)
 }
 
-CssStyleSetToken :: (style: *StyleData, field: s32, token: CssToken) {
+CssStyleSetToken :: (style: *StyleData, box: *StyleBoxData, field: s32, token: CssToken) {
     number: float32 = token.number
     material: s32 = token.material
     if field == cast(s32)CssFieldLineHeight {
@@ -677,7 +677,7 @@ CssStyleSetToken :: (style: *StyleData, field: s32, token: CssToken) {
         if token.kind == cast(s32)CssTokenNormal { number = 400.0 }
         else if token.kind == cast(s32)CssTokenBold { number = 700.0 }
     }
-    CssStyleSet(style, field, token.color, number, material)
+    CssStyleSet(style, box, field, token.color, number, material)
 }
 
 css_install_rules: StyleRules;
@@ -785,7 +785,8 @@ CssSheetBuild :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverride
                         return false
                     }
                 } else {
-                    CssStyleSetToken(*rules.items[rules.count].style, entry.field, token)
+                    CssStyleSetToken(*rules.items[rules.count].style, *rules.items[rules.count].box,
+                        entry.field, token)
                 }
                 // The template already holds the fallback when the token is absent
                 // or has the wrong kind. Validate whichever value will be used.
@@ -817,7 +818,7 @@ CssSheetBuild :: (sheet: *CssSheet, env: CssEnvironment, overrides: *CssOverride
         while expr < sheet.expr_count && sheet.exprs[expr].rule == index {
             if active {
                 entry := sheet.exprs[expr]
-                CssStyleSet(*rules.items[rules.count].style, entry.field, 0,
+                CssStyleSet(*rules.items[rules.count].style, *rules.items[rules.count].box, entry.field, 0,
                     cast(float32)CssExprAt(entry.expr, width, height), 0)
             }
             expr += 1
@@ -923,10 +924,11 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // The pack compiler writes these arrays; loading them skips parsing.
 
 // One rule: selector, paint and text fields, sizes and grid tracks, flex
-// and box data, then the percent masks of the style, flex and box fields.
+// and box data, the percent masks of the style, flex and box fields, then
+// the per-side border widths and colors and the outline width and offset.
 // The count is the pack format: a pack written with another one is stale
 // and css_tool regenerates it.
-CssRuleWords :: 72
+CssRuleWords :: 82
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
 // and high linear forms as px, vw and vh.
@@ -1091,6 +1093,12 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         style.percent = w[69]
         entry.rule.flex.percent = w[70]
         entry.rule.box.percent = w[71]
+        for side: 0..3 {
+            entry.rule.box.border_widths[side] = CssWordFloat(w[72 + side])
+            entry.rule.box.border_colors[side] = w[76 + side]
+        }
+        entry.rule.box.outline_width = CssWordFloat(w[80])
+        entry.rule.box.outline_offset = CssWordFloat(w[81])
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

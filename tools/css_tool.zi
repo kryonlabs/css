@@ -430,6 +430,10 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         Word(style.percent)
         Word(flex.percent)
         Word(box.percent)
+        for width: box.border_widths { Word(FloatBits(width)) }
+        for color: box.border_colors { Word(color) }
+        Word(FloatBits(box.outline_width))
+        Word(FloatBits(box.outline_offset))
     }
     ok = ok && EmitWords("rules", pack, CssRuleWords)
     for index: cast(s32)0..sheet.ref_count - 1 {

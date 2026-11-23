@@ -135,6 +135,25 @@ NativeAuthoring :: () {
         Check(grid.style.percent == 0 && grid.box.percent == 0 && grid.box.max_width == 480.0, "lengths stay pixels")
     }
     ParseFails("Column { width: calc(100% - 2rem); }", "percentages are native only alone", "percent in calc")
+    if Builds("Column { border: 1px solid #111111; border-left: 4px solid #2255ff; border-bottom-width: thick; border-inline-end-color: #333333; }",
+        "side borders") {
+        box := Rule(0).box
+        Check(Rule(0).style.border_width == 1.0 && box.border_widths[3] == 4.0 &&
+            box.border_colors[3] == cast(u32)0x2255ffff && box.border_widths[2] == 5.0 &&
+            box.border_colors[1] == cast(u32)0x333333ff, "side widths and colors")
+        Check((box.fields & cast(u32)StyleBoxBorderSides) == (cast(u32)StyleBoxBorderLeft |
+            cast(u32)StyleBoxBorderLeftColor | cast(u32)StyleBoxBorderBottom | cast(u32)StyleBoxBorderRightColor),
+            "only the declared sides are set")
+    }
+    if Builds("Column { border-left: 4px solid red; border: 1px solid blue; }", "uniform border after a side") {
+        Check((Rule(0).box.fields & cast(u32)StyleBoxBorderSides) == 0, "a later uniform border clears the side")
+    }
+    if Builds("Button:focus-visible { outline: 3px solid #38bdf8; outline-offset: -1px; }", "outline") {
+        Check(Rule(0).box.outline_width == 3.0 && Rule(0).box.outline_offset == -1.0 &&
+            Rule(0).style.focus == cast(u32)0x38bdf8ff, "outline width, offset and color")
+    }
+    ParseFails("Column { border-top: 2px dotted red; }", "borders are solid", "dotted side")
+    ParseFails("Button { outline: 2px dashed red; }", "focus rings are solid", "dashed outline")
     ParseFails("Button { color: hwb(0, 10%, 20%); }", "hwb() uses spaces", "HWB comma syntax")
     ParseFails("Button { color: hwb(0 10 20%); }", "expected a percentage", "HWB percentage subset")
     ParseFails("Button { color: hsl(10% 50% 50%); }", "a hue needs an angle", "invalid hue percentage")

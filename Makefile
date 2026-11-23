@@ -60,6 +60,7 @@ diagnostics-test: $(CSS_TOOL)
 	cmp $(BUILD)/css-diagnostics.log $(BUILD)/css-diagnostics-strict.log
 	grep -Fx "tests/css_diagnostics.css:5:3: web-only declaration 'text-transform': declaration is applied only by the browser" $(BUILD)/css-diagnostics.log
 	grep -Fx "tests/css_diagnostics.css:14:1: skipped at-rule '@supports': at-rule 'supports' is outside Kryon CSS" $(BUILD)/css-diagnostics.log
+	grep -F "tests/css_diagnostics.css:19:38: " $(BUILD)/css-diagnostics.log | grep -Fq "not per-side borders"
 
 # Packs are compiled into rule tables apps load without parsing. The
 # modules are committed, because apps import this package without running

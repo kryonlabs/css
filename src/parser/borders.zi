@@ -1,0 +1,191 @@
+// Per-side borders and the outline. A side's width and color are box
+// fields over the uniform border: a side without its own takes the
+// uniform one, and a uniform border later in the same rule clears them.
+// Containers paint square sides; with a radius they keep the uniform
+// border. The outline sets a focused widget's ring width and offset;
+// keyboard focus always keeps a ring, so `outline: none` changes nothing.
+
+css_border_side_names: [8]string = .["border-top", "border-right", "border-bottom", "border-left",
+    "border-block-start", "border-inline-end", "border-block-end", "border-inline-start"];
+css_border_parts: [4]string = .["", "-width", "-color", "-style"];
+
+CssNameJoined :: (name: CssName, head: string, tail: string) -> bool {
+    if name.length != cast(s32)(head.count + tail.count) { return false }
+    for index: cast(s32)0..name.length - 1 {
+        expected := ifx index < cast(s32)head.count then head[index] else tail[index - cast(s32)head.count]
+        if CssLower(name.bytes[index]) != expected { return false }
+    }
+    return true
+}
+
+// The index into the side names and parts of a per-side border property,
+// side * 4 + part, or -1.
+CssBorderSideOf :: (name: CssName) -> s32 {
+    if name.length < 10 || CssLower(name.bytes[0]) != #char "b" { return -1 }
+    for side: cast(s32)0..7 {
+        for part: cast(s32)0..3 {
+            if CssNameJoined(name, css_border_side_names[side], css_border_parts[part]) { return side * 4 + part }
+        }
+    }
+    return -1
+}
+
+// thin, medium and thick, or -1.
+CssBorderKeywordWidth :: (word: CssName) -> float32 {
+    if CssNameEquals(word, "thin") { return 1.0 }
+    if CssNameEquals(word, "medium") { return 3.0 }
+    if CssNameEquals(word, "thick") { return 5.0 }
+    return -1.0
+}
+
+// Drop side widths or colors set earlier in the rule, values and var()
+// references alike, so a uniform border written after them wins.
+CssClearBorderSides :: (p: *CssParser, widths: bool, colors: bool) {
+    first := ifx widths then cast(s32)CssFieldBorderTopWidth else cast(s32)CssFieldBorderTopColor
+    last := ifx colors then cast(s32)CssFieldBorderLeftColor else cast(s32)CssFieldBorderLeftWidth
+    widths_mask := cast(u32)StyleBoxBorderTop | cast(u32)StyleBoxBorderRight |
+        cast(u32)StyleBoxBorderBottom | cast(u32)StyleBoxBorderLeft
+    if widths { p.box_template.fields &= ~widths_mask }
+    if colors { p.box_template.fields &= ~(cast(u32)StyleBoxBorderSides & ~widths_mask) }
+    kept: s32 = 0
+    for index: cast(s32)0..p.rule_ref_count - 1 {
+        field := p.rule_refs[index].field
+        if field >= first && field <= last { continue }
+        p.rule_refs[kept] = p.rule_refs[index]
+        kept += 1
+    }
+    p.rule_ref_count = kept
+    kept = 0
+    for index: cast(s32)0..p.rule_expr_count - 1 {
+        field := p.rule_exprs[index].field
+        if field >= first && field <= last { continue }
+        p.rule_exprs[kept] = p.rule_exprs[index]
+        kept += 1
+    }
+    p.rule_expr_count = kept
+}
+
+// A rule with both a radius and per-side borders paints its uniform border.
+CssCheckRoundedSides :: (p: *CssParser, name: CssName) {
+    rounded := (p.template.fields & cast(u32)StyleRadius) != 0 && p.template.radius > 0.0
+    if !rounded || (p.box_template.fields & cast(u32)StyleBoxBorderSides) == 0 { return }
+    if !CssCollectIssues(p) { return }
+    CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, TextView(name.bytes[:name.length]),
+        "with border-radius a native box paints only its uniform border, not per-side borders", true)
+}
+
+CssApplyBorderSide :: (p: *CssParser, name: CssName, end: s32) -> s32 {
+    index := CssBorderSideOf(name)
+    side := (index / 4) % 4
+    part := index % 4
+    width_field := cast(s32)CssFieldBorderTopWidth + side
+    color_field := cast(s32)CssFieldBorderTopColor + side
+    if part == 0 {
+        CssReadBorder(p, end, name, width_field, color_field)
+    } else if part == 1 {
+        saved := p.cursor
+        keyword := CssBorderKeywordWidth(CssReadName(p))
+        if keyword >= 0.0 {
+            width: CssValue = .{.ref = -1, .ok = true, .number = keyword}
+            CssSetValue(p, width_field, width)
+        } else {
+            p.cursor = saved
+            value: CssValue = CssReadField(p, width_field)
+            if !value.ok { return -1 }
+            if !CssSetNonnegative(p, width_field, value, name) { return -1 }
+        }
+    } else if part == 2 {
+        value: CssValue = CssReadColor(p, true)
+        if !value.ok { return -1 }
+        CssSetValue(p, color_field, value)
+    } else {
+        word := CssReadName(p)
+        if CssNameEquals(word, "none") || CssNameEquals(word, "hidden") {
+            zero: CssValue = .{.ref = -1, .ok = true}
+            CssSetValue(p, width_field, zero)
+        } else if !CssNameEquals(word, "solid") {
+            CssFail(p, "Kryon borders are solid or none")
+        }
+    }
+    if CssFailed(p) || !CssEndValue(p, end, name) { return -1 }
+    CssBoxTarget(p, name, false)
+    CssCheckRoundedSides(p, name)
+    return CssScopeNative
+}
+
+CssOutlineProperty :: (name: CssName) -> bool {
+    return CssNameEquals(name, "outline") || CssNameEquals(name, "outline-width") ||
+        CssNameEquals(name, "outline-offset") || CssNameEquals(name, "outline-style")
+}
+
+// outline: [width] [style] [color]; outline-width; outline-offset (signed);
+// outline-style. The color is the focus ring color.
+CssApplyOutline :: (p: *CssParser, name: CssName, end: s32) -> s32 {
+    if CssNameEquals(name, "outline-offset") {
+        value: CssValue = CssReadField(p, cast(s32)CssFieldOutlineOffset)
+        if !value.ok { return -1 }
+        CssSetValue(p, cast(s32)CssFieldOutlineOffset, value)
+    } else if CssNameEquals(name, "outline-width") {
+        saved := p.cursor
+        keyword := CssBorderKeywordWidth(CssReadName(p))
+        value: CssValue = .{.ref = -1, .ok = true, .number = keyword}
+        if keyword < 0.0 {
+            p.cursor = saved
+            value = CssReadField(p, cast(s32)CssFieldOutlineWidth)
+            if !value.ok { return -1 }
+        }
+        if !CssSetNonnegative(p, cast(s32)CssFieldOutlineWidth, value, name) { return -1 }
+    } else if CssNameEquals(name, "outline-style") {
+        word := CssReadName(p)
+        CssOutlineStyle(p, name, word)
+    } else {
+        while CssMoreValue(p, end) && !CssFailed(p) {
+            byte := CssPeek(p, 0)
+            if CssNameStart(byte) && !CssAtColorFunction(p) {
+                saved := p.cursor
+                word := CssReadName(p)
+                keyword := CssBorderKeywordWidth(word)
+                if keyword >= 0.0 {
+                    width: CssValue = .{.ref = -1, .ok = true, .number = keyword}
+                    CssSetValue(p, cast(s32)CssFieldOutlineWidth, width)
+                    continue
+                }
+                if CssOutlineStyle(p, name, word) { continue }
+                if CssFailed(p) { return -1 }
+                p.cursor = saved
+            }
+            if CssIsDigit(byte) || byte == #char "." {
+                value: CssValue = CssReadField(p, cast(s32)CssFieldOutlineWidth)
+                if !value.ok { return -1 }
+                if !CssSetNonnegative(p, cast(s32)CssFieldOutlineWidth, value, name) { return -1 }
+                continue
+            }
+            color: CssValue = CssReadColor(p, true)
+            if !color.ok { return -1 }
+            CssSetValue(p, cast(s32)CssFieldFocus, color)
+        }
+    }
+    if CssFailed(p) || !CssEndValue(p, end, name) { return -1 }
+    return CssScopeNative
+}
+
+// solid and auto draw the ring; none keeps it, since keyboard focus stays
+// visible natively. False for a word that is no outline style.
+CssOutlineStyle :: (p: *CssParser, name: CssName, word: CssName) -> bool {
+    if CssNameEquals(word, "solid") || CssNameEquals(word, "auto") { return true }
+    if CssNameEquals(word, "none") {
+        if CssCollectIssues(p) {
+            CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, TextView(name.bytes[:name.length]),
+                "native keyboard focus keeps its ring; outline: none changes nothing", false)
+        }
+        return true
+    }
+    if CssNameEquals(word, "dashed") || CssNameEquals(word, "dotted") || CssNameEquals(word, "double") ||
+        CssNameEquals(word, "groove") || CssNameEquals(word, "ridge") || CssNameEquals(word, "inset") ||
+        CssNameEquals(word, "outset") {
+        CssFailName(p, "outline style", word, " is outside Kryon CSS; focus rings are solid")
+        return false
+    }
+    if CssNameEquals(name, "outline-style") { CssFail(p, "expected an outline style") }
+    return false
+}

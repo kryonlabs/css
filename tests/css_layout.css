@@ -107,6 +107,9 @@ Heading:not(.loud) { color: #050505; }
 Text.lead:first-child { color: #030303; }
 Text.quiet:not(:hover) { color: #040404; }
 
+Column.sunrise { background: linear-gradient(90deg, #000000, #ffffff); }
+Column.bands { background: linear-gradient(#ff0000, #00ff00, #0000ff); }
+
 Column.side { width: 120px; }
 Column.grow { flex: 1; }
 Row.push { width: 50px; margin-left: auto; }

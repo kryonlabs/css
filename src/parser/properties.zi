@@ -14,7 +14,8 @@ CssFieldKind :: (field: s32) -> s32 {
     if field == cast(s32)CssFieldBackground || field == cast(s32)CssFieldBackgroundEnd ||
         field == cast(s32)CssFieldForeground || field == cast(s32)CssFieldBorder ||
         field == cast(s32)CssFieldFocus ||
-        (field >= cast(s32)CssFieldBorderTopColor && field <= cast(s32)CssFieldBorderLeftColor) {
+        (field >= cast(s32)CssFieldBorderTopColor && field <= cast(s32)CssFieldBorderLeftColor) ||
+        field >= cast(s32)CssFieldGradientStop1 {
         return cast(s32)CssValueColor
     }
     if field == cast(s32)CssFieldOpacity { return cast(s32)CssValueNumber }
@@ -81,9 +82,12 @@ CssBoxSet :: (box: *StyleBoxData, field: s32, color: u32, number: float32) {
     } else if field == cast(s32)CssFieldOutlineWidth {
         box.outline_width = number
         box.fields |= cast(u32)StyleBoxOutlineWidth
-    } else {
+    } else if field == cast(s32)CssFieldOutlineOffset {
         box.outline_offset = number
         box.fields |= cast(u32)StyleBoxOutlineOffset
+    } else {
+        box.gradient_colors[field - cast(s32)CssFieldGradientStop1] = color
+        box.fields |= cast(u32)StyleBoxGradient
     }
 }
 
@@ -339,49 +343,7 @@ CssReadBackground :: (p: *CssParser, end: s32, property: CssName) {
     CssSkipSpace(p)
     if CssFailed(p) { return }
     if CssAtFunction(p, "linear-gradient") {
-        CssSkipSpace(p)
-        if CssFailed(p) { return }
-        if CssNameStart(CssPeek(p, 0)) && !CssAtColorFunction(p) {
-            saved: CssCursor = p.cursor
-            word: CssName = CssReadName(p)
-            if CssFailed(p) { return }
-            if CssNameEquals(word, "to") {
-                CssSkipSpace(p)
-                side: CssName = CssReadName(p)
-                if CssFailed(p) { return }
-                if !CssNameEquals(side, "bottom") {
-                    CssFail(p, "Kryon gradients run top to bottom; write 'to bottom' or omit it")
-                    return
-                }
-                if !CssExpect(p, #char ",", "expected ',' after the gradient direction") { return }
-            } else {
-                p.cursor = saved
-            }
-        } else if CssIsDigit(CssPeek(p, 0)) {
-            angle: CssNumber = CssReadNumber(p)
-            if CssFailed(p) { return }
-            if !angle.ok || !CssNameEquals(angle.unit, "deg") || angle.value != 180.0 {
-                CssFail(p, "Kryon gradients run top to bottom (180deg)")
-                return
-            }
-            if !CssExpect(p, #char ",", "expected ',' after the gradient angle") { return }
-        }
-        top: CssValue = CssReadColor(p, true)
-        if !top.ok { return }
-        if !CssExpect(p, #char ",", "Kryon gradients have two colors") { return }
-        bottom: CssValue = CssReadColor(p, true)
-        if !bottom.ok { return }
-        CssSkipSpace(p)
-        if CssFailed(p) { return }
-        if !CssAtByte(p, #char ")") {
-            if CssAtByte(p, #char ",") { CssFail(p, "Kryon gradients have two colors") }
-            else { CssFail(p, "color stop positions are outside Kryon CSS") }
-            return
-        }
-        CssAdvance(p, 1)
-        CssSetValue(p, cast(s32)CssFieldBackground, top)
-        CssSetValue(p, cast(s32)CssFieldBackgroundEnd, bottom)
-        unused CssEndValue(p, end, property)
+        CssReadLinearGradient(p, end, property)
         return
     }
     if CssAtFunction(p, "url") {
@@ -393,6 +355,7 @@ CssReadBackground :: (p: *CssParser, end: s32, property: CssName) {
     CssSetValue(p, cast(s32)CssFieldBackground, color)
     // A plain color clears a gradient set earlier in the cascade.
     p.template.fields &= ~cast(u32)StyleBackgroundEnd
+    CssClearGradient(p)
     unused CssEndValue(p, end, property)
 }
 
@@ -618,7 +581,28 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         if !value.ok { return -1 }
         CssSetValue(p, cast(s32)CssFieldBackground, value)
         p.template.fields &= ~cast(u32)StyleBackgroundEnd
-    } else if CssNameEquals(name, "background") {
+    } else if CssNameEquals(name, "background") || CssNameEquals(name, "background-image") {
+        if CssAtWebGradient(p) {
+            if !p.native_only { return CssPassWebDeclaration(p) }
+            CssFail(p, "radial, conic and repeating gradients are browser-only; Kryon paints linear-gradient()")
+            return -1
+        }
+        if CssNameEquals(name, "background-image") {
+            CssSkipSpace(p)
+            saved := p.cursor
+            if CssNameEquals(CssReadName(p), "none") && !CssMoreValue(p, end) {
+                p.template.fields &= ~cast(u32)StyleBackgroundEnd
+                CssClearGradient(p)
+                return CssScopeNative
+            }
+            p.cursor = saved
+            if !CssAtFunction(p, "linear-gradient") {
+                CssFail(p, "background-image takes none or linear-gradient() natively")
+                return -1
+            }
+            CssReadLinearGradient(p, end, name)
+            return ifx CssFailed(p) then -1 else CssScopeNative
+        }
         CssReadBackground(p, end, name)
         return ifx CssFailed(p) then -1 else CssScopeNative
     } else if CssNameEquals(name, "border-color") {

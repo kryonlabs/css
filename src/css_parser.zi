@@ -1,6 +1,7 @@
 #import "kryon/style"
 #import "kryon/style_sheet"
 #import "kryon/control_props"
+#import "std/math"
 
 using CssStatus;
 using CssTokenKind;
@@ -142,6 +143,11 @@ CssField :: enum {
     CssFieldBorderLeftColor :: 36
     CssFieldOutlineWidth :: 37
     CssFieldOutlineOffset :: 38
+    // The middle colors of a gradient with more than two stops.
+    CssFieldGradientStop1 :: 39
+    CssFieldGradientStop2 :: 40
+    CssFieldGradientStop3 :: 41
+    CssFieldGradientStop4 :: 42
 }
 
 // Rules outside every @layer outrank layered ones, as in CSS.
@@ -610,6 +616,7 @@ CssBegin :: (p: *CssParser, source: string, path: string) {
 #load "parser/flex.zi";
 #load "parser/box.zi";
 #load "parser/borders.zi";
+#load "parser/gradients.zi";
 #load "parser/visual.zi";
 #load "parser/catalog.zi";
 #load "parser/media.zi";

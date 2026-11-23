@@ -439,6 +439,12 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         SignedWord(selector.ancestor_id)
         SignedWord(selector.not_class)
         SignedWord(selector.not_state)
+        Word(FloatBits(box.gradient_dx))
+        Word(FloatBits(box.gradient_dy))
+        SignedWord(box.gradient_corner)
+        SignedWord(box.gradient_count)
+        for stop: box.gradient_stops { Word(FloatBits(stop)) }
+        for color: box.gradient_colors { Word(color) }
     }
     ok = ok && EmitWords("rules", pack, CssRuleWords)
     for index: cast(s32)0..sheet.ref_count - 1 {

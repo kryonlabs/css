@@ -537,6 +537,46 @@ ContextSelectors :: () {
         ContextColor(StyleKindHeading(), "loud", any) != cast(u32)0x050505ff, ":not(.loud)")
 }
 
+// Any-angle and multi-stop gradients paint from vertical gradient strips;
+// a widget's own face paints through Layout.Box, with its elevation, at End.
+Gradients :: () {
+    Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install gradient styles")
+    BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    before := PendingPaintCount(integration_session)
+    sunrise := Layout.Draw(integration_session, .{.key = 971, .class_name = StyleClass("sunrise"),
+        .bounds = .{10.0, 10.0, 256.0, 20.0}})
+    Check(sunrise.opened && End(integration_session), "close sunrise")
+    Check(PendingPaintCount(integration_session) == before + 64, "a horizontal gradient is 64 strips")
+    first := PendingPaintAt(integration_session, before)
+    last := PendingPaintAt(integration_session, before + 63)
+    Check(Near(first.bounds, 10.0, 10.0, 4.0, 20.0) && first.color.r < cast(u8)8 && last.color.r > cast(u8)247,
+        "strips run dark to light left to right")
+    before = PendingPaintCount(integration_session)
+    bands := Layout.Draw(integration_session, .{.key = 972, .class_name = StyleClass("bands"),
+        .bounds = .{10.0, 40.0, 100.0, 60.0}})
+    Check(bands.opened && End(integration_session), "close bands")
+    top := PendingPaintAt(integration_session, before)
+    bottom := PendingPaintAt(integration_session, before + 1)
+    Check(PendingPaintCount(integration_session) == before + 2 && top.kind == PaintKindVerticalGradient &&
+        Near(top.bounds, 10.0, 40.0, 100.0, 30.0) && ColorIs(top.color, cast(u32)0xff0000ff) &&
+        ColorIs(top.end_color, cast(u32)0x00ff00ff) && Near(bottom.bounds, 10.0, 70.0, 100.0, 30.0) &&
+        ColorIs(bottom.end_color, cast(u32)0x0000ffff), "a vertical three-stop gradient is two bands")
+    face: StyleData = .{.fields = cast(u32)StyleBackground | cast(u32)StyleElevation | cast(u32)StylePaddingX |
+        cast(u32)StylePaddingY, .background = cast(u32)0x223344ff, .elevation = .ElevationRoleFloating,
+        .padding_x = 6.0, .padding_y = 4.0}
+    before = PendingPaintCount(integration_session)
+    card := Layout.Box(integration_session, .{.key = 973}, face)
+    unused BoxWidget.Draw(integration_session, .{.key = 974, .bounds = .{height = 12.0}, .fill = Color.{9, 9, 9, 255}})
+    Check(card.opened && End(integration_session), "close box")
+    Check(TreeSubmittedBounds(integration_session, card.node).height == 20.0, "the box wraps its child and padding")
+    fill := PendingPaintAt(integration_session, before + 2)
+    child := PendingPaintAt(integration_session, before + 3)
+    Check(PendingPaintCount(integration_session) == before + 4 && ColorIs(fill.color, cast(u32)0x223344ff) &&
+        Near(fill.bounds, 0.0, 0.0, 400.0, 20.0) && Near(child.bounds, 6.0, 4.0, 388.0, 12.0),
+        "two elevation edges, then the face fill, beneath the child")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "gradient frame")
+}
+
 fluid_sheet: CssSheet;
 
 fluid_css :: #string CSS
@@ -653,6 +693,7 @@ main :: () -> s32 {
     PercentLayout()
     SideBorders()
     ContextSelectors()
+    Gradients()
     FluidValues()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }

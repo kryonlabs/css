@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `linear-gradient()` takes any angle (`deg`, `turn`, `rad`, `grad`) or `to` a side or corner, and two to six color stops with `%` positions, in `background` and `background-image`; Row, Column and Grid paint them, other widgets a top-to-bottom gradient of the first and last colors (`css_tool check` says so). Radial, conic and repeating gradients are refused natively with the reason. The pack format is 101 words a rule. Pins Kryon d0711324.
+
 - Selectors take tree context natively: one ancestor by class or id (`.card Text`), the parent (`.card > Text`), `:first-child`, and `:not(.class)` or `:not(:state)`, also in nested `&` rules, and the DOM export writes them as browser selectors. `:last-child`, `:nth-child()`, typed or second ancestors and sibling combinators fail with the native idiom. The pack format is 87 words a rule. Pins Kryon 56777c65.
 
 - Per-side borders are native on Row, Column and Grid: `border-top|right|bottom|left`, `border-block-start|end` and `border-inline-start|end`, each with `-width`, `-color` and `-style`, with `var()` values; a uniform border later in the same rule clears earlier sides. With a border radius the box paints its uniform border and `css_tool check` reports it. `outline`, `outline-width` (also `thin`, `medium`, `thick`) and `outline-offset` size the native focus ring; `outline: none` keeps it, and `css_tool check` says so. Border widths take `thin`, `medium` and `thick`. The pack format is 82 words a rule. Pins Kryon d97c19e8.

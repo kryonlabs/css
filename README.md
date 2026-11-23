@@ -97,7 +97,7 @@ Anything else is browser-only or an error.
 | Property | Applies to | Example | Values |
 | --- | --- | --- | --- |
 | `color` | `*` | `#203040` | color, var(), color-mix() |
-| `background` | `*` | `linear-gradient(#ffffff, #eeeeee)` | color or a two-stop vertical linear-gradient |
+| `background` | `Column` | `linear-gradient(135deg, #0ea5e9, #6366f1 60%, #a855f7)` | color or linear-gradient(): angle or to side/corner, 2-6 stops with % positions |
 | `background-color` | `*` | `rgb(10 20 30)` | color |
 | `border` | `*` | `1px solid #ccddee` | width (or thin, medium, thick), solid or none, color |
 | `border-color` | `*` | `hsl(200 50% 40%)` | color |
@@ -183,18 +183,21 @@ Anything else is browser-only or an error.
 | `outline` | `Button` | `2px solid #38bdf8` | [width] [solid, auto or none] [color]: the focus ring |
 | `outline-width` | `Button` | `3px` | length, thin, medium or thick |
 | `outline-offset` | `Button` | `2px` | signed length outside the edge |
+| `background-image` | `Row` | `linear-gradient(to right, #111827, #374151)` | none or linear-gradient() |
 <!-- properties:end -->
 
 - `box-shadow` selects a Kryon elevation role: `none` clears it, a shadow
   whose largest blur is at most 8px is `raised` and a softer one `floating`
   (the widgets that draw elevation, such as Card and Modal, use their own
-  shadow geometry and colors). `font: [style] [weight] size[/line-height]
-  family` sets those fields. A generic first family (`system-ui`,
-  `sans-serif`, `serif`) keeps the theme's typeface and `monospace` or
-  `ui-monospace` selects the `code` font role; a named first family is the
-  typeface and later families are ignored natively. Per-side borders,
-  multi-stop, angled and radial gradients, `transform` and outline width and
-  style are browser-only.
+  shadow geometry and colors, and Row, Column and Grid paint it under their
+  box). `font: [style] [weight] size[/line-height] family` sets those fields.
+  A generic first family (`system-ui`, `sans-serif`, `serif`) keeps the
+  theme's typeface and `monospace` or `ui-monospace` selects the `code` font
+  role; a named first family is the typeface and later families are ignored
+  natively. `linear-gradient()` takes an angle or `to` a side or corner and
+  two to six stops with `%` positions; Row, Column and Grid paint all of
+  them, other widgets a top-to-bottom gradient of the first and last colors.
+  Radial, conic and repeating gradients and `transform` are browser-only.
 
 - `gap` takes one value for both axes or two values in row, column order.
   `row-gap` and `column-gap` cascade independently. Gaps take `normal`

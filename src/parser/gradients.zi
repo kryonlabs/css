@@ -1,0 +1,198 @@
+// linear-gradient([<angle> | to <side or corner>,] <color> [<n>%], ...)
+// with up to six stops. Top to bottom with two stops at the ends stays a
+// two-color face that every widget paints; another angle, a corner, more
+// stops or stop positions are box fields Row, Column and Grid paint, while
+// other widgets paint the first and last colors top to bottom. Radial,
+// conic and repeating gradients have no paint primitive in Kryon backends.
+
+CssGradientStopLimit :: 6
+
+// A gradient only the browser paints, at the cursor; the cursor stays.
+CssAtWebGradient :: (p: *CssParser) -> bool {
+    CssSkipSpace(p)
+    saved := p.cursor
+    found := CssAtFunction(p, "radial-gradient") || CssAtFunction(p, "conic-gradient") ||
+        CssAtFunction(p, "repeating-linear-gradient") || CssAtFunction(p, "repeating-radial-gradient") ||
+        CssAtFunction(p, "repeating-conic-gradient")
+    p.cursor = saved
+    return found
+}
+
+// `to` followed by one or two sides: the angle, or a corner from 1 (top
+// right) clockwise to 4 (top left).
+CssReadGradientSides :: (p: *CssParser) -> (angle: float64, corner: s32) {
+    vertical: s32 = 0
+    horizontal: s32 = 0
+    for step: 0..1 {
+        CssSkipSpace(p)
+        if !CssNameStart(CssPeek(p, 0)) { break }
+        side := CssReadName(p)
+        if CssNameEquals(side, "top") { vertical = -1 }
+        else if CssNameEquals(side, "bottom") { vertical = 1 }
+        else if CssNameEquals(side, "left") { horizontal = -1 }
+        else if CssNameEquals(side, "right") { horizontal = 1 }
+        else {
+            CssFail(p, "expected top, bottom, left or right after 'to'")
+            return 0.0, 0
+        }
+    }
+    if vertical == 0 && horizontal == 0 {
+        CssFail(p, "expected top, bottom, left or right after 'to'")
+        return 0.0, 0
+    }
+    if vertical == 0 { return ifx horizontal > 0 then 90.0 else 270.0, 0 }
+    if horizontal == 0 { return ifx vertical > 0 then 180.0 else 0.0, 0 }
+    if vertical < 0 { return 0.0, ifx horizontal > 0 then 1 else 4 }
+    return 0.0, ifx horizontal > 0 then 2 else 3
+}
+
+// An angle in degrees: deg, turn, rad, grad, or a unitless zero.
+CssReadGradientAngle :: (p: *CssParser) -> float64 {
+    number := CssReadNumber(p)
+    if CssFailed(p) { return 0.0 }
+    if !number.ok || number.percent { CssFail(p, "expected a gradient angle"); return 0.0 }
+    if CssNameEquals(number.unit, "deg") || (number.unit.length == 0 && number.value == 0.0) { return number.value }
+    if CssNameEquals(number.unit, "turn") { return number.value * 360.0 }
+    if CssNameEquals(number.unit, "rad") { return number.value * 180.0 / 3.14159265358979 }
+    if CssNameEquals(number.unit, "grad") { return number.value * 0.9 }
+    CssFailName(p, "angle unit", number.unit, " is outside Kryon CSS; use deg, turn, rad or grad")
+    return 0.0
+}
+
+// CSS fills missing stop positions: the ends at 0 and 1, the rest evenly
+// between the known ones, each at least the one before.
+CssFillGradientStops :: (positions: []float64) {
+    count := cast(s32)positions.count
+    if positions[0] < 0.0 { positions[0] = 0.0 }
+    if positions[count - 1] < 0.0 { positions[count - 1] = 1.0 }
+    index: s32 = 1
+    while index < count {
+        if positions[index] >= 0.0 { index += 1; continue }
+        next := index
+        while positions[next] < 0.0 { next += 1 }
+        from := positions[index - 1]
+        span := cast(float64)(next - index + 1)
+        for fill: index..next - 1 {
+            positions[fill] = from + (positions[next] - from) * cast(float64)(fill - index + 1) / span
+        }
+        index = next
+    }
+    for fix: 1..count - 1 {
+        if positions[fix] < positions[fix - 1] { positions[fix] = positions[fix - 1] }
+    }
+}
+
+// The rest of linear-gradient( after its opening parenthesis.
+CssReadLinearGradient :: (p: *CssParser, end: s32, property: CssName) {
+    angle: float64 = 180.0
+    corner: s32 = 0
+    CssSkipSpace(p)
+    if CssFailed(p) { return }
+    byte := CssPeek(p, 0)
+    if CssNameStart(byte) && !CssAtColorFunction(p) {
+        saved := p.cursor
+        word := CssReadName(p)
+        if CssFailed(p) { return }
+        if CssNameEquals(word, "to") {
+            side_angle, side_corner := CssReadGradientSides(p)
+            angle = side_angle
+            corner = side_corner
+            if CssFailed(p) || !CssExpect(p, #char ",", "expected ',' after the gradient direction") { return }
+        } else {
+            p.cursor = saved
+        }
+    } else if CssIsDigit(byte) || byte == #char "-" || byte == #char "+" || byte == #char "." {
+        angle = CssReadGradientAngle(p)
+        if CssFailed(p) || !CssExpect(p, #char ",", "expected ',' after the gradient angle") { return }
+    }
+    colors: [6]CssValue
+    positions: [6]float64
+    count: s32 = 0
+    while true {
+        if count >= CssGradientStopLimit {
+            CssFail(p, "Kryon gradients take up to six color stops")
+            return
+        }
+        color := CssReadColor(p, true)
+        if !color.ok { return }
+        colors[count] = color
+        positions[count] = -1.0
+        CssSkipSpace(p)
+        if CssFailed(p) { return }
+        next := CssPeek(p, 0)
+        if CssIsDigit(next) || next == #char "." || next == #char "-" {
+            stop := CssReadNumber(p)
+            if CssFailed(p) { return }
+            if !stop.ok || !stop.percent {
+                CssFail(p, "gradient stop positions are percentages natively")
+                return
+            }
+            positions[count] = stop.value / 100.0
+            CssSkipSpace(p)
+            if CssIsDigit(CssPeek(p, 0)) {
+                CssFail(p, "one position per gradient stop natively")
+                return
+            }
+        }
+        count += 1
+        CssSkipSpace(p)
+        if CssFailed(p) { return }
+        if !CssAtByte(p, #char ",") { break }
+        CssAdvance(p, 1)
+        CssSkipSpace(p)
+    }
+    if !CssExpect(p, #char ")", "expected ')' to close linear-gradient()") { return }
+    if count < 2 {
+        CssFail(p, "a gradient needs two colors")
+        return
+    }
+    CssFillGradientStops(positions[:count])
+    turned := angle - 360.0 * cast(float64)cast(s64)(angle / 360.0)
+    if turned < 0.0 { turned += 360.0 }
+    simple := corner == 0 && count == 2 && positions[0] == 0.0 && positions[1] == 1.0 &&
+        (turned == 180.0 || turned == 0.0)
+    first := ifx simple && turned == 0.0 then 1 else 0
+    CssSetValue(p, cast(s32)CssFieldBackground, colors[first])
+    CssSetValue(p, cast(s32)CssFieldBackgroundEnd, colors[ifx first == 1 then 0 else count - 1])
+    CssClearGradient(p)
+    if !simple {
+        for index: 1..count - 2 {
+            CssSetValue(p, cast(s32)CssFieldGradientStop1 + index - 1, colors[index])
+        }
+        box := *p.box_template
+        radians := turned * 3.14159265358979 / 180.0
+        box.gradient_dx = cast(float32)Sin(radians)
+        box.gradient_dy = cast(float32)-Cos(radians)
+        box.gradient_corner = corner
+        box.gradient_count = count
+        for index: 0..count - 1 { box.gradient_stops[index] = cast(float32)positions[index] }
+        box.fields |= cast(u32)StyleBoxGradient
+        CssGradientTarget(p, property)
+    }
+    unused CssEndValue(p, end, property)
+}
+
+// Drop a gradient set earlier in the rule, its middle stops' var() included.
+CssClearGradient :: (p: *CssParser) {
+    p.box_template.fields &= ~cast(u32)StyleBoxGradient
+    kept: s32 = 0
+    for index: cast(s32)0..p.rule_ref_count - 1 {
+        field := p.rule_refs[index].field
+        if field >= cast(s32)CssFieldGradientStop1 && field <= cast(s32)CssFieldGradientStop4 { continue }
+        p.rule_refs[kept] = p.rule_refs[index]
+        kept += 1
+    }
+    p.rule_ref_count = kept
+}
+
+CssGradientTarget :: (p: *CssParser, property: CssName) {
+    if !CssCollectIssues(p) { return }
+    for index: cast(s32)0..p.selector_count - 1 {
+        kind := p.selectors[index].selector.kind
+        if kind == StyleKindAny() || kind == StyleKindRow() || kind == StyleKindColumn() || kind == StyleKindGrid() { continue }
+        CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, TextView(property.bytes[:property.length]),
+            "an angled or multi-stop gradient paints on Row, Column and Grid; other widgets paint its first and last colors top to bottom",
+            false)
+        return
+    }
+}

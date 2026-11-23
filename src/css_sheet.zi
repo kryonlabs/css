@@ -925,10 +925,11 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 
 // One rule: selector, paint and text fields, sizes and grid tracks, flex
 // and box data, the percent masks of the style, flex and box fields, then
-// the per-side border widths and colors, the outline width and offset, and
-// the selector's tree context. The count is the pack format: a pack written
-// with another one is stale and css_tool regenerates it.
-CssRuleWords :: 87
+// the per-side border widths and colors, the outline width and offset, the
+// selector's tree context, and the box gradient. The count is the pack
+// format: a pack written with another one is stale and css_tool
+// regenerates it.
+CssRuleWords :: 101
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
 // and high linear forms as px, vw and vh.
@@ -1104,6 +1105,12 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         entry.rule.selector.ancestor_id = cast(s32)w[84]
         entry.rule.selector.not_class = cast(s32)w[85]
         entry.rule.selector.not_state = cast(s32)w[86]
+        entry.rule.box.gradient_dx = CssWordFloat(w[87])
+        entry.rule.box.gradient_dy = CssWordFloat(w[88])
+        entry.rule.box.gradient_corner = cast(s32)w[89]
+        entry.rule.box.gradient_count = cast(s32)w[90]
+        for stop: 0..5 { entry.rule.box.gradient_stops[stop] = CssWordFloat(w[91 + stop]) }
+        for stop: 0..3 { entry.rule.box.gradient_colors[stop] = w[97 + stop] }
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

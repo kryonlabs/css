@@ -154,6 +154,21 @@ NativeAuthoring :: () {
         Check(Rule(0).box.outline_width == 3.0 && Rule(0).box.outline_offset == -1.0 &&
             Rule(0).style.focus == cast(u32)0x38bdf8ff, "outline width, offset and color")
     }
+    if Builds("Column { background: linear-gradient(135deg, #ff0000, #00ff00 40%, #0000ff); } Row { background-image: linear-gradient(to top right, red, blue); } Text { background: linear-gradient(to top, #111111, #222222); }",
+        "gradients") {
+        column := Rule(0)
+        Check(column.style.background == cast(u32)0xff0000ff && column.style.background_end == cast(u32)0x0000ffff &&
+            column.box.gradient_colors[0] == cast(u32)0x00ff00ff && column.box.gradient_count == 3 &&
+            column.box.gradient_dx > 0.707 && column.box.gradient_dx < 0.708 &&
+            column.box.gradient_dy > 0.707 && column.box.gradient_dy < 0.708 && column.box.gradient_stops[1] == 0.4 &&
+            column.box.gradient_stops[2] == 1.0 && (column.box.fields & cast(u32)StyleBoxGradient) != 0,
+            "angled three-stop gradient")
+        Check(Rule(1).box.gradient_corner == 1, "to top right is a corner")
+        Check(Rule(2).style.background == cast(u32)0x222222ff && (Rule(2).box.fields & cast(u32)StyleBoxGradient) == 0,
+            "to top with two stops is a reversed plain gradient")
+    }
+    ParseFails("Column { background: radial-gradient(red, blue); }", "browser-only; Kryon paints linear-gradient()", "radial")
+    ParseFails("Column { background: linear-gradient(red 10px, blue); }", "stop positions are percentages", "px stop")
     ParseFails("Column { border-top: 2px dotted red; }", "borders are solid", "dotted side")
     ParseFails("Button { outline: 2px dashed red; }", "focus rings are solid", "dashed outline")
     ParseFails("Button { color: hwb(0, 10%, 20%); }", "hwb() uses spaces", "HWB comma syntax")
@@ -274,8 +289,6 @@ Diagnostics :: () {
     ParseFails("Button { padding: 1px 2px 3px 4px; }", "Kryon pads", "uneven sides")
     ParseFails("Button { border: 1px dashed red; }", "borders are solid", "border style")
     ParseFails("Button { background: url(a.png); }", "background images are outside Kryon CSS", "image")
-    ParseFails("Button { background: linear-gradient(90deg, red, blue); }", "Kryon gradients run top to bottom",
-        "gradient angle")
     ParseFails("Button { color: #12345; }", "hex colors have 3, 4, 6 or 8 digits", "hex length")
     ParseFails("Button { color: blurple; }", "unknown color", "color name")
     ParseFails("Button { --x: 1px; }", "custom properties belong in :root", "custom property in rule")

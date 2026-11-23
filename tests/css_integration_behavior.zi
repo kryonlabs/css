@@ -505,6 +505,38 @@ SideBorders :: () {
     Check(Near(plain.bounds, 8.0, 8.0, 84.0, 34.0) && plain.width == 2.0, "without an outline the ring is 2px")
 }
 
+ContextColor :: (kind: s32, class_name: string, state: s32) -> u32 {
+    facts := StyleDefaultFacts(kind)
+    if class_name != "" { facts.class_name = StyleClass(class_name) }
+    return ResolveInstalledStyleRules(StyleData.{}, facts, state).foreground
+}
+
+// Ancestor, parent, first-child and :not() selectors match the widget about
+// to be built under the open containers.
+ContextSelectors :: () {
+    Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install context styles")
+    text := StyleKindText()
+    any := StyleStateAny()
+    BeginFrame(integration_session, cast(u64)510, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    outer := Layout.Draw(integration_session, .{.key = 961})
+    Check(ContextColor(text, "", any) != cast(u32)0x010101ff, "no ancestor outside the panel")
+    panel := Layout.Draw(integration_session, .{.key = 962, .class_name = StyleClass("panel")})
+    Check(ContextColor(text, "", any) == cast(u32)0x010101ff, ".panel Text matches inside the panel")
+    Check(ContextColor(text, "direct", any) == cast(u32)0x020202ff, ".panel > .direct matches its child")
+    Check(ContextColor(text, "lead", any) == cast(u32)0x030303ff, ":first-child before any child")
+    unused BoxWidget.Draw(integration_session, .{.key = 963, .bounds = .{height = 10.0}})
+    Check(ContextColor(text, "lead", any) == cast(u32)0x010101ff, "no first child after a sibling")
+    inner := Layout.Draw(integration_session, .{.key = 964})
+    Check(ContextColor(text, "direct", any) == cast(u32)0x010101ff, "a grandchild is a descendant, not a child")
+    Check(outer.opened && panel.opened && inner.opened && End(integration_session) &&
+        End(integration_session) && End(integration_session), "close context containers")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "context frame")
+    Check(ContextColor(text, "quiet", any) == cast(u32)0x040404ff &&
+        ContextColor(text, "quiet", cast(s32)ButtonStateHover) != cast(u32)0x040404ff, ":not(:hover)")
+    Check(ContextColor(StyleKindHeading(), "soft", any) == cast(u32)0x050505ff &&
+        ContextColor(StyleKindHeading(), "loud", any) != cast(u32)0x050505ff, ":not(.loud)")
+}
+
 fluid_sheet: CssSheet;
 
 fluid_css :: #string CSS
@@ -620,6 +652,7 @@ main :: () -> s32 {
     FillLayout()
     PercentLayout()
     SideBorders()
+    ContextSelectors()
     FluidValues()
     if SessionValid(integration_session) { unused SessionClose(integration_session) }
     if test_failures == 0 { TestSay("css integration behavior: PASS\n") }

@@ -1,7 +1,10 @@
-// Part of the css_parser module: selectors. Kryon CSS selectors are flat
-// compounds, matched by table lookup: an optional widget type or '*', then
-// any '.class', '[attribute=value]' and one state pseudo-class, e.g.
-// 'Button.hero[tone=accent]:hover'. A comma list gives one rule each.
+// Part of the css_parser module: selectors. A Kryon CSS selector is a
+// compound matched by table lookup: an optional widget type or '*', then
+// any '.class', '[attribute=value]', one state pseudo-class, :first-child
+// and :not(.class) or :not(:state), e.g. 'Button.hero[tone=accent]:hover'.
+// One ancestor may come first, as '.card Text' (any ancestor) or
+// '.card > Text' (the parent), matched by class or id. A comma list gives
+// one rule each.
 
 #program_export
 CssClass :: (name: string) -> s32 {
@@ -86,15 +89,67 @@ CssReadAttribute :: (p: *CssParser, selector: *StyleSelector) {
     if mapped == -999999 { CssFailName(p, "unknown value", value, "") }
 }
 
-// One compound selector at the cursor. Returns false after a diagnostic.
+// A selector at the cursor: one compound, or an ancestor compound, a space
+// or '>', and the compound it styles. Returns false after a diagnostic.
 CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
     CssSkipSpace(p)
     if CssFailed(p) { return false }
-    pending.selector = StyleDefaultSelector()
-    pending.state = StyleStateAny()
     pending.start = p.cursor.pos
     pending.suffix_start = 0
     pending.suffix_length = 0
+    if !CssReadOneCompound(p, pending) { return false }
+    pending.length = p.cursor.pos - pending.start
+    CssSkipSpace(p)
+    if CssFailed(p) { return false }
+    if CssAtByte(p, #char ",") || CssAtByte(p, #char "{") { return true }
+    if CssAtByte(p, #char "+") || CssAtByte(p, #char "~") {
+        CssFail(p, "sibling combinators are outside Kryon CSS; use :first-child or give the widget a class")
+        return false
+    }
+    parent := CssAtByte(p, #char ">")
+    if parent { CssAdvance(p, 1) }
+    else if !(CssNameStart(CssPeek(p, 0)) || CssAtByte(p, #char "*") || CssAtByte(p, #char ".") ||
+        CssAtByte(p, #char "#") || CssAtByte(p, #char ":") || CssAtByte(p, #char "[")) {
+        CssFail(p, "expected '{' after the selector")
+        return false
+    }
+    ancestor := pending.selector
+    if !CssAncestorCompound(ancestor, pending.state) {
+        CssFail(p, "an ancestor matches by its class or id alone natively, as '.card Text' or '.card > Text'")
+        return false
+    }
+    CssSkipSpace(p)
+    if CssFailed(p) || !CssReadOneCompound(p, pending) { return false }
+    pending.selector.context |= ifx parent then cast(u32)StyleContextParent else cast(u32)StyleContextAncestor
+    pending.selector.ancestor_class = ancestor.class_name
+    pending.selector.ancestor_id = ancestor.id
+    pending.length = p.cursor.pos - pending.start
+    CssSkipSpace(p)
+    if CssFailed(p) { return false }
+    if CssAtByte(p, #char ",") || CssAtByte(p, #char "{") { return true }
+    CssFail(p, "Kryon CSS matches one ancestor; give the inner widget its own class")
+    return false
+}
+
+// An ancestor compound: a class, an id or both, and nothing else, since the
+// frame matches ancestors by the class and id their nodes carry.
+CssAncestorCompound :: (selector: StyleSelector, state: s32) -> bool {
+    if selector.class_name == 0 && selector.id == 0 { return false }
+    defaults := StyleDefaultSelector()
+    defaults.class_name = selector.class_name
+    defaults.id = selector.id
+    return state == StyleStateAny() && selector.kind == defaults.kind && selector.name == 0 &&
+        selector.role == defaults.role && selector.tone == defaults.tone &&
+        selector.emphasis == defaults.emphasis && selector.size == defaults.size &&
+        selector.state == defaults.state && selector.validation == defaults.validation &&
+        selector.orientation == defaults.orientation && selector.placement == defaults.placement &&
+        selector.context == 0
+}
+
+// One compound: a type or '*', then classes, ids, attributes and pseudo-classes.
+CssReadOneCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
+    pending.selector = StyleDefaultSelector()
+    pending.state = StyleStateAny()
     parts: s32 = 0
     if CssAtByte(p, #char "*") {
         CssAdvance(p, 1)
@@ -117,17 +172,7 @@ CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
         CssFail(p, "expected a selector")
         return false
     }
-    pending.length = p.cursor.pos - pending.start
-    CssSkipSpace(p)
-    if CssFailed(p) { return false }
-    if CssAtByte(p, #char ",") || CssAtByte(p, #char "{") { return true }
-    if CssAtByte(p, #char ">") || CssAtByte(p, #char "+") || CssAtByte(p, #char "~") ||
-        CssNameStart(CssPeek(p, 0)) || CssAtByte(p, #char "*") || CssAtByte(p, #char ".") {
-        CssFail(p, "combinators are outside Kryon CSS; give the inner widget its own class")
-        return false
-    }
-    CssFail(p, "expected '{' after the selector")
-    return false
+    return true
 }
 
 // Classes, ids, attributes and one state pseudo-class after a type; the
@@ -162,15 +207,27 @@ CssReadSelectorParts :: (p: *CssParser, pending: *CssPendingSelector) -> s32 {
             name: CssName = CssReadName(p)
             if CssFailed(p) { return -1 }
             if CssAtByte(p, #char "(") {
-                CssFailName(p, "selector function", name, "() is outside Kryon CSS; write the positive state or give the widget a class")
-                return -1
+                if !CssNameEquals(name, "not") {
+                    CssFailName(p, "selector function", name, "() is outside Kryon CSS; write the positive state or give the widget a class")
+                    return -1
+                }
+                CssAdvance(p, 1)
+                if !CssReadNot(p, pending) { return -1 }
+                parts += 1
+                continue
+            }
+            if CssNameEquals(name, "first-child") {
+                pending.selector.context |= cast(u32)StyleContextFirstChild
+                parts += 1
+                continue
             }
             state: s32 = CssPseudoState(name)
             if state < 0 {
                 if CssNameEquals(name, "root") { CssFail(p, ":root holds only custom properties") }
-                else if CssNameEquals(name, "first-child") || CssNameEquals(name, "last-child") ||
-                    CssNameEquals(name, "nth-child") {
-                    CssFailName(p, "pseudo-class", name, " needs sibling context; set a class from the frame")
+                else if CssNameEquals(name, "last-child") || CssNameEquals(name, "nth-child") ||
+                    CssNameEquals(name, "only-child") || CssNameEquals(name, "first-of-type") {
+                    CssFailName(p, "pseudo-class", name,
+                        " needs siblings the frame has not built yet; use :first-child or set a class from the frame")
                 } else { CssFailName(p, "unknown pseudo-class", name, "") }
                 return -1
             }
@@ -242,4 +299,41 @@ CssAtRoot :: (p: *CssParser) -> bool {
     }
     p.cursor = saved
     return false
+}
+
+// The inside of :not( up to its ')': one class or one state pseudo-class.
+CssReadNot :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
+    CssSkipSpace(p)
+    if CssFailed(p) { return false }
+    if pending.selector.not_class != 0 || pending.selector.not_state != 0 {
+        CssFail(p, "one :not() per selector in Kryon CSS")
+        return false
+    }
+    if CssAtByte(p, #char ".") {
+        CssAdvance(p, 1)
+        name: CssName = CssReadName(p)
+        if CssFailed(p) { return false }
+        if name.length == 0 {
+            CssFail(p, "expected a class name after '.'")
+            return false
+        }
+        pending.selector.not_class = CssClassId(name)
+    } else if CssAtByte(p, #char ":") {
+        CssAdvance(p, 1)
+        name: CssName = CssReadName(p)
+        if CssFailed(p) { return false }
+        state := CssPseudoState(name)
+        if state < 0 {
+            CssFailName(p, "unknown pseudo-class", name, " in :not()")
+            return false
+        }
+        pending.selector.not_state = state
+    } else {
+        CssFail(p, "Kryon :not() takes one class or one state, as :not(.muted) or :not(:hover)")
+        return false
+    }
+    CssSkipSpace(p)
+    if !CssExpect(p, #char ")", "Kryon :not() takes one class or one state, as :not(.muted) or :not(:hover)") { return false }
+    pending.selector.context |= cast(u32)StyleContextNot
+    return true
 }

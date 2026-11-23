@@ -61,6 +61,9 @@ Selectors :: () {
     nested: string = Export("Text { color: red; &:disabled { color: blue; } }", CssDefaultEnvironment())
     Check(Contains(nested, "#kryon-dom-root :where([data-kryon-widget=\"Text\"][aria-disabled=\"true\"]) {\n  color: blue;"),
         "a nested & rule exports with its parent's selector")
+    context: string = Export("#side > Text:first-child:not(:hover) { color: red; }", CssDefaultEnvironment())
+    Check(Contains(context, "[data-kryon-id=") && Contains(context, "\"] > [data-kryon-widget=\"Text\"]:first-child:not(:hover)) {"),
+        "a parent combinator, :first-child and :not() export to the DOM")
     states: string = Export("Tab:selected { color: red; }\nButton:loading { opacity: 0.5; }\nButton:hover { color: blue; }",
         CssDefaultEnvironment())
     Check(Contains(states, ":is([data-kryon-selected=\"true\"],[aria-selected=\"true\"]):not(:hover):not(:active):not([aria-disabled=\"true\"])"),

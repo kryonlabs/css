@@ -77,14 +77,17 @@ one class (`.primary`), one ID (`#save`; set `props.id` to `StyleId("save")`),
 Kryon attributes (`[role=Label]`, `[tone=Accent]`, `[emphasis=Soft]`,
 `[size=Small]`, `[state=normal]`) and one state pseudo-class:
 `:hover`, `:active`, `:focus`, `:focus-visible`, `:disabled`, `:selected`,
-`:checked` or `:loading`, in comma lists. A rule can hold nested `&:state`,
-`&.class`, `&#id` and `&[attribute]` rules one level deep; each adds its parts
-to every parent selector and may not set a class, id, attribute or state the
-parent sets to another value. Native styles are matched without tree
-context, so descendant and child combinators (` `, `>`, `+`, `~`), `:not()`,
-`:first-child`, `:last-child` and `:nth-child()` are errors: give the inner
-widget its own class (`.card .title` becomes `Text.card-title`), or set a
-class or state from the frame.
+`:checked` or `:loading`, in comma lists. `:first-child`, `:not(.class)` and
+`:not(:state)` add tree context, and so may one ancestor, matched by its class
+or id, before the compound: `.card Text` (any ancestor) or `.card > Text` (the
+parent). Kryon matches the widget being styled as the next child of the open
+container while the frame builds, so `:last-child` and `:nth-child()`, which
+need later siblings, are errors, as are a typed ancestor (`Row Text`), a
+second ancestor (`.a .b .c`) and sibling combinators (`+`, `~`): give the inner
+widget its own class (`Text.card-title`). A rule can hold nested `&:state`,
+`&.class`, `&#id`, `&[attribute]`, `&:first-child` and `&:not(...)` rules one
+level deep; each adds its parts to every parent selector and may not set a
+class, id, attribute or state the parent sets to another value.
 
 Properties a native sheet reads, generated from the parser's own catalog
 (`src/parser/catalog.zi`); every example parses on its target in the tests.

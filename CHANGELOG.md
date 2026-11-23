@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Selectors take tree context natively: one ancestor by class or id (`.card Text`), the parent (`.card > Text`), `:first-child`, and `:not(.class)` or `:not(:state)`, also in nested `&` rules, and the DOM export writes them as browser selectors. `:last-child`, `:nth-child()`, typed or second ancestors and sibling combinators fail with the native idiom. The pack format is 87 words a rule. Pins Kryon 56777c65.
+
 - Per-side borders are native on Row, Column and Grid: `border-top|right|bottom|left`, `border-block-start|end` and `border-inline-start|end`, each with `-width`, `-color` and `-style`, with `var()` values; a uniform border later in the same rule clears earlier sides. With a border radius the box paints its uniform border and `css_tool check` reports it. `outline`, `outline-width` (also `thin`, `medium`, `thick`) and `outline-offset` size the native focus ring; `outline: none` keeps it, and `css_tool check` says so. Border widths take `thin`, `medium` and `thick`. The pack format is 82 words a rule. Pins Kryon d97c19e8.
 
 - Percentages are native in `width`, `height`, `min-width`, `max-width`, `max-height` and the logical aliases on Row, Column and Grid, in `min-height` on those containers, and in `flex-basis` (also through `flex`): the parser keeps the percentage with a `percent` mask and Kryon layout resolves it against the parent's content box. A percentage inside `calc()`, `min()`, `max()` or `clamp()`, or on another widget's size, fails a plain native parse with the reason. The pack format gains the three masks (72 words a rule); older packs are refused as stale. Pins Kryon 60f081a4.

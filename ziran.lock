@@ -76,12 +76,12 @@
       "url": "https://aomedia.googlesource.com/aom"
     },
     {
-      "commit": "d97c19e86d0570b111ce0cd5548d1041ebdd08e9",
+      "commit": "56777c658300469a77bbd391562e3319ff6d6922",
       "dependencies": {"audio": "pf832f0842a94daad", "avif": "p6abd95e3b55e2350", "image_codec": "p115fee450ee07367", "libaom": "p74ab3cb6eb3b86fa", "libavif": "p57c0272208aae8db", "libwebp": "p3b3c785a0e17e605", "sdl3": "p16cd0434af3dff7b", "webp": "p4cdce4edaaf93e67"},
       "dependency_refs": {"audio": "1b2f35b7b39df6fb9af7a52324b4b7cf18e98df2", "avif": "786871ec1d54fde303611a428ef31735bbdcc71d", "image_codec": "3017f0d1cc56975aa29c600a1f55a62e1193cf7b", "libaom": "b141d9c45db236335351c8a4b2a14b3ade27c937", "libavif": "1aadfad932c98c069a1204261b1856f81f3bc199", "libwebp": "1844042d1ca751e62e61df7617dba19c98588339", "sdl3": "829a65d769d935c4852f8159e964312c0957260a", "webp": "6581dfa03711a96d219becd964860543b24b1f4f"},
-      "id": "p9549de24bad4d167",
+      "id": "pa9bcfe5e906e723b",
       "name": "kryon",
-      "ref": "d97c19e86d0570b111ce0cd5548d1041ebdd08e9",
+      "ref": "56777c658300469a77bbd391562e3319ff6d6922",
       "url": "https://git.waozi.xyz/kryonlabs/kryon.git"
     },
     {
@@ -122,8 +122,8 @@
     }
   ],
   "root": {
-    "dependencies": {"kryon": "p9549de24bad4d167"},
-    "dependency_refs": {"kryon": "d97c19e86d0570b111ce0cd5548d1041ebdd08e9"},
+    "dependencies": {"kryon": "pa9bcfe5e906e723b"},
+    "dependency_refs": {"kryon": "56777c658300469a77bbd391562e3319ff6d6922"},
     "name": "Css"
   },
   "toolchain": {

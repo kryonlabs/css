@@ -10,6 +10,8 @@
 using StyleField;
 using StyleBoxField;
 using StyleFlexField;
+using StyleContext;
+using ButtonState;
 using ButtonTone;
 using MaterialKind;
 using ElevationRole;
@@ -224,8 +226,22 @@ Selectors :: () {
         Check(Rule(3).state == 7 && Rule(5).state == 7, "checked and selected")
         Check(Rule(4).state == 4, "focus")
     }
-    ParseFails("Button > Text { color: red; }", "combinators are outside Kryon CSS", "combinator")
-    ParseFails("Button Text { color: red; }", "combinators are outside Kryon CSS", "descendant")
+    ParseFails("Button > Text { color: red; }", "an ancestor matches by its class or id alone", "typed parent")
+    ParseFails("Button Text { color: red; }", "an ancestor matches by its class or id alone", "typed ancestor")
+    ParseFails(".a .b .c { color: red; }", "matches one ancestor", "two ancestors")
+    ParseFails(".a + .b { color: red; }", "sibling combinators are outside Kryon CSS", "sibling")
+    ParseFails("Text:not(.a, .b) { color: red; }", "takes one class or one state", "not list")
+    if Builds(".card Text, .card > .title:first-child:not(:hover), Text:not(.muted) { color: red; }", "tree context") {
+        descendant := Rule(0).selector
+        Check(descendant.context == cast(u32)StyleContextAncestor && descendant.ancestor_class == CssClass("card") &&
+            descendant.kind == StyleKindText(), "descendant of a class")
+        child := Rule(1).selector
+        Check(child.context == (cast(u32)StyleContextParent | cast(u32)StyleContextFirstChild |
+            cast(u32)StyleContextNot) && child.class_name == CssClass("title") &&
+            child.not_state == cast(s32)ButtonStateHover, "first child of the parent, not hovered")
+        Check(Rule(2).selector.not_class == CssClass("muted") && Rule(2).selector.context == cast(u32)StyleContextNot,
+            "not a class")
+    }
     ParseFails("Button#save#other { color: red; }", "one id per selector", "two ids")
     ParseFails("Button::before { color: red; }", "pseudo-elements are outside Kryon CSS", "pseudo-element")
     ParseFails("Button:nth-child(2) { color: red; }", "selector function", "selector function")
@@ -246,10 +262,10 @@ Diagnostics :: () {
     ParseFails("Button { gap: 4; }", "a length needs a unit", "unitless length")
     ParseFails("Button { gap: 2vmin; }", "is outside Kryon CSS; use px, rem, em, vw or vh", "unknown length unit")
     ParseFails("Button { gap: 50%; }", "percentages are native only alone", "percent")
-    ParseFails("Button.a { & .b { color: red; } }", "a nested combinator is outside Kryon CSS", "nested combinator")
+    ParseFails("Button.a { & .b { color: red; } }", "write a combinator such as", "nested combinator")
     ParseFails("Button.a { &.b { color: red; } }", "repeats a class, id, attribute or state", "nested second class")
     ParseFails("Button.a { &:hover { &:focus { color: red; } } }", "nested rules are outside Kryon CSS", "nesting twice")
-    ParseFails("Button:first-child { color: red; }", "needs sibling context", "first child")
+    ParseFails("Button:last-child { color: red; }", "needs siblings the frame has not built yet", "last child")
     ParseFails("Button { gap: calc(4px * 2px); }", "multiply a length by a number", "length times length")
     ParseFails("Button { gap: calc(4px +2px); }", "expected ')' to close calc", "calc sign needs spaces")
     ParseFails("Button { gap: min(1vw, max(2vw, 4px)); }", "nested min(), max() or clamp() with vw or vh",

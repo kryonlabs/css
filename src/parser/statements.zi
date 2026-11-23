@@ -285,6 +285,13 @@ CssMergeSelector :: (p: *CssParser, target: *CssPendingSelector, part: CssPendin
         if target.state != StyleStateAny() && target.state != part.state { clash = true }
         target.state = part.state
     }
+    if b.context != 0 {
+        if (b.not_class != 0 && a.not_class != 0 && a.not_class != b.not_class) ||
+            (b.not_state != 0 && a.not_state != 0 && a.not_state != b.not_state) { clash = true }
+        a.context |= b.context
+        if b.not_class != 0 { a.not_class = b.not_class }
+        if b.not_state != 0 { a.not_state = b.not_state }
+    }
     if clash {
         CssFail(p, "a nested & rule repeats a class, id, attribute or state of its parent with another value")
         return false
@@ -334,9 +341,9 @@ CssReadNestedRule :: (p: *CssParser) -> bool {
     if parts < 0 { return false }
     part.suffix_length = p.cursor.pos - part.suffix_start
     if parts == 0 || !CssExpect(p, #char "{",
-        "nest as &:state, &.class, &#id or &[attribute] { }; a nested combinator is outside Kryon CSS") {
+        "nest as &:state, &.class, &#id or &[attribute] { }; write a combinator such as '.card .title' at the top level") {
         if !CssFailed(p) {
-            CssFail(p, "nest as &:state, &.class, &#id or &[attribute] { }; a nested combinator is outside Kryon CSS")
+            CssFail(p, "nest as &:state, &.class, &#id or &[attribute] { }; write a combinator such as '.card .title' at the top level")
         }
         return false
     }

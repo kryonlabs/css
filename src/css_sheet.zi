@@ -925,10 +925,10 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 
 // One rule: selector, paint and text fields, sizes and grid tracks, flex
 // and box data, the percent masks of the style, flex and box fields, then
-// the per-side border widths and colors and the outline width and offset.
-// The count is the pack format: a pack written with another one is stale
-// and css_tool regenerates it.
-CssRuleWords :: 82
+// the per-side border widths and colors, the outline width and offset, and
+// the selector's tree context. The count is the pack format: a pack written
+// with another one is stale and css_tool regenerates it.
+CssRuleWords :: 87
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
 // and high linear forms as px, vw and vh.
@@ -1099,6 +1099,11 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         }
         entry.rule.box.outline_width = CssWordFloat(w[80])
         entry.rule.box.outline_offset = CssWordFloat(w[81])
+        entry.rule.selector.context = w[82]
+        entry.rule.selector.ancestor_class = cast(s32)w[83]
+        entry.rule.selector.ancestor_id = cast(s32)w[84]
+        entry.rule.selector.not_class = cast(s32)w[85]
+        entry.rule.selector.not_state = cast(s32)w[86]
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

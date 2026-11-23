@@ -101,6 +101,12 @@ Button.ringed:focus-visible {
   outline-offset: 2px;
 }
 
+Heading:not(.loud) { color: #050505; }
+.panel Text { color: #010101; }
+.panel > .direct { color: #020202; }
+Text.lead:first-child { color: #030303; }
+Text.quiet:not(:hover) { color: #040404; }
+
 Column.side { width: 120px; }
 Column.grow { flex: 1; }
 Row.push { width: 50px; margin-left: auto; }

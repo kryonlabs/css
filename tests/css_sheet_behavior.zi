@@ -74,6 +74,12 @@ Packs :: () {
     SamePack("styles/lightfield.css", StylePackLightfield(), "lightfield pack matches its CSS")
 }
 
+CssCutPack :: (pack: CssCompiledSheet) -> CssCompiledSheet {
+    cut := pack
+    cut.rules = pack.rules[:pack.rules.count - 1]
+    return cut
+}
+
 PackedFields :: () {
     words: [CssRuleWords]u32
     words[0] = cast(u32)StyleKindText()
@@ -99,6 +105,14 @@ PackedFields :: () {
     pack.rule_words = CssRuleWords
     pack.rules = words[:]
     CssSheetReset(*compiled_sheet)
+    Check(!CssSheetLoad(*compiled_sheet, pack), "a dense pack without its rule count is refused as stale")
+    packed: [CssRuleMaskWords + CssRuleWords]u32
+    pack.rules = packed[:CssPackRule(words[:], packed[:])]
+    pack.rule_count = 1
+    Check(pack.rules.count == CssRuleMaskWords + 13, "a packed rule keeps only its nonzero words")
+    CssSheetReset(*compiled_sheet)
+    Check(!CssSheetLoad(*compiled_sheet, CssCutPack(pack)), "a pack that ends inside a rule is refused as stale")
+    CssSheetReset(*compiled_sheet)
     Check(CssSheetLoad(*compiled_sheet, pack), "current pack loads")
     style: StyleData = compiled_sheet.rules[0].rule.style
     Check(style.row_gap == 4.0 && style.column_gap == 12.0 &&
@@ -121,10 +135,12 @@ PackedMotion :: () {
     condition: [CssConditionWords]u32
     condition[0] = 1
     condition[2] = 0x17fff
+    packed: [CssRuleMaskWords + CssRuleWords]u32
     pack: CssCompiledSheet
     pack.file = "compiled-motion.css"
     pack.rule_words = CssRuleWords
-    pack.rules = words[:]
+    pack.rules = packed[:CssPackRule(words[:], packed[:])]
+    pack.rule_count = 1
     pack.conditions = condition[:]
     CssSheetReset(*compiled_sheet)
     Check(CssSheetLoad(*compiled_sheet, pack), "pack with a motion mask loads")

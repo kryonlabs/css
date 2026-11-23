@@ -353,6 +353,7 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
     for index: cast(s32)0..sheet.rule_count - 1 {
         entry: CssSheetRule = sheet.rules[index]
         selector: StyleSelector = entry.rule.selector
+        rule_start: s32 = word_count
         SignedWord(selector.kind)
         SignedWord(selector.name)
         SignedWord(selector.class_name)
@@ -451,8 +452,14 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         for part: box.transform_origin { Word(FloatBits(part)) }
         Word(FloatBits(box.transform_seconds))
         for part: box.transform_timing { Word(cast(u32)part) }
+        if word_count - rule_start != CssRuleWords || word_count + CssRuleMaskWords > cast(s32)words.count {
+            return Fail(path, "the rule layout does not match CssRuleWords")
+        }
+        dense: [CssRuleWords]u32
+        for word: cast(s32)0..CssRuleWords - 1 { dense[word] = words[rule_start + word] }
+        word_count = rule_start + CssPackRule(dense[:], words[rule_start:rule_start + CssRuleMaskWords + CssRuleWords])
     }
-    ok = ok && EmitWords("rules", pack, CssRuleWords)
+    ok = ok && EmitWords("rules", pack, 16)
     for index: cast(s32)0..sheet.ref_count - 1 {
         ref: CssSheetRef = sheet.refs[index]
         SignedWord(ref.rule)
@@ -518,7 +525,8 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
     ok = ok && Emit("// The ") && Emit(pack) && Emit(" pack, compiled: load it with CssSheetLoad.\n") &&
         Emit("#program_export\nStylePack") && Emit(title) && Emit(" :: () -> CssCompiledSheet {\n") &&
         Emit("    compiled: CssCompiledSheet\n") &&
-        Emit("    compiled.rule_words = ") && EmitNumber(CssRuleWords) && Emit("\n")
+        Emit("    compiled.rule_words = ") && EmitNumber(CssRuleWords) && Emit("\n") &&
+        Emit("    compiled.rule_count = ") && EmitNumber(sheet.rule_count) && Emit("\n")
     for part: css_tool_parts {
         ok = ok && PackPart(pack, part)
     }

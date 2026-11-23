@@ -939,8 +939,11 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // the per-side border widths and colors, the outline width and offset, the
 // selector's tree context, the box gradient, and the transform with its
 // origin and transition. The count is the pack format: a pack written
-// with another one is stale and css_tool regenerates it.
+// with another one is stale and css_tool regenerates it. Most words of a
+// rule are zero, so a pack stores each rule as CssRuleMaskWords words with
+// one bit for each rule word, then only the words whose bit is set.
 CssRuleWords :: 116
+CssRuleMaskWords :: 4
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
 // and high linear forms as px, vw and vh.
@@ -960,6 +963,7 @@ CssCompiledSheet :: struct {
     typefaces: []string
     file: string
     rule_words: s32
+    rule_count: s32
     motion: []u32
     keyframes: []u32
     frames: []u32
@@ -974,16 +978,45 @@ CssWordFloat :: (word: u32) -> float32 {
     return cast(float32)Binary.Float32FromBits(word)
 }
 
+// Writes the CssRuleWords words of DENSE to OUT in the pack's sparse form;
+// the number of words written.
+CssPackRule :: (dense: []u32, out: []u32) -> s32 {
+    count: s32 = CssRuleMaskWords
+    for word: cast(s32)0..CssRuleMaskWords - 1 { out[word] = 0 }
+    for word: cast(s32)0..CssRuleWords - 1 {
+        if dense[word] == 0 { continue }
+        out[word / 32] |= cast(u32)1 << cast(u32)(word % 32)
+        out[count] = dense[word]
+        count += 1
+    }
+    return count
+}
+
+// Reads the sparse rule at AT of PACKED into DENSE; where the next rule
+// starts, or -1 when PACKED ends inside this one.
+CssUnpackRule :: (packed: []u32, at: s64, dense: []u32) -> s64 {
+    if at + CssRuleMaskWords > packed.count { return -1 }
+    next: s64 = at + CssRuleMaskWords
+    for word: cast(s32)0..CssRuleWords - 1 {
+        dense[word] = 0
+        if ((packed[at + word / 32] >> cast(u32)(word % 32)) & cast(u32)1) == 0 { continue }
+        if next >= packed.count { return -1 }
+        dense[word] = packed[next]
+        next += 1
+    }
+    return next
+}
+
 // Append a compiled sheet; its layers, names and themes merge by name.
 #program_export
 CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
     if sheet.failed { return false }
-    if compiled.rule_words != CssRuleWords || compiled.rules.count % cast(s64)CssRuleWords != 0 ||
+    rule_count: s32 = compiled.rule_count
+    if compiled.rule_words != CssRuleWords || (rule_count == 0) != (compiled.rules.count == 0) ||
         compiled.conditions.count % cast(s64)CssConditionWords != 0 {
         CssSheetFail(sheet, "the compiled CSS pack is stale; regenerate it with css_tool")
         return false
     }
-    rule_count: s32 = cast(s32)compiled.rules.count / CssRuleWords
     ref_count: s32 = cast(s32)compiled.refs.count / CssCompiledRefWords
     definition_count: s32 = cast(s32)compiled.definitions.count / CssCompiledDefinitionWords
     condition_count: s32 = cast(s32)compiled.conditions.count / CssConditionWords
@@ -1035,8 +1068,15 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         sheet.condition_count += 1
     }
     rule_base: s32 = sheet.rule_count
+    packed_at: s64 = 0
     for index: cast(s32)0..rule_count - 1 {
-        w: []u32 = compiled.rules[index * CssRuleWords:(index + 1) * CssRuleWords]
+        dense: [CssRuleWords]u32
+        packed_at = CssUnpackRule(compiled.rules, packed_at, dense[:])
+        if packed_at < 0 {
+            CssSheetFail(sheet, "the compiled CSS pack is stale; regenerate it with css_tool")
+            return false
+        }
+        w: []u32 = dense[:]
         entry: CssSheetRule
         entry.rule.selector.kind = cast(s32)w[0]
         entry.rule.selector.name = cast(s32)w[1]
@@ -1130,6 +1170,10 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         for part: 0..3 { entry.rule.box.transform_timing[part] = cast(u8)w[112 + part] }
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
+    }
+    if packed_at != compiled.rules.count {
+        CssSheetFail(sheet, "the compiled CSS pack is stale; regenerate it with css_tool")
+        return false
     }
     for index: cast(s32)0..ref_count - 1 {
         at: s32 = index * CssCompiledRefWords

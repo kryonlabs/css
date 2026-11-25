@@ -66,9 +66,9 @@ def build_project(ziran, css_source):
     output = PROJECT / "build" / "css_dom-web.html"
     if not output.is_file() or output.stat().st_size < 100_000:
         raise AssertionError("the production DOM page was not generated")
-    if not next((PROJECT / "build/generated/web/ir").glob("*_dom_run.zir"), None):
+    if not (PROJECT / "build/generated/web/ir/kryon_program_host.zir").is_file():
         raise AssertionError("the DOM runner saved IR was not generated")
-    if not next((PROJECT / "build/generated/web/c").glob("*_dom_run.c"), None):
+    if not (PROJECT / "build/generated/web/c/kryon_program_host.c").is_file():
         raise AssertionError("the DOM runner C source was not generated")
     return output
 

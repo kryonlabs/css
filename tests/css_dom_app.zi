@@ -1,3 +1,4 @@
+App :: #import "kryon/app";
 Button :: #import "kryon/button";
 CSS :: #import "css/Css";
 Dom :: #import "kryon/dom";
@@ -112,18 +113,19 @@ Start :: () -> bool {
     return true
 }
 
-#program_export
-Frame :: (session: Session, viewport: Rectangle) -> s32 {
+Frame :: (frame: App.Frame) {
+    session := Session.{.slot = frame.slot, .epoch = frame.epoch}
+    viewport := frame.viewport
     scope: s32 = WebScope()
     defer WebEnd(scope)
     if !started {
-        if !Start() { return 1 }
+        if !Start() { Dom.RequestClose(); return }
         started = true
     }
     if !updated && WebAsBool(WebGet(WebGlobal, WebName("__cssDomUpdate"))) { updated = true }
 
     opened := Page.Draw(session, .{key = 1, bounds = viewport, title = "CSS DOM"})
-    if !opened.opened { return 1 }
+    if !opened.opened { return }
 
     heading: Text.Props
     heading.key = 2; heading.bounds = Rectangle.{12.0, 12.0, 240.0, 28.0}
@@ -146,7 +148,8 @@ Frame :: (session: Session, viewport: Rectangle) -> s32 {
     unused Button.Draw(session, state)
     unused Button.Draw(session, plain)
 
-    if !Tree.End(session) { return 1 }
+    if !Tree.End(session) { Dom.RequestClose(); return }
     if WebAsBool(WebGet(WebGlobal, WebName("__cssDomDone"))) { Dom.RequestClose() }
-    return 0
 }
+
+main :: () -> s32 { return App.Run(App.Window.{.title = "css-dom"}, Frame) }

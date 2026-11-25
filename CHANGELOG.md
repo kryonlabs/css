@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Pin Ziran ba28d7c0 and Kryon ad43e92a so applications share the fixed GPU skinning and native program entry paths.
+- Pin Ziran ba28d7c0 and Kryon 6a41ba74 so applications share the fixed GPU skinning, native entry, web scene compilation and hosted package naming paths.
 
 - Build with Ziran c041afb6 and Kryon 09664f07: the DOM test app declares `main` and runs `App.Run` like every Kryon program now that the program-export program entry is gone, and the DOM browser test expects the `kryon_program_host` runner artifacts.
 

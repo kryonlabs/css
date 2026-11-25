@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Pin Ziran ba28d7c0 and Kryon ad43e92a so applications share the fixed GPU skinning and native program entry paths.
+
 - Build with Ziran c041afb6 and Kryon 09664f07: the DOM test app declares `main` and runs `App.Run` like every Kryon program now that the program-export program entry is gone, and the DOM browser test expects the `kryon_program_host` runner artifacts.
 
 - `translate` is the standard CSS property: `translate: 0 -2px` moves the whole box at paint time, after `rotate`, `scale` and `transform`, and `transition: translate` eases it (Kryon 2f9b5db2). The widget part metric it used to set is `-kryon-content-offset` (before: `NavigationBar[role=Panel] { translate: 340px 0; }`, after: `NavigationBar[role=Panel] { -kryon-content-offset: 340px 0; }`); the three presets use it, and the old meaning has no alias. In `@keyframes`, `-kryon-content-offset` animates and the transform properties say to ease through `transition`. The pack format is 118 words a rule.

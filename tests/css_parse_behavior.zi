@@ -297,7 +297,29 @@ Selectors :: () {
     }
     ParseFails("Button#save#other { color: red; }", "one id per selector", "two ids")
     ParseFails("Button::before { color: red; }", "pseudo-elements are outside Kryon CSS", "pseudo-element")
-    ParseFails("Button:nth-child(2) { color: red; }", "selector function", "selector function")
+    if Builds("Button:nth-child(2), Text:nth-child(odd), Text:nth-child(even), Text:nth-child(2n+1), Text:nth-child(-n+2), Text:nth-of-type(3n) { color: red; }",
+        "nth positions") {
+        Check(Rule(0).selector.context == cast(u32)StyleContextNthChild &&
+            Rule(0).selector.nth_a == 0 && Rule(0).selector.nth_b == 2, "nth-child(2)")
+        Check(Rule(1).selector.nth_a == 2 && Rule(1).selector.nth_b == 1, "odd")
+        Check(Rule(2).selector.nth_a == 2 && Rule(2).selector.nth_b == 0, "even")
+        Check(Rule(3).selector.nth_a == 2 && Rule(3).selector.nth_b == 1, "2n+1")
+        Check(Rule(4).selector.nth_a == -1 && Rule(4).selector.nth_b == 2, "-n+2")
+        Check(Rule(5).selector.context == cast(u32)StyleContextNthOfType &&
+            Rule(5).selector.nth_a == 3 && Rule(5).selector.nth_b == 0, "nth-of-type(3n)")
+    }
+    if Builds("Button:last-child, Text:only-child, Text:first-of-type, Text:last-of-type, Text:only-of-type { color: red; }",
+        "sibling family") {
+        Check(Rule(0).selector.context == cast(u32)StyleContextLastChild, "last child")
+        Check(Rule(1).selector.context == cast(u32)StyleContextOnlyChild, "only child")
+        Check(Rule(2).selector.context == cast(u32)StyleContextFirstOfType, "first of type")
+        Check(Rule(3).selector.context == cast(u32)StyleContextLastOfType, "last of type")
+        Check(Rule(4).selector.context == cast(u32)StyleContextOnlyOfType, "only of type")
+    }
+    ParseFails("Button:nth-child(2):nth-child(3) { color: red; }", "one :nth-child() or :nth-of-type()",
+        "two nth")
+    ParseFails("Button:nth-child(2 3) { color: red; }", "expected ')' after the :nth-...() argument",
+        "nth junk")
     ParseFails("Butt0n { color: red; }", "unknown widget type", "widget name")
     ParseFails("Button.a.b { color: red; }", "one class per selector", "two classes")
     if Builds("a { color: red; } p { color: red; } input { color: red; } textarea { color: red; } select { color: red; } button { color: red; } img { opacity: 0.5; } body { color: red; }",
@@ -329,7 +351,6 @@ Diagnostics :: () {
     ParseFails("Button.a { & .b { color: red; } }", "write a combinator such as", "nested combinator")
     ParseFails("Button.a { &.b { color: red; } }", "repeats a class, id, attribute or state", "nested second class")
     ParseFails("Button.a { &:hover { &:focus { color: red; } } }", "nested rules are outside Kryon CSS", "nesting twice")
-    ParseFails("Button:last-child { color: red; }", "needs siblings the frame has not built yet", "last child")
     ParseFails("Button { gap: calc(4px * 2px); }", "multiply a length by a number", "length times length")
     ParseFails("Button { gap: calc(4px +2px); }", "expected ')' to close calc", "calc sign needs spaces")
     ParseFails("Button { gap: min(1vw, max(2vw, 4px)); }", "nested min(), max() or clamp() with vw or vh",

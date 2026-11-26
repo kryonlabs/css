@@ -1,10 +1,11 @@
 // Part of the css_parser module: selectors. A Kryon CSS selector is a
 // compound matched by table lookup: an optional widget type or '*', then
-// any '.class', '[attribute=value]', one state pseudo-class, :first-child
-// and :not(.class) or :not(:state), e.g. 'Button.hero[tone=accent]:hover'.
-// One ancestor may come first, as '.card Text' (any ancestor) or
-// '.card > Text' (the parent), matched by class or id. A comma list gives
-// one rule each.
+// any '.class', '[attribute=value]', one state pseudo-class, the sibling
+// family :first-child, :last-child, :only-child, :nth-child(), the matching
+// of-type set and :not(.class) or :not(:state), e.g.
+// 'Button.hero[tone=accent]:hover'. One ancestor may come first, as
+// '.card Text' (any ancestor) or '.card > Text' (the parent), matched by
+// class or id. A comma list gives one rule each.
 
 #program_export
 CssClass :: (name: string) -> s32 {
@@ -208,6 +209,12 @@ CssReadSelectorParts :: (p: *CssParser, pending: *CssPendingSelector) -> s32 {
             name: CssName = CssReadName(p)
             if CssFailed(p) { return -1 }
             if CssAtByte(p, #char "(") {
+                if CssNameEquals(name, "nth-child") || CssNameEquals(name, "nth-of-type") {
+                    CssAdvance(p, 1)
+                    if !CssReadNth(p, pending, CssNameEquals(name, "nth-of-type")) { return -1 }
+                    parts += 1
+                    continue
+                }
                 if !CssNameEquals(name, "not") {
                     CssFailName(p, "selector function", name, "() is outside Kryon CSS; write the positive state or give the widget a class")
                     return -1
@@ -222,14 +229,35 @@ CssReadSelectorParts :: (p: *CssParser, pending: *CssPendingSelector) -> s32 {
                 parts += 1
                 continue
             }
+            if CssNameEquals(name, "last-child") {
+                pending.selector.context |= cast(u32)StyleContextLastChild
+                parts += 1
+                continue
+            }
+            if CssNameEquals(name, "only-child") {
+                pending.selector.context |= cast(u32)StyleContextOnlyChild
+                parts += 1
+                continue
+            }
+            if CssNameEquals(name, "first-of-type") {
+                pending.selector.context |= cast(u32)StyleContextFirstOfType
+                parts += 1
+                continue
+            }
+            if CssNameEquals(name, "last-of-type") {
+                pending.selector.context |= cast(u32)StyleContextLastOfType
+                parts += 1
+                continue
+            }
+            if CssNameEquals(name, "only-of-type") {
+                pending.selector.context |= cast(u32)StyleContextOnlyOfType
+                parts += 1
+                continue
+            }
             state: s32 = CssPseudoState(name)
             if state < 0 {
                 if CssNameEquals(name, "root") { CssFail(p, ":root holds only custom properties") }
-                else if CssNameEquals(name, "last-child") || CssNameEquals(name, "nth-child") ||
-                    CssNameEquals(name, "only-child") || CssNameEquals(name, "first-of-type") {
-                    CssFailName(p, "pseudo-class", name,
-                        " needs siblings the frame has not built yet; use :first-child or set a class from the frame")
-                } else { CssFailName(p, "unknown pseudo-class", name, "") }
+                else { CssFailName(p, "unknown pseudo-class", name, "") }
                 return -1
             }
             if pending.state != StyleStateAny() {
@@ -336,5 +364,87 @@ CssReadNot :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
     CssSkipSpace(p)
     if !CssExpect(p, #char ")", "Kryon :not() takes one class or one state, as :not(.muted) or :not(:hover)") { return false }
     pending.selector.context |= cast(u32)StyleContextNot
+    return true
+}
+
+// 'odd', 'even', an ordinal or 'An+B' inside :nth-child() / :nth-of-type().
+// Spaces may surround the '+' or '-' between the two terms, as CSS allows.
+CssReadNth :: (p: *CssParser, pending: *CssPendingSelector, of_type: bool) -> bool {
+    CssSkipSpace(p)
+    if CssFailed(p) { return false }
+    if pending.selector.nth_a != 0 || pending.selector.nth_b != 0 {
+        CssFail(p, "one :nth-child() or :nth-of-type() per selector")
+        return false
+    }
+    a: s32 = 0
+    b: s32 = 0
+    if CssReadNthKeyword(p, "odd") { a = 2; b = 1 }
+    else if CssReadNthKeyword(p, "even") { a = 2 }
+    else {
+        sign: s32 = 1
+        if CssAtByte(p, #char "+") { CssAdvance(p, 1) }
+        else if CssAtByte(p, #char "-") { CssAdvance(p, 1); sign = -1 }
+        value: s32 = 0
+        digits: s32 = 0
+        while CssIsDigit(CssPeek(p, 0)) {
+            value = value * 10 + cast(s32)(CssPeek(p, 0) - #char "0")
+            CssAdvance(p, 1)
+            digits += 1
+            if value > 1000000 {
+                CssFail(p, "the :nth-...() ordinal is larger than 1000000")
+                return false
+            }
+        }
+        if CssLower(CssPeek(p, 0)) == #char "n" {
+            a = sign
+            if digits > 0 { a = sign * value }
+            CssAdvance(p, 1)
+            CssSkipSpace(p)
+            if CssAtByte(p, #char "+") || CssAtByte(p, #char "-") {
+                offset_sign: s32 = 1
+                if CssAtByte(p, #char "-") { offset_sign = -1 }
+                CssAdvance(p, 1)
+                CssSkipSpace(p)
+                offset: s32 = 0
+                offset_digits: s32 = 0
+                while CssIsDigit(CssPeek(p, 0)) {
+                    offset = offset * 10 + cast(s32)(CssPeek(p, 0) - #char "0")
+                    CssAdvance(p, 1)
+                    offset_digits += 1
+                    if offset > 1000000 {
+                        CssFail(p, "the :nth-...() ordinal is larger than 1000000")
+                        return false
+                    }
+                }
+                if offset_digits == 0 {
+                    CssFail(p, "expected the ordinal after 'n +'")
+                    return false
+                }
+                b = offset_sign * offset
+            }
+        } else {
+            if digits == 0 {
+                CssFail(p, "expected odd, even, an ordinal or 'An+B' in :nth-child()")
+                return false
+            }
+            b = sign * value
+        }
+    }
+    CssSkipSpace(p)
+    if !CssExpect(p, #char ")", "expected ')' after the :nth-...() argument") { return false }
+    pending.selector.nth_a = a
+    pending.selector.nth_b = b
+    pending.selector.context |=
+    ifx of_type then cast(u32)StyleContextNthOfType else cast(u32)StyleContextNthChild
+    return true
+}
+
+// At a whole keyword followed by a name end; consumes it when it matches.
+CssReadNthKeyword :: (p: *CssParser, keyword: string) -> bool {
+    for index: 0..cast(s32)keyword.count - 1 {
+        if CssLower(CssPeek(p, index)) != keyword[index] { return false }
+    }
+    if CssNameChar(CssPeek(p, cast(s32)keyword.count)) { return false }
+    CssAdvance(p, cast(s32)keyword.count)
     return true
 }

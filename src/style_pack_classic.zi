@@ -970,7 +970,7 @@ style_pack_classic_typefaces_count :: 0;
 #program_export
 StylePackClassic :: () -> CssCompiledSheet {
     compiled: CssCompiledSheet
-    compiled.rule_words = 118
+    compiled.rule_words = 126
     compiled.rule_count = 277
     compiled.rules = style_pack_classic_rules[0:style_pack_classic_rules_count]
     compiled.refs = style_pack_classic_refs[0:style_pack_classic_refs_count]

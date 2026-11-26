@@ -382,10 +382,9 @@ ResponsiveBox :: (width: float32) {
     Check(End(integration_session), "close fluid column")
     Check(outer.opened && End(integration_session), "close box column")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "box frame")
-    align: s32 = 0
-    request: TextStyleRequest = .{.kind = StyleKindText(), .class_name = StyleClass("centered"), .align = *align}
-    unused ResolveInstalledTextStyle(request, StyleData.{})
-    Check(align == 1, "text-align reaches native Text")
+    face := ResolveInstalledTextStyle(
+        .{.kind = StyleKindText(), .class_name = StyleClass("centered")}, TextFace.{})
+    Check(face.align == 1, "text-align reaches native Text")
 }
 
 // A content-sized Column with a CSS background and border paints its box
@@ -538,6 +537,86 @@ ContextSelectors :: () {
         ContextColor(text, "quiet", cast(s32)ButtonStateHover) != cast(u32)0x040404ff, ":not(:hover)")
     Check(ContextColor(StyleKindHeading(), "soft", any) == cast(u32)0x050505ff &&
         ContextColor(StyleKindHeading(), "loud", any) != cast(u32)0x050505ff, ":not(.loud)")
+}
+
+// The sibling family: pending facts match while building, late facts
+// (:last-child family) read the committed frame and converge after a
+// structure change on the next frame.
+// The sibling family: pending facts match while building, late facts
+// (:last-child family) read the committed frame and converge after a
+// structure change on the next frame. A leading box separates child
+// positions from of-type positions.
+SiblingSelectors :: () {
+    Check(CssSheetLoad(*integration_sheet, StylePackLayout()) &&
+        CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install sibling styles")
+    text := StyleKindText()
+    any := StyleStateAny()
+    BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    outer := Layout.Draw(integration_session, .{.key = 970})
+    unused Layout.Draw(integration_session, .{.key = 971})
+    Check(ContextColor(text, "f1", any) == cast(u32)0x101010ff, ":first-child before any child")
+    Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, ":first-of-type before any child")
+    Check(ContextColor(text, "f2", any) != cast(u32)0x202020ff, ":nth-child(2) misses 1")
+    Check(ContextColor(text, "f4", any) != cast(u32)0x404040ff, "a new container has no committed last child")
+    unused BoxWidget.Draw(integration_session, .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}})
+    Check(ContextColor(text, "f2", any) == cast(u32)0x202020ff, ":nth-child(2) follows any kind of sibling")
+    Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, "a box is not of the text type")
+    Check(ContextColor(text, "f1", any) != cast(u32)0x101010ff, ":first-child misses 2")
+    unused TextWidget.Draw(integration_session, .{.key = 973, .text = "a", .class_name = StyleClass("f1")})
+    Check(ContextColor(text, "f3", any) == cast(u32)0x303030ff, ":nth-child(odd) at 3")
+    unused TextWidget.Draw(integration_session, .{.key = 974, .text = "b", .class_name = StyleClass("f1")})
+    unused TextWidget.Draw(integration_session, .{.key = 975, .text = "c", .class_name = StyleClass("f1")})
+    Check(End(integration_session), "close the first sibling row")
+    unused Layout.Draw(integration_session, .{.key = 976})
+    Check(ContextColor(text, "f5", any) != cast(u32)0x505050ff, "a new container has no committed only child")
+    unused TextWidget.Draw(integration_session, .{.key = 977, .text = "solo", .class_name = StyleClass("f5")})
+    Check(End(integration_session), "close the sibling solo row")
+    Check(outer.opened && End(integration_session), "close the sibling column")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "first sibling frame")
+
+    // The committed row holds the box and three texts; late facts match now.
+    BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    outer = Layout.Draw(integration_session, .{.key = 970})
+    unused Layout.Draw(integration_session, .{.key = 971})
+    Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, ":first-of-type keeps matching the text type")
+    Check(ContextColor(text, "f7", any) != cast(u32)0x707070ff, "the committed row holds more than one text")
+    unused BoxWidget.Draw(integration_session, .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}})
+    unused TextWidget.Draw(integration_session, .{.key = 973, .text = "a", .class_name = StyleClass("f1")})
+    unused TextWidget.Draw(integration_session, .{.key = 974, .text = "b", .class_name = StyleClass("f1")})
+    Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, ":last-child converges at the committed count")
+    Check(ContextColor(text, "f7", any) == cast(u32)0x707070ff, ":last-of-type converges at the committed count")
+    unused TextWidget.Draw(integration_session, .{.key = 975, .text = "c", .class_name = StyleClass("f1")})
+    Check(End(integration_session), "close the converged sibling row")
+    unused Layout.Draw(integration_session, .{.key = 976})
+    Check(ContextColor(text, "f5", any) == cast(u32)0x505050ff, ":only-child converges on the committed row")
+    Check(ContextColor(text, "f8", any) == cast(u32)0x808080ff, ":only-of-type converges on the committed row")
+    unused TextWidget.Draw(integration_session, .{.key = 977, .text = "solo", .class_name = StyleClass("f5")})
+    Check(End(integration_session), "close the converged solo row")
+    Check(outer.opened && End(integration_session), "close the converged column")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "converged sibling frame")
+
+    // Dropping the last text still converges this frame: the stale committed
+    // count equals the submitted position for one frame.
+    BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    outer = Layout.Draw(integration_session, .{.key = 970})
+    unused Layout.Draw(integration_session, .{.key = 971})
+    unused BoxWidget.Draw(integration_session, .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}})
+    unused TextWidget.Draw(integration_session, .{.key = 973, .text = "a", .class_name = StyleClass("f1")})
+    unused TextWidget.Draw(integration_session, .{.key = 974, .text = "b", .class_name = StyleClass("f1")})
+    Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, "the stale committed count still converges the last position")
+    Check(ContextColor(text, "f5", any) != cast(u32)0x505050ff, "two children are not an only child")
+    Check(End(integration_session) && outer.opened && End(integration_session), "close the changed column")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "changed sibling frame")
+    BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    outer = Layout.Draw(integration_session, .{.key = 970})
+    unused Layout.Draw(integration_session, .{.key = 971})
+    unused BoxWidget.Draw(integration_session, .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}})
+    unused TextWidget.Draw(integration_session, .{.key = 973, .text = "a", .class_name = StyleClass("f1")})
+    Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, "the shorter row's last position converges")
+    unused TextWidget.Draw(integration_session, .{.key = 974, .text = "b", .class_name = StyleClass("f1")})
+    Check(ContextColor(text, "f4", any) != cast(u32)0x404040ff, "a position past the committed row waits one frame")
+    Check(End(integration_session) && outer.opened && End(integration_session), "close the shorter column")
+    Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "shorter sibling frame")
 }
 
 // Any-angle and multi-stop gradients paint from vertical gradient strips;
@@ -758,6 +837,7 @@ main :: () -> s32 {
     PercentLayout()
     SideBorders()
     ContextSelectors()
+    SiblingSelectors()
     Gradients()
     Transforms()
     FluidValues()

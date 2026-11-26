@@ -107,6 +107,15 @@ Heading:not(.loud) { color: #050505; }
 Text.lead:first-child { color: #030303; }
 Text.quiet:not(:hover) { color: #040404; }
 
+Text.f1:first-child { color: #101010; }
+Text.f2:nth-child(2) { color: #202020; }
+Text.f3:nth-child(odd) { color: #303030; }
+Text.f4:last-child { color: #404040; }
+Text.f5:only-child { color: #505050; }
+Text.f6:first-of-type { color: #606060; }
+Text.f7:last-of-type { color: #707070; }
+Text.f8:only-of-type { color: #808080; }
+
 Column.sunrise { background: linear-gradient(90deg, #000000, #ffffff); }
 Column.bands { background: linear-gradient(#ff0000, #00ff00, #0000ff); }
 

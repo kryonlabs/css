@@ -154,6 +154,26 @@ CssExportCompound :: (e: *CssExporter, text: string) -> bool {
                 CssExportWrite(e, ":first-child")
                 continue
             }
+            if state == "last-child" || state == "only-child" ||
+            state == "first-of-type" || state == "last-of-type" ||
+            state == "only-of-type" {
+                CssExportWrite(e, ":")
+                CssExportWrite(e, state)
+                continue
+            }
+            if (state == "nth-child" || state == "nth-of-type") &&
+            at < count && text[at] == #char "(" {
+                close: s32 = at
+                while close < count && text[close] != #char ")" { close += 1 }
+                if close == count {
+                    return CssExportFail(e, "an :nth-...() argument without a ')'")
+                }
+                CssExportWrite(e, ":")
+                CssExportWrite(e, state)
+                CssExportWrite(e, text[at:close + 1])
+                at = close + 1
+                continue
+            }
             if state == "not" && at < count && text[at] == #char "(" {
                 close: s32 = at
                 while close < count && text[close] != #char ")" { close += 1 }

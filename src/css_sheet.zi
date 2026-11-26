@@ -938,11 +938,14 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // and box data, the percent masks of the style, flex and box fields, then
 // the per-side border widths and colors, the outline width and offset, the
 // selector's tree context, the box gradient, and the transform with its
-// origin and transition, and the translate property. The count is the pack format: a pack written
-// with another one is stale and css_tool regenerates it. Most words of a
-// rule are zero, so a pack stores each rule as CssRuleMaskWords words with
-// one bit for each rule word, then only the words whose bit is set.
-CssRuleWords :: 118
+// origin and transition, and the translate property. After those follow
+// the flex align-content, wrap-reverse and order, the selector's An+B
+// terms, and the radial gradient's shape, size and center. The count is
+// the pack format: a pack written with another one is stale and css_tool
+// regenerates it. Most words of a rule are zero, so a pack stores each
+// rule as CssRuleMaskWords words with one bit for each rule word, then
+// only the words whose bit is set.
+CssRuleWords :: 126
 CssRuleMaskWords :: 4
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
@@ -1137,6 +1140,9 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
             .justify_content = cast(s32)w[53], .align_items = cast(s32)w[54],
             .basis = CssWordFloat(w[55]), .grow = CssWordFloat(w[56]), .shrink = CssWordFloat(w[57]),
             .align_self = cast(s32)w[58]}
+        entry.rule.flex.align_content = cast(s32)w[118]
+        entry.rule.flex.wrap_reverse = w[119] != 0
+        entry.rule.flex.order = cast(s32)w[120]
         entry.rule.box = .{.fields = w[59], .min_width = CssWordFloat(w[60]),
             .max_width = CssWordFloat(w[61]), .max_height = CssWordFloat(w[62]),
             .clip_children = w[63] != 0, .text_align = cast(s32)w[64],
@@ -1156,6 +1162,8 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         entry.rule.selector.ancestor_id = cast(s32)w[84]
         entry.rule.selector.not_class = cast(s32)w[85]
         entry.rule.selector.not_state = cast(s32)w[86]
+        entry.rule.selector.nth_a = cast(s32)w[121]
+        entry.rule.selector.nth_b = cast(s32)w[122]
         entry.rule.box.gradient_dx = CssWordFloat(w[87])
         entry.rule.box.gradient_dy = CssWordFloat(w[88])
         entry.rule.box.gradient_corner = cast(s32)w[89]
@@ -1169,6 +1177,11 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         entry.rule.box.transform_seconds = CssWordFloat(w[111])
         for part: 0..3 { entry.rule.box.transform_timing[part] = cast(u8)w[112 + part] }
         entry.rule.box.translate = float32.[CssWordFloat(w[116]), CssWordFloat(w[117])]
+        radial: s32 = cast(s32)w[123]
+        entry.rule.box.radial_shape = radial & 255
+        entry.rule.box.radial_size = (radial >> 8) & 255
+        entry.rule.box.radial_cx = CssWordFloat(w[124])
+        entry.rule.box.radial_cy = CssWordFloat(w[125])
         sheet.rules[sheet.rule_count] = entry
         sheet.rule_count += 1
     }

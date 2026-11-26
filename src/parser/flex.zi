@@ -1,8 +1,9 @@
 // Native flex declarations are stored separately from widget paint and text
 // fields. Layout.Row and Layout.Draw consume them when placing a measured batch.
 
-css_flex_properties: [10]string = .["display", "flex-direction", "flex-wrap", "justify-content",
-    "align-items", "align-self", "flex", "flex-basis", "flex-grow", "flex-shrink"];
+css_flex_properties: [12]string = .["display", "flex-direction", "flex-wrap", "justify-content",
+    "align-items", "align-content", "align-self", "order", "flex", "flex-basis",
+    "flex-grow", "flex-shrink"];
 
 CssFlexProperty :: (name: CssName) -> bool {
     for property: css_flex_properties {
@@ -50,6 +51,19 @@ CssFlexAlignValue :: (word: CssName) -> s32 {
     if CssNameEquals(word, "center") { return 1 }
     if CssNameEquals(word, "flex-end") || CssNameEquals(word, "end") { return 2 }
     if CssNameEquals(word, "stretch") || CssNameEquals(word, "normal") { return 3 }
+    if CssNameEquals(word, "baseline") { return 4 }
+    return -1
+}
+
+// align-content: stretch shares the leftover cross space over the lines.
+CssFlexAlignContentValue :: (word: CssName) -> s32 {
+    if CssNameEquals(word, "stretch") || CssNameEquals(word, "normal") { return 0 }
+    if CssNameEquals(word, "flex-start") || CssNameEquals(word, "start") { return 1 }
+    if CssNameEquals(word, "center") { return 2 }
+    if CssNameEquals(word, "flex-end") || CssNameEquals(word, "end") { return 3 }
+    if CssNameEquals(word, "space-between") { return 4 }
+    if CssNameEquals(word, "space-around") { return 5 }
+    if CssNameEquals(word, "space-evenly") { return 6 }
     return -1
 }
 
@@ -125,6 +139,11 @@ CssApplyFlexProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
             flex.shrink = cast(float32)number.value
             field = cast(u32)StyleFlexShrink
         }
+    } else if CssNameEquals(name, "order") {
+        number := CssReadNumber(p)
+        valid = number.ok && !number.percent && number.unit.length == 0
+        flex.order = cast(s32)cast(s64)number.value
+        field = cast(u32)StyleFlexOrder
     } else if CssNameEquals(name, "flex-basis") {
         number := CssReadNumber(p)
         basis, percent, ok := CssFlexBasisValue(number)
@@ -153,9 +172,17 @@ CssApplyFlexProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
             valid = flex.direction >= 0
             field = cast(u32)StyleFlexDirection
         } else if CssNameEquals(name, "flex-wrap") {
-            flex.wrap = CssNameEquals(word, "wrap")
-            valid = flex.wrap || CssNameEquals(word, "nowrap")
-            field = cast(u32)StyleFlexWrap
+            if CssNameEquals(word, "wrap") {
+                flex.wrap = true
+                field = cast(u32)StyleFlexWrap
+            } else if CssNameEquals(word, "nowrap") {
+                flex.wrap = false
+                field = cast(u32)StyleFlexWrap
+            } else if CssNameEquals(word, "wrap-reverse") {
+                flex.wrap = true
+                flex.wrap_reverse = true
+                field = cast(u32)StyleFlexWrapReverse
+            } else { valid = false }
         } else if CssNameEquals(name, "justify-content") {
             flex.justify_content = CssFlexJustifyValue(word)
             valid = flex.justify_content >= 0
@@ -164,6 +191,10 @@ CssApplyFlexProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
             flex.align_items = CssFlexAlignValue(word)
             valid = flex.align_items >= 0
             field = cast(u32)StyleFlexAlign
+        } else if CssNameEquals(name, "align-content") {
+            flex.align_content = CssFlexAlignContentValue(word)
+            valid = flex.align_content >= 0
+            field = cast(u32)StyleFlexAlignContent
         } else {
             container = false
             flex.align_self = CssFlexAlignValue(word)

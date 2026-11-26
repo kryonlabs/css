@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Share the Kryon revision that fixes GPU seams in rounded fills.
+
 - `radial-gradient()` parses and paints natively in `background` and
   `background-image`: `[circle | ellipse] [<extent> | <radius> [<radius>]]?
   [at <position>]` — extent keywords `closest-corner` (default),

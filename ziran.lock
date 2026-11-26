@@ -65,12 +65,12 @@
       "url": "https://github.com/xiph/opus.git"
     },
     {
-      "commit": "c31a57b47c6cad20f60c94ec28676c4fca201573",
+      "commit": "e8b42fd4cb56ce388d8c8a0ca603c206385358f7",
       "dependencies": {"audio": "waozi_xyz_ziranlang_audio_b5c6b56b7117", "avif": "waozi_xyz_ziranlang_avif_6ff696d436b6", "image_codec": "waozi_xyz_ziranlang_image_codec_3017f0d1cc56", "libaom": "src_aomedia_googlesource_com_aom_b141d9c45db2", "libavif": "src_github_com_AOMediaCodec_libavif_1aadfad932c9", "libwebp": "src_github_com_webmproject_libwebp_1844042d1ca7", "sdl3": "src_github_com_libsdl_org_SDL_829a65d769d9", "webp": "waozi_xyz_ziranlang_webp_4b9a61d32460"},
       "dependency_refs": {"audio": "b5c6b56b71172c4361ae01e3afdd2118bdac0975", "avif": "6ff696d436b6b4f142eb1e3ecf210de7adfa048f", "image_codec": "3017f0d1cc56975aa29c600a1f55a62e1193cf7b", "libaom": "b141d9c45db236335351c8a4b2a14b3ade27c937", "libavif": "1aadfad932c98c069a1204261b1856f81f3bc199", "libwebp": "1844042d1ca751e62e61df7617dba19c98588339", "sdl3": "829a65d769d935c4852f8159e964312c0957260a", "webp": "4b9a61d32460d481624fe0f83996a7de50327dfe"},
-      "id": "waozi_xyz_kryonlabs_kryon_c31a57b47c6c",
+      "id": "waozi_xyz_kryonlabs_kryon_e8b42fd4cb56",
       "name": "kryon",
-      "ref": "c31a57b47c6cad20f60c94ec28676c4fca201573",
+      "ref": "e8b42fd4cb56ce388d8c8a0ca603c206385358f7",
       "url": "https://git.waozi.xyz/kryonlabs/kryon.git"
     },
     {
@@ -119,8 +119,8 @@
     }
   ],
   "root": {
-    "dependencies": {"kryon": "waozi_xyz_kryonlabs_kryon_c31a57b47c6c"},
-    "dependency_refs": {"kryon": "c31a57b47c6cad20f60c94ec28676c4fca201573"},
+    "dependencies": {"kryon": "waozi_xyz_kryonlabs_kryon_e8b42fd4cb56"},
+    "dependency_refs": {"kryon": "e8b42fd4cb56ce388d8c8a0ca603c206385358f7"},
     "name": "Css"
   },
   "toolchain": {

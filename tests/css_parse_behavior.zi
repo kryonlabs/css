@@ -174,6 +174,12 @@ NativeAuthoring :: () {
         grid: StyleRule = Rule(1)
         Check(grid.style.percent == 0 && grid.box.percent == 0 && grid.box.max_width == 480.0, "lengths stay pixels")
     }
+    if Builds("Text { font-size: 20px; flex-basis: 2em; } Column { flex-basis: 10vw; } Column { flex-basis: 10vh; }",
+        "basis units") {
+        Check(Rule(0).flex.basis == 40.0, "em basis uses the rule font")
+        Check(Rule(1).flex.basis == 102.4, "vw basis bakes at the sheet viewport")
+        Check(Rule(2).flex.basis == 76.8, "vh basis bakes at the sheet viewport")
+    }
     ParseFails("Column { width: calc(100% - 2rem); }", "percentages are native only alone", "percent in calc")
     if Builds("Column { border: 1px solid #111111; border-left: 4px solid #2255ff; border-bottom-width: thick; border-inline-end-color: #333333; }",
         "side borders") {
@@ -304,7 +310,24 @@ Selectors :: () {
     ParseFails("Button > Text { color: red; }", "an ancestor matches by its class or id alone", "typed parent")
     ParseFails("Button Text { color: red; }", "an ancestor matches by its class or id alone", "typed ancestor")
     ParseFails(".a .b .c { color: red; }", "matches one ancestor", "two ancestors")
-    ParseFails(".a + .b { color: red; }", "sibling combinators are outside Kryon CSS", "sibling")
+    if Builds(".a + .b, .a ~ .b, Row.item#lead + Text, Row.item ~ Text { color: red; }", "sibling combinators") {
+        adjacent := Rule(0).selector
+        Check(adjacent.context == cast(u32)StyleContextPrevSibling &&
+            adjacent.sibling_class == CssClass("a") && adjacent.class_name == CssClass("b") &&
+            adjacent.sibling_kind == StyleKindAny(), "adjacent previous sibling")
+        any_prev := Rule(1).selector
+        Check(any_prev.context == cast(u32)StyleContextAnyPrevSibling &&
+            any_prev.sibling_class == CssClass("a") && any_prev.class_name == CssClass("b"),
+            "any previous sibling")
+        Check(Rule(2).selector.sibling_kind == StyleKindRow() &&
+            Rule(2).selector.sibling_id == CssClass("lead") &&
+            Rule(2).selector.kind == StyleKindText(), "typed adjacent sibling pair")
+        Check(Rule(3).selector.sibling_kind == StyleKindRow() &&
+            Rule(3).selector.sibling_class == CssClass("item"), "typed any sibling pair")
+    }
+    ParseFails(".a + .b .c { color: red; }", "the sibling combinator sits directly before the styled compound", "sibling then ancestor")
+    ParseFails(".a + .b + .c { color: red; }", "one sibling combinator per selector in Kryon CSS", "two sibling combinators")
+    ParseFails(".a:hover + .b { color: red; }", "the compound before '+' or '~' matches by its type, class and id alone", "stateful sibling left")
     ParseFails("Text:not(.a, .b) { color: red; }", "takes one class or one state", "not list")
     if Builds(".card Text, .card > .title:first-child:not(:hover), Text:not(.muted) { color: red; }", "tree context") {
         descendant := Rule(0).selector

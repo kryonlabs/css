@@ -469,6 +469,9 @@ GeneratePack :: (pack: string, source: string, canonical: bool = true) -> s32 {
         Word(FloatBits(box.radial_cy))
         Word(FloatBits(box.radial_rx))
         Word(FloatBits(box.radial_ry))
+        SignedWord(selector.sibling_class)
+        SignedWord(selector.sibling_id)
+        SignedWord(selector.sibling_kind)
         if word_count - rule_start != CssRuleWords || word_count + CssRuleMaskWords > cast(s32)words.count {
             return Fail(path, "the rule layout does not match CssRuleWords")
         }

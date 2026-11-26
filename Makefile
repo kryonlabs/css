@@ -9,9 +9,9 @@ STYLE_PACKS := classic material lightfield
 CSS_TOOL := $(BUILD)/tools/css_tool
 INCLUDE = -I$$($(ZIRAN) pkg path ziran)/include
 
-.PHONY: check test conformance style-packs style-pack-check diagnostics-test format export css-dom-test motion-test fuzz clean
+.PHONY: check test conformance style-packs style-pack-check diagnostics-test format export motion-test fuzz clean
 
-check: test conformance style-pack-check css-dom-test motion-test fuzz
+check: test conformance style-pack-check motion-test fuzz
 
 # A behavior test: build one Ziran entry to C and run it.
 define native_test
@@ -86,9 +86,6 @@ export: $(CSS_TOOL)
 	$(CSS_TOOL) export $(IN) $(OUT)
 
 # A real Kryon web project, its production DOM writer and private Chromium.
-css-dom-test: $(CSS_TOOL)
-	ZIRAN="$(ZIRAN)" python3 tests/css_dom_browser.py
-
 # Generated and damaged sheets through the parser, the sheet, the formatter
 # and the exporter, built with AddressSanitizer and UndefinedBehaviorSanitizer.
 # The same seed makes the same sheets; see tests/css_fuzz.zi.

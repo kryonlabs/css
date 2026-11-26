@@ -5,7 +5,10 @@
 // of-type set and :not(.class) or :not(:state), e.g.
 // 'Button.hero[tone=accent]:hover'. One ancestor may come first, as
 // '.card Text' (any ancestor) or '.card > Text' (the parent), matched by
-// class or id. A comma list gives one rule each.
+// class or id, and one sibling combinator may sit directly before the
+// styled compound: '.a + .b' (the adjacent previous sibling) or '.a ~ .b'
+// (any previous sibling), whose left compound matches by type, class and
+// id. A comma list gives one rule each.
 
 #program_export
 CssClass :: (name: string) -> s32 {
@@ -91,7 +94,8 @@ CssReadAttribute :: (p: *CssParser, selector: *StyleSelector) {
 }
 
 // A selector at the cursor: one compound, or an ancestor compound, a space
-// or '>', and the compound it styles. Returns false after a diagnostic.
+// or '>', and the compound it styles, or a sibling compound, '+' or '~',
+// and the compound it styles. Returns false after a diagnostic.
 CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
     CssSkipSpace(p)
     if CssFailed(p) { return false }
@@ -104,7 +108,30 @@ CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
     if CssFailed(p) { return false }
     if CssAtByte(p, #char ",") || CssAtByte(p, #char "{") { return true }
     if CssAtByte(p, #char "+") || CssAtByte(p, #char "~") {
-        CssFail(p, "sibling combinators are outside Kryon CSS; use :first-child or give the widget a class")
+        adjacent := CssAtByte(p, #char "+")
+        left := pending.selector
+        if !CssSiblingCompound(left, pending.state) {
+            CssFail(p, "the compound before '+' or '~' matches by its type, class and id alone, as 'Row.item + Row.item'")
+            return false
+        }
+        CssAdvance(p, 1)
+        CssSkipSpace(p)
+        if CssFailed(p) { return false }
+        if !CssReadOneCompound(p, pending) { return false }
+        pending.selector.sibling_kind = left.kind
+        pending.selector.sibling_class = left.class_name
+        pending.selector.sibling_id = left.id
+        context_bit := ifx adjacent then cast(u32)StyleContextPrevSibling else cast(u32)StyleContextAnyPrevSibling
+        pending.selector.context |= context_bit
+        pending.length = p.cursor.pos - pending.start
+        CssSkipSpace(p)
+        if CssFailed(p) { return false }
+        if CssAtByte(p, #char ",") || CssAtByte(p, #char "{") { return true }
+        if CssAtByte(p, #char "+") || CssAtByte(p, #char "~") {
+            CssFail(p, "one sibling combinator per selector in Kryon CSS")
+            return false
+        }
+        CssFail(p, "the sibling combinator sits directly before the styled compound")
         return false
     }
     parent := CssAtByte(p, #char ">")
@@ -137,6 +164,24 @@ CssReadCompound :: (p: *CssParser, pending: *CssPendingSelector) -> bool {
 CssAncestorCompound :: (selector: StyleSelector, state: s32) -> bool {
     if selector.class_name == 0 && selector.id == 0 { return false }
     defaults := StyleDefaultSelector()
+    defaults.class_name = selector.class_name
+    defaults.id = selector.id
+    return state == StyleStateAny() && selector.kind == defaults.kind && selector.name == 0 &&
+        selector.role == defaults.role && selector.tone == defaults.tone &&
+        selector.emphasis == defaults.emphasis && selector.size == defaults.size &&
+        selector.state == defaults.state && selector.validation == defaults.validation &&
+        selector.orientation == defaults.orientation && selector.placement == defaults.placement &&
+        selector.context == 0
+}
+
+// The compound before '+' or '~': its type, class or id, at least one of
+// the three, and nothing else, since the frame matches submitted siblings
+// by the kind, class and id their nodes carry.
+CssSiblingCompound :: (selector: StyleSelector, state: s32) -> bool {
+    if selector.class_name == 0 && selector.id == 0 &&
+    selector.kind == StyleKindAny() { return false }
+    defaults := StyleDefaultSelector()
+    defaults.kind = selector.kind
     defaults.class_name = selector.class_name
     defaults.id = selector.id
     return state == StyleStateAny() && selector.kind == defaults.kind && selector.name == 0 &&

@@ -941,12 +941,14 @@ CssSheetToken :: (sheet: *CssSheet, name: string) -> CssTokenResult {
 // origin and transition, and the translate property. After those follow
 // the flex align-content, wrap-reverse and order, the selector's An+B
 // terms, the radial gradient's shape, size and center, and its explicit
-// radii. The count is the pack format: a pack written with another one is
-// stale and css_tool regenerates it. Most words of a rule are zero, so a
+// radii, then the sibling combinator's left compound: its class, id and
+// style kind. The count is the pack format: a pack written with another
+// one is stale and css_tool regenerates it. Most words of a rule are zero,
+// so a
 // pack stores each rule as CssRuleMaskWords words with one bit for each
 // rule word, then only the words whose bit is set.
-CssRuleWords :: 128
-CssRuleMaskWords :: 4
+CssRuleWords :: 131
+CssRuleMaskWords :: 5
 CssCompiledRefWords :: 4
 // A viewport length: rule, field, which bounds it has, then the value, low
 // and high linear forms as px, vw and vh.
@@ -1164,6 +1166,9 @@ CssSheetLoad :: (sheet: *CssSheet, compiled: CssCompiledSheet) -> bool {
         entry.rule.selector.not_state = cast(s32)w[86]
         entry.rule.selector.nth_a = cast(s32)w[121]
         entry.rule.selector.nth_b = cast(s32)w[122]
+        entry.rule.selector.sibling_class = cast(s32)w[128]
+        entry.rule.selector.sibling_id = cast(s32)w[129]
+        entry.rule.selector.sibling_kind = cast(s32)w[130]
         entry.rule.box.gradient_dx = CssWordFloat(w[87])
         entry.rule.box.gradient_dy = CssWordFloat(w[88])
         entry.rule.box.gradient_corner = cast(s32)w[89]

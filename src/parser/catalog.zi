@@ -66,7 +66,7 @@ css_catalog_4: [10]CssCatalogEntry = .[
     .{"align-items", "Row", "center", "start, center, end, stretch, normal"},
     .{"align-self", "Text", "flex-end", "auto, start, center, end, stretch"},
     .{"flex", "Column", "1", "none, auto, initial, or grow [shrink] [basis]"},
-    .{"flex-basis", "Text", "25%", "auto, a static length or a percentage"},
+    .{"flex-basis", "Text", "25%", "auto, a length (px, rem, em, vw, vh) or a percentage"},
     .{"flex-grow", "Text", "2", "number"},
     .{"flex-shrink", "Text", "0", "number"},
     .{"grid-template-columns", "Grid", "repeat(3, minmax(0, 1fr))", "1fr, repeat(N, 1fr), repeat(auto-fit, minmax(LENGTH, 1fr))"},

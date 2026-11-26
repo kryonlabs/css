@@ -67,15 +67,23 @@ CssFlexAlignContentValue :: (word: CssName) -> s32 {
     return -1
 }
 
-// A basis in logical pixels or, with `percent`, as a percentage of the
-// container's inner main size.
-CssFlexBasisValue :: (number: CssNumber) -> (value: float32, percent: bool, ok: bool) {
+// A basis in logical pixels (px, rem and em; vw and vh bake at the sheet's
+// default viewport like min() and max()) or, with `percent`, as a percentage
+// of the container's inner main size.
+CssFlexBasisValue :: (p: *CssParser, number: CssNumber) -> (value: float32, percent: bool, ok: bool) {
     if !number.ok || number.value < 0.0 { return 0.0, false, false }
     if number.percent { return cast(float32)number.value, true, true }
     if CssNameEquals(number.unit, "px") || (number.unit.length == 0 && number.value == 0.0) {
         return cast(float32)number.value, false, true
     }
     if CssNameEquals(number.unit, "rem") { return cast(float32)(number.value * CssRemPixels), false, true }
+    if CssNameEquals(number.unit, "em") { return cast(float32)(number.value * CssEmPixels(p)), false, true }
+    if CssNameEquals(number.unit, "vw") {
+        return cast(float32)(number.value * CssDefaultViewportWidth / 100.0), false, true
+    }
+    if CssNameEquals(number.unit, "vh") {
+        return cast(float32)(number.value * CssDefaultViewportHeight / 100.0), false, true
+    }
     return 0.0, false, false
 }
 
@@ -108,7 +116,7 @@ CssFlexShorthand :: (p: *CssParser, end: s32, flex: *StyleFlexData) -> bool {
             continue
         }
         if basis_seen { return false }
-        basis, percent, ok := CssFlexBasisValue(number)
+        basis, percent, ok := CssFlexBasisValue(p, number)
         if !ok {
             if number.ok || !CssNameEquals(CssReadName(p), "auto") { return false }
             basis = -1.0
@@ -146,7 +154,7 @@ CssApplyFlexProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
         field = cast(u32)StyleFlexOrder
     } else if CssNameEquals(name, "flex-basis") {
         number := CssReadNumber(p)
-        basis, percent, ok := CssFlexBasisValue(number)
+        basis, percent, ok := CssFlexBasisValue(p, number)
         flex.basis = basis
         flex.percent = CssPercentBit(flex.percent, cast(u32)StyleFlexBasis, percent)
         valid = ok

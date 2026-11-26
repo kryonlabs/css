@@ -89,7 +89,11 @@ match while the frame builds; late facts (`:last-child` family) read the
 previous frame's children, so a structure change converges on the next frame.
 A typed ancestor (`Row Text`), a second ancestor (`.a .b .c`) and sibling
 combinators (`+`, `~`) are errors: give the inner widget its own class
-(`Text.card-title`). A rule can hold nested `&:state`,
+(`Text.card-title`). One sibling combinator may sit directly before the
+styled compound: `.a + .b` matches the adjacent previous sibling and
+`.a ~ .b` any previous sibling; its left side matches by type, class and id
+alone, and it reads the siblings the frame has already submitted, so it is
+exact. A rule can hold nested `&:state`,
 `&.class`, `&#id`, `&[attribute]`, `&:first-child` and `&:not(...)` rules one
 level deep; each adds its parts to every parent selector and may not set a
 class, id, attribute or state the parent sets to another value.
@@ -146,7 +150,7 @@ Anything else is browser-only or an error.
 | `align-items` | `Row` | `center` | start, center, end, stretch, normal |
 | `align-self` | `Text` | `flex-end` | auto, start, center, end, stretch |
 | `flex` | `Column` | `1` | none, auto, initial, or grow [shrink] [basis] |
-| `flex-basis` | `Text` | `25%` | auto, a static length or a percentage |
+| `flex-basis` | `Text` | `25%` | auto, a length (px, rem, em, vw, vh) or a percentage |
 | `flex-grow` | `Text` | `2` | number |
 | `flex-shrink` | `Text` | `0` | number |
 | `grid-template-columns` | `Grid` | `repeat(3, minmax(0, 1fr))` | 1fr, repeat(N, 1fr), repeat(auto-fit, minmax(LENGTH, 1fr)) |

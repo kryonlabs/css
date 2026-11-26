@@ -79,14 +79,17 @@ one class (`.primary`), one ID (`#save`; set `props.id` to `StyleId("save")`),
 Kryon attributes (`[role=Label]`, `[tone=Accent]`, `[emphasis=Soft]`,
 `[size=Small]`, `[state=normal]`) and one state pseudo-class:
 `:hover`, `:active`, `:focus`, `:focus-visible`, `:disabled`, `:selected`,
-`:checked` or `:loading`, in comma lists. `:first-child`, `:not(.class)` and
-`:not(:state)` add tree context, and so may one ancestor, matched by its class
-or id, before the compound: `.card Text` (any ancestor) or `.card > Text` (the
-parent). Kryon matches the widget being styled as the next child of the open
-container while the frame builds, so `:last-child` and `:nth-child()`, which
-need later siblings, are errors, as are a typed ancestor (`Row Text`), a
-second ancestor (`.a .b .c`) and sibling combinators (`+`, `~`): give the inner
-widget its own class (`Text.card-title`). A rule can hold nested `&:state`,
+`:checked` or `:loading`, in comma lists. `:not(.class)` and `:not(:state)`
+add tree context, and so may one ancestor, matched by its class or id, before
+the compound: `.card Text` (any ancestor) or `.card > Text` (the parent).
+Structural positions also work: `:first-child`, `:last-child`, `:only-child`,
+`:nth-child(an+b)`, `:first-of-type`, `:last-of-type`, `:only-of-type` and
+`:nth-of-type(an+b)` (`.item:nth-child(2)`, `Text:last-child`). Early facts
+match while the frame builds; late facts (`:last-child` family) read the
+previous frame's children, so a structure change converges on the next frame.
+A typed ancestor (`Row Text`), a second ancestor (`.a .b .c`) and sibling
+combinators (`+`, `~`) are errors: give the inner widget its own class
+(`Text.card-title`). A rule can hold nested `&:state`,
 `&.class`, `&#id`, `&[attribute]`, `&:first-child` and `&:not(...)` rules one
 level deep; each adds its parts to every parent selector and may not set a
 class, id, attribute or state the parent sets to another value.
@@ -138,7 +141,7 @@ Anything else is browser-only or an error.
 | `text-align` | `Text` | `center` | start, left, center, end or right |
 | `display` | `Row` | `flex` | flex (Row, Column) or grid (Grid) |
 | `flex-direction` | `Row` | `row-reverse` | row, column and their -reverse |
-| `flex-wrap` | `Row` | `wrap` | wrap or nowrap |
+| `flex-wrap` | `Row` | `wrap-reverse` | wrap, wrap-reverse or nowrap |
 | `justify-content` | `Row` | `space-between` | normal, flex-start, center, flex-end, space-between, -around, -evenly |
 | `align-items` | `Row` | `center` | start, center, end, stretch, normal |
 | `align-self` | `Text` | `flex-end` | auto, start, center, end, stretch |
@@ -261,15 +264,17 @@ Anything else is browser-only or an error.
   `id` and `class_name` when a selector matches it. `display: grid` maps
   to `Layout.Grid`. Native code selects the container.
 - Flex directions are `row`, `row-reverse`, `column` and `column-reverse`.
-  Lines support `wrap` and `nowrap` and use the main-axis and cross-axis gaps.
-  Justification supports `normal`, `flex-start`, `center`, `flex-end`,
-  `space-between`, `space-around` and `space-evenly`. Alignment supports
-  `start`/`flex-start`, `center`, `end`/`flex-end`, `stretch`, `normal`, and
-  `auto` for `align-self`. Stretch fills an unset cross extent. Flex basis
-  accepts `auto`, nonnegative `px` and `rem`, and zero. The `flex` shorthand
-  also accepts `none`, `auto` and `initial`. Percentage or intrinsic basis,
-  `wrap-reverse`, baseline alignment and cross-line distribution are outside
-  this native subset.
+  Lines support `wrap`, `wrap-reverse` and `nowrap` and use the main-axis and
+  cross-axis gaps. Justification supports `normal`, `flex-start`, `center`,
+  `flex-end`, `space-between`, `space-around` and `space-evenly`. Alignment
+  supports `start`/`flex-start`, `center`, `end`/`flex-end`, `stretch`,
+  `normal`, `baseline` and `auto` for `align-self`, with `align-content`
+  distributing wrapped lines the same way. Stretch fills an unset cross
+  extent. Flex basis accepts `auto`, nonnegative `px` and `rem`, zero, and a
+  percentage of the container's inner main size. The `flex` shorthand also
+  accepts `none`, `auto` and `initial`. Intrinsic basis keywords
+  (`min-content`, `max-content`, `fit-content`) remain outside this native
+  subset.
 - `Card.Draw` uses stylesheet axis padding for its returned content rectangle.
 - Native `Text`, `Heading` and `ParagraphText` read `font-weight`,
   `font-style` and `letter-spacing`. Weight takes `normal` (400), `bold` (700)

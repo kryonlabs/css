@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- `radial-gradient()` parses and paints natively in `background` and
+  `background-image`: `[circle | ellipse] [<extent> | <radius> [<radius>]]?
+  [at <position>]` — extent keywords `closest-corner` (default),
+  `closest-side`, `farthest-corner` and `farthest-side`; a circle radius is a
+  `px` length, ellipse radii are `px` or `%` — with two to six percentage
+  stops sharing the linear gradient's stop list. Row, Column and Grid paint
+  it as bands from the computed center and radii; other widgets keep the
+  first-and-last-colors face. Conic and repeating gradients stay refused.
+  Packs stay 128 words a rule. Pins Kryon 3f37001a.
+
+- Structural sibling selectors are native: `:last-child`, `:only-child`,
+  `:nth-child(an+b)`, `:first-of-type`, `:last-of-type`, `:only-of-type` and
+  `:nth-of-type(an+b)` join `:first-child`. Early positions match while the
+  frame builds; late positions read the previous frame's committed children,
+  so a structure change converges on the next frame. The pack format is 128
+  words a rule; older packs are refused as stale. Pins Kryon 35a52f70.
+
+- Flex completes its native subset: `wrap-reverse`, percentage `flex-basis`
+  (also through `flex`), `order`, `align-content` distributing wrapped lines,
+  and `baseline` alignment on `align-items` and `align-self`, alongside the
+  existing directions, justification, grow/shrink and min/max constraints.
+  Intrinsic basis keywords (`min-content`, `max-content`, `fit-content`)
+  remain browser-only.
+
 - Pin Ziran ba28d7c0 and Kryon 6a41ba74 so applications share the fixed GPU skinning, native entry, web scene compilation and hosted package naming paths.
 
 - Build with Ziran c041afb6 and Kryon 09664f07: the DOM test app declares `main` and runs `App.Run` like every Kryon program now that the program-export program entry is gone, and the DOM browser test expects the `kryon_program_host` runner artifacts.
@@ -16,9 +40,9 @@
 
 - `transform` (translate, scale and rotate functions with their X and Y forms), `scale`, `rotate` and `transform-origin` are native: Kryon applies them at paint time on every host to Row, Column, Grid, Button, Card, Text, Heading, Link and Image and to what they contain, with `:hover` and `:active` following the pointer, and `transition: transform …` eases them. They are opt-in paint code: the app calls `PaintTransformInstall()` (kryon/paint_transform) once, and `CssSheetInstall` refuses a sheet that sets a transform until it has, with that instruction. Skew, `matrix()`, 3D functions, `translate()` percentages and shearing lists fail a plain native parse with the reason. The pack format is 116 words a rule. Pins Kryon fdd70c4b.
 
-- `linear-gradient()` takes any angle (`deg`, `turn`, `rad`, `grad`) or `to` a side or corner, and two to six color stops with `%` positions, in `background` and `background-image`; Row, Column and Grid paint them, other widgets a top-to-bottom gradient of the first and last colors (`css_tool check` says so). Radial, conic and repeating gradients are refused natively with the reason. The pack format is 101 words a rule. Pins Kryon d0711324.
+- `linear-gradient()` takes any angle (`deg`, `turn`, `rad`, `grad`) or `to` a side or corner, and two to six color stops with `%` positions, in `background` and `background-image`; Row, Column and Grid paint them, other widgets a top-to-bottom gradient of the first and last colors (`css_tool check` says so). Conic and repeating gradients are refused natively with the reason; `radial-gradient()` joins above. The pack format is 101 words a rule. Pins Kryon d0711324.
 
-- Selectors take tree context natively: one ancestor by class or id (`.card Text`), the parent (`.card > Text`), `:first-child`, and `:not(.class)` or `:not(:state)`, also in nested `&` rules, and the DOM export writes them as browser selectors. `:last-child`, `:nth-child()`, typed or second ancestors and sibling combinators fail with the native idiom. The pack format is 87 words a rule. Pins Kryon 56777c65.
+- Selectors take tree context natively: one ancestor by class or id (`.card Text`), the parent (`.card > Text`), `:first-child`, and `:not(.class)` or `:not(:state)`, also in nested `&` rules, and the DOM export writes them as browser selectors. Typed or second ancestors and sibling combinators fail with the native idiom; the structural `:last-child` and `:nth-child()` family joins above. The pack format is 87 words a rule. Pins Kryon 56777c65.
 
 - Per-side borders are native on Row, Column and Grid: `border-top|right|bottom|left`, `border-block-start|end` and `border-inline-start|end`, each with `-width`, `-color` and `-style`, with `var()` values; a uniform border later in the same rule clears earlier sides. With a border radius the box paints its uniform border and `css_tool check` reports it. `outline`, `outline-width` (also `thin`, `medium`, `thick`) and `outline-offset` size the native focus ring; `outline: none` keeps it, and `css_tool check` says so. Border widths take `thin`, `medium` and `thick`. The pack format is 82 words a rule. Pins Kryon d97c19e8.
 

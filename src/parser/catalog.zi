@@ -61,7 +61,7 @@ css_catalog_3: [10]CssCatalogEntry = .[
     .{"flex-direction", "Row", "row-reverse", "row, column and their -reverse"}];
 
 css_catalog_4: [10]CssCatalogEntry = .[
-    .{"flex-wrap", "Row", "wrap", "wrap or nowrap"},
+    .{"flex-wrap", "Row", "wrap-reverse", "wrap, wrap-reverse or nowrap"},
     .{"justify-content", "Row", "space-between", "normal, flex-start, center, flex-end, space-between, -around, -evenly"},
     .{"align-items", "Row", "center", "start, center, end, stretch, normal"},
     .{"align-self", "Text", "flex-end", "auto, start, center, end, stretch"},

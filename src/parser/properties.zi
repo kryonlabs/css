@@ -346,6 +346,10 @@ CssReadBackground :: (p: *CssParser, end: s32, property: CssName) {
         CssReadLinearGradient(p, end, property)
         return
     }
+    if CssAtFunction(p, "radial-gradient") {
+        CssReadRadialGradient(p, end, property)
+        return
+    }
     if CssAtFunction(p, "url") {
         CssFail(p, "background images are outside Kryon CSS")
         return
@@ -648,7 +652,7 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
     } else if CssNameEquals(name, "background") || CssNameEquals(name, "background-image") {
         if CssAtWebGradient(p) {
             if !p.native_only { return CssPassWebDeclaration(p) }
-            CssFail(p, "radial, conic and repeating gradients are browser-only; Kryon paints linear-gradient()")
+            CssFail(p, "conic and repeating gradients are browser-only; Kryon paints linear-gradient() and radial-gradient()")
             return -1
         }
         if CssNameEquals(name, "background-image") {
@@ -660,8 +664,12 @@ CssApplyProperty :: (p: *CssParser, name: CssName, end: s32) -> s32 {
                 return CssScopeNative
             }
             p.cursor = saved
+            if CssAtFunction(p, "radial-gradient") {
+                CssReadRadialGradient(p, end, name)
+                return ifx CssFailed(p) then -1 else CssScopeNative
+            }
             if !CssAtFunction(p, "linear-gradient") {
-                CssFail(p, "background-image takes none or linear-gradient() natively")
+                CssFail(p, "background-image takes none, linear-gradient() or radial-gradient() natively")
                 return -1
             }
             CssReadLinearGradient(p, end, name)

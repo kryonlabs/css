@@ -1,9 +1,10 @@
-// linear-gradient([<angle> | to <side or corner>,] <color> [<n>%], ...)
-// with up to six stops. Top to bottom with two stops at the ends stays a
-// two-color face that every widget paints; another angle, a corner, more
-// stops or stop positions are box fields Row, Column and Grid paint, while
-// other widgets paint the first and last colors top to bottom. Radial,
-// conic and repeating gradients have no paint primitive in Kryon backends.
+// linear-gradient([<angle> | to <side or corner>,] <color> [<n>%], ...) and
+// radial-gradient([circle | ellipse] [<extent> | <radius> [<radius>]]?
+// [at <position>]?, <color> [<n>%], ...), up to six stops each. A top to
+// bottom two-stop linear gradient stays a two-color face that every widget
+// paints; anything else is box fields Row, Column and Grid paint, while
+// other widgets paint the first and last colors top to bottom. Conic and
+// repeating gradients are browser-only.
 
 CssGradientStopLimit :: 6
 
@@ -11,7 +12,7 @@ CssGradientStopLimit :: 6
 CssAtWebGradient :: (p: *CssParser) -> bool {
     CssSkipSpace(p)
     saved := p.cursor
-    found := CssAtFunction(p, "radial-gradient") || CssAtFunction(p, "conic-gradient") ||
+    found := CssAtFunction(p, "conic-gradient") ||
         CssAtFunction(p, "repeating-linear-gradient") || CssAtFunction(p, "repeating-radial-gradient") ||
         CssAtFunction(p, "repeating-conic-gradient")
     p.cursor = saved
@@ -82,6 +83,55 @@ CssFillGradientStops :: (positions: []float64) {
     }
 }
 
+// The stop list both gradients share: colors with optional percentage
+// positions, at most six and at least two, then ')', with the missing
+// positions filled. The arrays and count come back together.
+CssReadGradientStopList :: (p: *CssParser, closer: string) -> (count: s32, colors: [6]CssValue, positions: [6]float64) {
+    count: s32 = 0
+    colors: [6]CssValue
+    positions: [6]float64
+    while true {
+        if count >= CssGradientStopLimit {
+            CssFail(p, "Kryon gradients take up to six color stops")
+            return count, colors, positions
+        }
+        color := CssReadColor(p, true)
+        if !color.ok { return count, colors, positions }
+        colors[count] = color
+        positions[count] = -1.0
+        CssSkipSpace(p)
+        if CssFailed(p) { return count, colors, positions }
+        next := CssPeek(p, 0)
+        if CssIsDigit(next) || next == #char "." || next == #char "-" {
+            stop := CssReadNumber(p)
+            if CssFailed(p) { return count, colors, positions }
+            if !stop.ok || !stop.percent {
+                CssFail(p, "gradient stop positions are percentages natively")
+                return count, colors, positions
+            }
+            positions[count] = stop.value / 100.0
+            CssSkipSpace(p)
+            if CssIsDigit(CssPeek(p, 0)) {
+                CssFail(p, "one position per gradient stop natively")
+                return count, colors, positions
+            }
+        }
+        count += 1
+        CssSkipSpace(p)
+        if CssFailed(p) { return count, colors, positions }
+        if !CssAtByte(p, #char ",") { break }
+        CssAdvance(p, 1)
+        CssSkipSpace(p)
+    }
+    if !CssExpect(p, #char ")", closer) { return count, colors, positions }
+    if count < 2 {
+        CssFail(p, "a gradient needs two colors")
+        return count, colors, positions
+    }
+    CssFillGradientStops(positions[:count])
+    return count, colors, positions
+}
+
 // The rest of linear-gradient( after its opening parenthesis.
 CssReadLinearGradient :: (p: *CssParser, end: s32, property: CssName) {
     angle: float64 = 180.0
@@ -105,48 +155,8 @@ CssReadLinearGradient :: (p: *CssParser, end: s32, property: CssName) {
         angle = CssReadGradientAngle(p)
         if CssFailed(p) || !CssExpect(p, #char ",", "expected ',' after the gradient angle") { return }
     }
-    colors: [6]CssValue
-    positions: [6]float64
-    count: s32 = 0
-    while true {
-        if count >= CssGradientStopLimit {
-            CssFail(p, "Kryon gradients take up to six color stops")
-            return
-        }
-        color := CssReadColor(p, true)
-        if !color.ok { return }
-        colors[count] = color
-        positions[count] = -1.0
-        CssSkipSpace(p)
-        if CssFailed(p) { return }
-        next := CssPeek(p, 0)
-        if CssIsDigit(next) || next == #char "." || next == #char "-" {
-            stop := CssReadNumber(p)
-            if CssFailed(p) { return }
-            if !stop.ok || !stop.percent {
-                CssFail(p, "gradient stop positions are percentages natively")
-                return
-            }
-            positions[count] = stop.value / 100.0
-            CssSkipSpace(p)
-            if CssIsDigit(CssPeek(p, 0)) {
-                CssFail(p, "one position per gradient stop natively")
-                return
-            }
-        }
-        count += 1
-        CssSkipSpace(p)
-        if CssFailed(p) { return }
-        if !CssAtByte(p, #char ",") { break }
-        CssAdvance(p, 1)
-        CssSkipSpace(p)
-    }
-    if !CssExpect(p, #char ")", "expected ')' to close linear-gradient()") { return }
-    if count < 2 {
-        CssFail(p, "a gradient needs two colors")
-        return
-    }
-    CssFillGradientStops(positions[:count])
+    count, colors, positions := CssReadGradientStopList(p, "expected ')' to close linear-gradient()")
+    if CssFailed(p) { return }
     turned := angle - 360.0 * cast(float64)cast(s64)(angle / 360.0)
     if turned < 0.0 { turned += 360.0 }
     simple := corner == 0 && count == 2 && positions[0] == 0.0 && positions[1] == 1.0 &&
@@ -167,7 +177,7 @@ CssReadLinearGradient :: (p: *CssParser, end: s32, property: CssName) {
         box.gradient_count = count
         for index: 0..count - 1 { box.gradient_stops[index] = cast(float32)positions[index] }
         box.fields |= cast(u32)StyleBoxGradient
-        CssGradientTarget(p, property)
+        CssGradientTarget(p, property, "an angled or multi-stop gradient paints on Row, Column and Grid; other widgets paint its first and last colors top to bottom")
     }
     unused CssEndValue(p, end, property)
 }
@@ -175,6 +185,13 @@ CssReadLinearGradient :: (p: *CssParser, end: s32, property: CssName) {
 // Drop a gradient set earlier in the rule, its middle stops' var() included.
 CssClearGradient :: (p: *CssParser) {
     p.box_template.fields &= ~cast(u32)StyleBoxGradient
+    p.box_template.fields &= ~cast(u32)StyleBoxRadial
+    p.box_template.radial_shape = 0
+    p.box_template.radial_size = 0
+    p.box_template.radial_cx = 0.0
+    p.box_template.radial_cy = 0.0
+    p.box_template.radial_rx = 0.0
+    p.box_template.radial_ry = 0.0
     kept: s32 = 0
     for index: cast(s32)0..p.rule_ref_count - 1 {
         field := p.rule_refs[index].field
@@ -185,14 +202,187 @@ CssClearGradient :: (p: *CssParser) {
     p.rule_ref_count = kept
 }
 
-CssGradientTarget :: (p: *CssParser, property: CssName) {
+CssGradientTarget :: (p: *CssParser, property: CssName, message: string) {
     if !CssCollectIssues(p) { return }
     for index: cast(s32)0..p.selector_count - 1 {
         kind := p.selectors[index].selector.kind
         if kind == StyleKindAny() || kind == StyleKindRow() || kind == StyleKindColumn() || kind == StyleKindGrid() { continue }
         CssReportIssue(p, p.pending_name_cursor, CssIssueKind.Declaration, TextView(property.bytes[:property.length]),
-            "an angled or multi-stop gradient paints on Row, Column and Grid; other widgets paint its first and last colors top to bottom",
-            false)
+            message, false)
         return
     }
+}
+
+// One piece of `at <position>`: a percentage or a side keyword. Percentages
+// fill the horizontal then the vertical share; a vertical keyword flips the
+// order, as CSS reads top before a following share. One piece alone is the
+// horizontal one.
+CssReadRadialPosition :: (p: *CssParser) -> (x: float64, y: float64) {
+    x: float64 = -1.0
+    y: float64 = -1.0
+    vertical: bool = false
+    for piece: 0..1 {
+        CssSkipSpace(p)
+        if CssFailed(p) { return x, y }
+        byte := CssPeek(p, 0)
+        if !CssIsDigit(byte) && byte != #char "." && !CssNameStart(byte) { break }
+        if CssIsDigit(byte) || byte == #char "." {
+            number := CssReadNumber(p)
+            if CssFailed(p) { return x, y }
+            if !number.ok || !number.percent {
+                CssFail(p, "a radial center position is a percentage or side keyword natively")
+                return x, y
+            }
+            share := number.value / 100.0
+            if vertical || x >= 0.0 { y = share } else { x = share }
+        } else {
+            word := CssReadName(p)
+            if CssFailed(p) { return x, y }
+            if CssNameEquals(word, "left") { x = 0.0 }
+            else if CssNameEquals(word, "right") { x = 1.0 }
+            else if CssNameEquals(word, "top") { y = 0.0; vertical = true }
+            else if CssNameEquals(word, "bottom") { y = 1.0; vertical = true }
+            else if CssNameEquals(word, "center") {
+                if x >= 0.0 { y = 0.5 } else { x = 0.5 }
+            } else {
+                CssFailName(p, "position word", word, " is outside Kryon CSS; use left, right, top, bottom or center")
+                return x, y
+            }
+        }
+    }
+    if x < 0.0 { x = 0.5 }
+    if y < 0.0 { y = 0.5 }
+    return x, y
+}
+
+// One explicit radius: a percentage of the box's width or height, stored as
+// a negative fraction, or a static length. A radius never starts with a
+// name; the caller checks the bytes first.
+CssReadRadialRadius :: (p: *CssParser) -> (value: float64, ok: bool) {
+    CssSkipSpace(p)
+    percentage, is_percent := CssReadPercent(p)
+    if is_percent {
+        if percentage < 0.0 {
+            CssFail(p, "a radial gradient's radius is zero or more")
+            return 0.0, false
+        }
+        return -cast(float64)percentage / 100.0, true
+    }
+    byte := CssPeek(p, 0)
+    if !CssIsDigit(byte) && byte != #char "." && byte != #char "-" && byte != #char "+" { return 0.0, false }
+    length, is_length := CssReadStaticLength(p)
+    if !is_length || length < 0.0 { return 0.0, false }
+    return cast(float64)length, true
+}
+
+// The rest of radial-gradient( after its opening parenthesis: an optional
+// shape and extent keyword in either order, explicit radii instead of an
+// extent, an optional `at` position, then the shared stop list. A single
+// radius makes a circle; explicit radii are px lengths or percentages of
+// the box, unlike an extent keyword, which measures the box.
+CssReadRadialGradient :: (p: *CssParser, end: s32, property: CssName) {
+    shape: s32 = 0
+    size: s32 = 0
+    rx: float64 = 0.0
+    ry: float64 = 0.0
+    center_x: float64 = 0.5
+    center_y: float64 = 0.5
+    named_shape: bool = false
+    named_size: bool = false
+    leading: bool = false
+    CssSkipSpace(p)
+    if CssFailed(p) { return }
+    // The shape and the extent keyword come in either order.
+    for round: 0..1 {
+        CssSkipSpace(p)
+        if !CssNameStart(CssPeek(p, 0)) { break }
+        saved := p.cursor
+        word := CssReadName(p)
+        if CssFailed(p) { return }
+        if CssNameEquals(word, "circle") { shape = 1; named_shape = true }
+        else if CssNameEquals(word, "ellipse") { shape = 0; named_shape = true }
+        else if CssNameEquals(word, "closest-corner") { size = 1; named_size = true }
+        else if CssNameEquals(word, "closest-side") { size = 2; named_size = true }
+        else if CssNameEquals(word, "farthest-corner") { size = 0; named_size = true }
+        else if CssNameEquals(word, "farthest-side") { size = 3; named_size = true }
+        else { p.cursor = saved; break }
+    }
+    if named_shape || named_size { leading = true }
+    // Explicit radii: one for a circle, two for an ellipse.
+    byte := CssPeek(p, 0)
+    if CssIsDigit(byte) || byte == #char "." || byte == #char "-" || byte == #char "+" {
+        first, ok := CssReadRadialRadius(p)
+        if CssFailed(p) { return }
+        if !ok {
+            CssFail(p, "a radial gradient's radius is a percentage or px length natively")
+            return
+        }
+        if named_size {
+            CssFail(p, "a radial size is one extent keyword or explicit radii, not both")
+            return
+        }
+        leading = true
+        rx = first
+        saved := p.cursor
+        second, more := CssReadRadialRadius(p)
+        if CssFailed(p) { return }
+        if more {
+            if shape == 1 {
+                CssFail(p, "a circle takes one radius; an ellipse takes two")
+                return
+            }
+            ry = second
+        } else {
+            p.cursor = saved
+            if first < 0.0 {
+                CssFail(p, "one radius makes a circle; a circle's radius is a px length, percentages need an ellipse")
+                return
+            }
+            if named_shape && shape == 0 {
+                CssFail(p, "an ellipse takes two radii; a single radius makes a circle")
+                return
+            }
+            shape = 1
+            ry = rx
+        }
+    }
+    // `at <position>` when the next word says so.
+    CssSkipSpace(p)
+    if CssNameStart(CssPeek(p, 0)) {
+        saved := p.cursor
+        word := CssReadName(p)
+        if CssFailed(p) { return }
+        if CssNameEquals(word, "at") {
+            px, py := CssReadRadialPosition(p)
+            if CssFailed(p) { return }
+            center_x = px
+            center_y = py
+            leading = true
+        } else {
+            p.cursor = saved
+        }
+    }
+    if leading {
+        if !CssExpect(p, #char ",", "expected ',' after the radial gradient's shape, size or position") { return }
+    }
+    count, colors, positions := CssReadGradientStopList(p, "expected ')' to close radial-gradient()")
+    if CssFailed(p) { return }
+    CssSetValue(p, cast(s32)CssFieldBackground, colors[0])
+    CssSetValue(p, cast(s32)CssFieldBackgroundEnd, colors[count - 1])
+    CssClearGradient(p)
+    for index: 1..count - 2 {
+        CssSetValue(p, cast(s32)CssFieldGradientStop1 + index - 1, colors[index])
+    }
+    box := *p.box_template
+    box.radial_shape = shape
+    box.radial_size = size
+    box.radial_rx = cast(float32)rx
+    box.radial_ry = cast(float32)ry
+    box.radial_cx = cast(float32)center_x
+    box.radial_cy = cast(float32)center_y
+    box.gradient_count = count
+    for index: 0..count - 1 { box.gradient_stops[index] = cast(float32)positions[index] }
+    box.fields |= cast(u32)StyleBoxRadial
+    CssGradientTarget(p, property, "a radial gradient paints on Row, Column and Grid; other widgets paint its first and last colors top to bottom")
+    unused CssEndValue(p, end, property)
 }

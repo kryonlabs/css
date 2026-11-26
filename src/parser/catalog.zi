@@ -14,7 +14,7 @@ CssCatalogCount :: 93
 
 css_catalog_0: [10]CssCatalogEntry = .[
     .{"color", "*", "#203040", "color, var(), color-mix()"},
-    .{"background", "Column", "linear-gradient(135deg, #0ea5e9, #6366f1 60%, #a855f7)", "color or linear-gradient(): angle or to side/corner, 2-6 stops with % positions"},
+    .{"background", "Column", "radial-gradient(circle closest-side at 25% 25%, #0ea5e9, #a855f7)", "color, linear-gradient() (angle or to side/corner) or radial-gradient() (shape, extent or radii, at position); 2-6 stops with % positions"},
     .{"background-color", "*", "rgb(10 20 30)", "color"},
     .{"border", "*", "1px solid #ccddee", "width (or thin, medium, thick), solid or none, color"},
     .{"border-color", "*", "hsl(200 50% 40%)", "color"},
@@ -116,7 +116,7 @@ css_catalog_8: [10]CssCatalogEntry = .[
     .{"outline", "Button", "2px solid #38bdf8", "[width] [solid, auto or none] [color]: the focus ring"},
     .{"outline-width", "Button", "3px", "length, thin, medium or thick"},
     .{"outline-offset", "Button", "2px", "signed length outside the edge"},
-    .{"background-image", "Row", "linear-gradient(to right, #111827, #374151)", "none or linear-gradient()"},
+    .{"background-image", "Row", "linear-gradient(to right, #111827, #374151)", "none, linear-gradient() or radial-gradient()"},
     .{"transform", "Column", "translateY(-2px) scale(1.02)", "none, or translate(), scale() and rotate() with their X and Y forms"},
     .{"translate", "Column", "0 -2px", "none, or x [y] lengths; moves the whole box"}];
 

@@ -205,7 +205,29 @@ NativeAuthoring :: () {
         Check(Rule(2).style.background == cast(u32)0x222222ff && (Rule(2).box.fields & cast(u32)StyleBoxGradient) == 0,
             "to top with two stops is a reversed plain gradient")
     }
-    ParseFails("Column { background: radial-gradient(red, blue); }", "browser-only; Kryon paints linear-gradient()", "radial")
+    if Builds("Column { background: radial-gradient(#ffffff, #000000); } Row { background: radial-gradient(circle closest-side at 25% 25%, #111111, #222222 40%, #333333); } Text { background: radial-gradient(60px 30px, red, blue); }",
+        "radial gradients") {
+        orb := Rule(0).box
+        Check(Rule(0).style.background == cast(u32)0xffffffff && Rule(0).style.background_end == cast(u32)0x000000ff &&
+            orb.radial_shape == 0 && orb.radial_size == 0 && orb.radial_cx == 0.5 && orb.radial_cy == 0.5 &&
+            orb.gradient_count == 2 && orb.gradient_stops[0] == 0.0 && orb.gradient_stops[1] == 1.0 &&
+            (orb.fields & cast(u32)StyleBoxRadial) != 0, "a default radial fills the box from its center")
+        lens := Rule(1).box
+        Check(lens.radial_shape == 1 && lens.radial_size == 2 && lens.radial_cx == 0.25 && lens.radial_cy == 0.25 &&
+            lens.gradient_count == 3 && lens.gradient_stops[1] == 0.4 &&
+            lens.gradient_colors[0] == cast(u32)0x222222ff, "a circle sized to its closest side, centered by 'at'")
+        sized := Rule(2).box
+        Check(sized.radial_shape == 0 && sized.radial_rx == 60.0 && sized.radial_ry == 30.0 &&
+            (sized.fields & cast(u32)StyleBoxRadial) != 0, "two radii size an ellipse")
+    }
+    ParseFails("Column { background: radial-gradient(farthest-corner 50px, red, blue); }",
+        "one extent keyword or explicit radii", "extent with radii")
+    ParseFails("Column { background: radial-gradient(50%, red, blue); }",
+        "a circle's radius is a px length", "one percentage radius")
+    ParseFails("Column { background: radial-gradient(circle 60px 30px, red, blue); }",
+        "a circle takes one radius", "circle with two radii")
+    ParseFails("Column { background: radial-gradient(ellipse 60px, red, blue); }",
+        "an ellipse takes two radii", "ellipse with one radius")
     ParseFails("Column { background: linear-gradient(red 10px, blue); }", "stop positions are percentages", "px stop")
     ParseFails("Column { border-top: 2px dotted red; }", "borders are solid", "dotted side")
     ParseFails("Button { outline: 2px dashed red; }", "focus rings are solid", "dashed outline")

@@ -910,7 +910,7 @@ style_pack_material_typefaces_count :: 0;
 #program_export
 StylePackMaterial :: () -> CssCompiledSheet {
     compiled: CssCompiledSheet
-    compiled.rule_words = 126
+    compiled.rule_words = 128
     compiled.rule_count = 266
     compiled.rules = style_pack_material_rules[0:style_pack_material_rules_count]
     compiled.refs = style_pack_material_refs[0:style_pack_material_refs_count]

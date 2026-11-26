@@ -346,6 +346,20 @@ Near :: (bounds: Rectangle, x: float32, y: float32, width: float32, height: floa
     return bounds.x == x && bounds.y == y && bounds.width == width && bounds.height == height
 }
 
+// The color of the plain fill covering a point, scanning the pending
+// paint queue; a transparent color when no fill covers it.
+RadialFillAt :: (x: float32, y: float32) -> Color {
+    found: Color
+    for index: cast(s32)0..PendingPaintCount(integration_session) - 1 {
+        paint := PendingPaintAt(integration_session, index)
+        if paint.kind != cast(s32)PaintKindRoundedFill { continue }
+        if x < paint.bounds.x || y < paint.bounds.y { continue }
+        if x >= paint.bounds.x + paint.bounds.width || y >= paint.bounds.y + paint.bounds.height { continue }
+        found = paint.color
+    }
+    return found
+}
+
 // Margins, auto centering, min/max sizes, overflow and text-align from the
 // packed sheet, at a narrow and a wide viewport.
 ResponsiveBox :: (width: float32) {
@@ -643,6 +657,18 @@ Gradients :: () {
         Near(top.bounds, 10.0, 40.0, 100.0, 30.0) && ColorIs(top.color, cast(u32)0xff0000ff) &&
         ColorIs(top.end_color, cast(u32)0x00ff00ff) && Near(bottom.bounds, 10.0, 70.0, 100.0, 30.0) &&
         ColorIs(bottom.end_color, cast(u32)0x0000ffff), "a vertical three-stop gradient is two bands")
+    before = PendingPaintCount(integration_session)
+    orb := Layout.Draw(integration_session, .{.key = 981, .class_name = StyleClass("orb"),
+        .bounds = .{10.0, 110.0, 64.0, 32.0}})
+    Check(orb.opened && End(integration_session), "close orb")
+    lens := Layout.Draw(integration_session, .{.key = 982, .class_name = StyleClass("lens"),
+        .bounds = .{84.0, 110.0, 100.0, 60.0}})
+    Check(lens.opened && End(integration_session), "close lens")
+    Check(PendingPaintCount(integration_session) > before + 100, "radial gradients paint band fills")
+    Check(RadialFillAt(42.0, 126.0).r > cast(u8)200, "the orb's center takes the first color")
+    Check(RadialFillAt(10.5, 110.5).r < cast(u8)32, "the orb's corner nears the last color")
+    Check(RadialFillAt(109.0, 125.0).r > cast(u8)200, "the lens' point takes the first color")
+    Check(ColorIs(RadialFillAt(85.0, 111.0), cast(u32)0x000000ff), "beyond the lens' ending shape is the last color")
     face: StyleData = .{.fields = cast(u32)StyleBackground | cast(u32)StyleElevation | cast(u32)StylePaddingX |
         cast(u32)StylePaddingY, .background = cast(u32)0x223344ff, .elevation = .ElevationRoleFloating,
         .padding_x = 6.0, .padding_y = 4.0}

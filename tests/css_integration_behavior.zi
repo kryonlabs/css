@@ -6,9 +6,9 @@
 using RasterHost :: #import "css_button_raster_host";
 BoxWidget :: #import "kryon/box";
 ButtonWidget :: #import "kryon/button";
+Fixture :: #import "css_integration_fixture";
 Layout :: #import "kryon/layout";
 Grid :: #import "kryon/grid";
-Page :: #import "kryon/page";
 TextWidget :: #import "kryon/text";
 #import "kryon/grid_props"
 #import "kryon/control_props"
@@ -114,15 +114,10 @@ PropsFor :: (id: s32, state: s32) -> ButtonWidget.Props {
 Draw :: (props: ButtonWidget.Props) -> bool {
     BeginFrame(integration_session, cast(u64)props.id,
         Rectangle.{0.0, 0.0, 200.0, 100.0})
-    if ButtonWidget.Draw(integration_session, props) != 0 { return false }
+    if Fixture.DrawButton(integration_session, props) { return false }
     return EndFrame(integration_session) == cast(FrameStatus)FrameOk
 }
 
-ColorIs :: (color: Color, value: u32) -> bool {
-    return color.r == cast(u8)(value >> cast(u32)24) &&
-        color.g == cast(u8)(value >> cast(u32)16) &&
-        color.b == cast(u8)(value >> cast(u32)8) && color.a == cast(u8)value
-}
 
 Install :: () -> bool {
     CssSheetReset(*integration_sheet)
@@ -203,16 +198,14 @@ Integration :: () {
 LayoutIntegration :: () {
     viewport: Rectangle = .{0.0, 0.0, 200.0, 100.0}
     BeginFrame(integration_session, cast(u64)500, viewport)
-    row := Layout.Row(integration_session,
+    row := Fixture.OpenRow(integration_session,
         .{.key = 201, .class_name = StyleClass("actions"), .bounds = .{0.0, 0.0, 100.0, 40.0}})
     Check(row.opened && row.gap == 0 && row.content.x == 7.0 && row.content.y == 3.0,
         "native row uses zero column gap and separate padding axes")
-    Check(End(integration_session), "close row")
-    column := Layout.Draw(integration_session,
+    column := Fixture.OpenColumn(integration_session,
         .{.key = 202, .class_name = StyleClass("actions"), .bounds = .{0.0, 50.0, 100.0, 40.0}})
     Check(column.opened && column.gap == 4 && column.content.x == 7.0 && column.content.y == 53.0,
         "native column uses row gap and separate padding axes")
-    Check(End(integration_session), "close column")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "native layout frame")
 }
 
@@ -220,7 +213,10 @@ LayoutSizing :: () {
     viewport: Rectangle = .{0.0, 0.0, 200.0, 100.0}
     sized := StyleClass("sized")
     BeginFrame(integration_session, cast(u64)501, viewport)
-    row := Layout.Row(integration_session, .{.key = 211, .class_name = sized})
+    sizing: [1]Fixture.SizingResults
+    row := Fixture.SizingRow(integration_session, .{.key = 211, .class_name = sized},
+        .{.key = 212, .class_name = sized, .bounds = .{0.0, 0.0, 44.0, 0.0}},
+        .{.key = 213, .bounds = .{0.0, 0.0, 10.0, 8.0}}, sizing[:])
     Check(row.opened && row.bounds.width == 132.5 && row.bounds.height == 40.0 &&
         row.content.width == 124.5 && row.content.height == 32.0,
         "parsed sizing controls the outer bounds and content")
@@ -233,16 +229,12 @@ LayoutSizing :: () {
     unrelated := ResolveInstalledStyleRules(StyleData.{}, facts, StyleStateAny())
     Check(!StyleHasField(unrelated, cast(u32)StyleWidth | cast(u32)StyleHeight),
         "container sizes do not enter the button cascade")
-    column := Layout.Draw(integration_session,
-        .{.key = 212, .class_name = sized, .bounds = .{0.0, 0.0, 44.0, 0.0}})
+    column := sizing[0].column
     Check(column.opened && column.bounds.x == 4.0 && column.bounds.y == 4.0 &&
         column.bounds.width == 44.0 && column.bounds.height == 40.0,
         "nested column uses explicit width and styled height")
-    Check(End(integration_session), "close sized column")
-    sibling := BoxWidget.Draw(integration_session, .{.key = 213, .bounds = .{0.0, 0.0, 10.0, 8.0}})
-    Check(sibling >= 0 && TreeSubmittedBounds(integration_session, sibling).x == 48.0,
+    Check(sizing[0].node >= 0 && TreeSubmittedBounds(integration_session, sizing[0].node).x == 48.0,
         "retained siblings advance by the allocated column width")
-    Check(End(integration_session), "close sized row")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "parsed size frame")
 
     CssSheetReset(*integration_sheet)
@@ -250,13 +242,12 @@ LayoutSizing :: () {
         CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "sizing pack installs")
     packed := StyleClass("packed")
     BeginFrame(integration_session, cast(u64)502, viewport)
-    fixed := Layout.Draw(integration_session, .{.key = 214, .class_name = packed})
+    fixed := Fixture.OpenColumn(integration_session, .{.key = 214, .class_name = packed})
     Check(fixed.bounds.width == 88.0 && fixed.bounds.height == 35.0, "pack keeps both sizes")
-    Check(End(integration_session), "close packed column")
-    fluid := Layout.Row(integration_session, .{.key = 215, .class_name = packed, .id = StyleId("fluid")})
+    fluid := Fixture.OpenRow(integration_session,
+        .{.key = 215, .class_name = packed, .id = StyleId("fluid")})
     Check(fluid.bounds.width == 200.0 && fluid.bounds.height == 35.0,
         "packed auto wins the width cascade and leaves the height intact")
-    Check(End(integration_session), "close packed row")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "packed size frame")
 }
 
@@ -264,16 +255,18 @@ ResponsiveGrid :: (width: float32, columns: s32, row_gap: s32, section: bool = f
     env := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), width)
     Check(CssSheetInstall(*integration_sheet, env, null), "install viewport styles")
     BeginFrame(integration_session, cast(u64)503, Rectangle.{0.0, 0.0, width, 540.0})
-    if section {
-        parent := Page.Section(integration_session, .{.key = 301, .label = "Dashboard",
-            .class_name = StyleClass("dashboard")})
-        Check(parent.opened, "open dashboard section")
-    } else {
-        parent := Layout.Draw(integration_session, .{.key = 301, .padding = 16, .gap = 10})
-        Check(parent.opened, "open dashboard column")
-    }
     items: [3]GridItem = .[.{.height = 100, .column_span = -1}, .{.height = 80}, .{.height = 60}]
-    grid := Layout.Grid(integration_session, GridProps.{.key = 302, .class_name = StyleClass("panels")}, items[:])
+    empty_bounds: [1]Rectangle
+    results: [1]Fixture.DashboardResults
+    Fixture.Dashboard(integration_session, section,
+        .{.key = 301, .label = "Dashboard", .class_name = StyleClass("dashboard")},
+        .{.key = 301, .padding = 16, .gap = 10},
+        .{.key = 302, .class_name = StyleClass("panels")},
+        .{.key = 303, .class_name = StyleClass("metrics")},
+        items[:], items[1:], empty_bounds[0:0], results[:])
+    if section { Check(results[0].opened, "open dashboard section") }
+    else { Check(results[0].opened, "open dashboard column") }
+    grid := results[0].grid
     cursor := grid.cursor
     Check(grid.container.opened && cursor.metrics.columns == columns &&
         grid.container.bounds.width == width - 32.0 && grid.container.content.width == width - 52.0,
@@ -294,13 +287,10 @@ ResponsiveGrid :: (width: float32, columns: s32, row_gap: s32, section: bool = f
         Check(second.y == cursor.item.y && cursor.item.x - second.x - second.width == 14.0,
             "wide chart panels share a row with the CSS column gap")
     }
-    Check(End(integration_session), "close panels")
-    metrics := Layout.Grid(integration_session, GridProps.{.key = 303, .class_name = StyleClass("metrics")}, items[1:])
+    metrics := results[0].metrics
     Check(metrics.cursor.metrics.columns == 2, "auto-fit collapses unused columns when item spans are declared")
     Check(metrics.container.bounds.y == grid.container.bounds.y + grid.container.bounds.height + 10.0,
         "following grid advances by measured height")
-    Check(End(integration_session), "close metrics")
-    Check(End(integration_session), "close dashboard parent")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "responsive grid frame")
 }
 
@@ -325,7 +315,8 @@ ResponsiveFlex :: (width: float32, wrap: bool) {
         .width = 120.0, .height = 12.0}, .{.kind = StyleKindText(), .class_name = StyleClass("secondary-filter"),
         .width = 200.0, .height = 24.0}, .{.width = 100.0, .height = 20.0}]
     placed: [3]Layout.FlexPlacement
-    row := Layout.Row(integration_session, .{.key = 401, .class_name = StyleClass("filters")}, items[:], placed[:])
+    row := Fixture.FlexRow(integration_session,
+        .{.key = 401, .class_name = StyleClass("filters")}, items[:], placed[:])
     first := placed[0].bounds
     second := placed[1].bounds
     last := placed[2].bounds
@@ -338,13 +329,9 @@ ResponsiveFlex :: (width: float32, wrap: bool) {
         Check(row.bounds.height == 30.0 && first.x == 325.0 && first.width == 870.0 && second.x == 115.0 &&
             last.x == 5.0 && last.y == 5.0, "wide row evaluates reverse direction and nowrap at the breakpoint")
     }
-    Check(End(integration_session), "close flex row")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "responsive flex frame")
 }
 
-Near :: (bounds: Rectangle, x: float32, y: float32, width: float32, height: float32) -> bool {
-    return bounds.x == x && bounds.y == y && bounds.width == width && bounds.height == height
-}
 
 // The color of the plain fill covering a point, scanning the pending
 // paint queue; a transparent color when no fill covers it.
@@ -366,35 +353,28 @@ ResponsiveBox :: (width: float32) {
     env := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), width)
     Check(CssSheetInstall(*integration_sheet, env, null), "install box viewport styles")
     BeginFrame(integration_session, cast(u64)505, Rectangle.{0.0, 0.0, width, 540.0})
-    outer := Layout.Draw(integration_session, .{.key = 601})
-    page := Layout.Draw(integration_session, .{.key = 602, .class_name = StyleClass("page"),
-        .bounds = .{height = 100.0}})
+    boxes: [1]Fixture.BoxResults
+    outer := Fixture.BoxBody(integration_session, .{.key = 601},
+        .{.key = 602, .class_name = StyleClass("page"), .bounds = .{height = 100.0}},
+        .{.key = 603, .class_name = StyleClass("inset"), .bounds = .{height = 50.0}},
+        .{.key = 604, .bounds = .{0.0, 0.0, width, 80.0}},
+        .{.key = 605, .bounds = .{height = 10.0}},
+        .{.key = 606, .class_name = StyleClass("bounded"), .bounds = .{width = 200.0, height = 40.0}},
+        .{.key = 607, .class_name = StyleClass("fluid-pad"), .bounds = .{height = 40.0}},
+        boxes[:])
     if width > 820.0 {
-        Check(Near(page.bounds, 300.0, 0.0, 600.0, 100.0), "max-width with auto margins centers the column")
+        Check(Near(boxes[0].page.bounds, 300.0, 0.0, 600.0, 100.0), "max-width with auto margins centers the column")
     } else {
-        Check(Near(page.bounds, 16.0, 0.0, width - 32.0, 100.0), "narrow media drops the maximum for inline margins")
+        Check(Near(boxes[0].page.bounds, 16.0, 0.0, width - 32.0, 100.0), "narrow media drops the maximum for inline margins")
     }
-    Check(page.content.width == page.bounds.width, "content follows the margin box")
-    Check(End(integration_session), "close page")
-    inset := Layout.Draw(integration_session, .{.key = 603, .class_name = StyleClass("inset"),
-        .bounds = .{height = 50.0}})
-    Check(Near(inset.bounds, 6.0, 104.0, width - 12.0, 50.0), "fixed margins inset the box in its slot")
-    child := BoxWidget.Draw(integration_session, .{.key = 604, .bounds = .{0.0, 0.0, width, 80.0}})
-    clipped := TreeSubmittedNodeAt(integration_session, child)
+    Check(boxes[0].page.content.width == boxes[0].page.bounds.width, "content follows the margin box")
+    clipped := TreeSubmittedNodeAt(integration_session, boxes[0].child)
     Check(clipped.clipped && Near(clipped.clip, 6.0, 104.0, width - 12.0, 50.0), "overflow hidden clips children")
-    Check(End(integration_session), "close inset")
-    after := BoxWidget.Draw(integration_session, .{.key = 605, .bounds = .{height = 10.0}})
-    Check(TreeSubmittedBounds(integration_session, after).y == 162.0, "the next sibling starts after the bottom margin")
-    bounded := Layout.Row(integration_session, .{.key = 606, .class_name = StyleClass("bounded"),
-        .bounds = .{width = 200.0, height = 40.0}})
-    Check(Near(bounded.bounds, 0.0, 172.0, 300.0, 24.0), "min-width and max-height clamp the declared size")
-    Check(End(integration_session), "close bounded row")
-    fluid := Layout.Draw(integration_session, .{.key = 607, .class_name = StyleClass("fluid-pad"),
-        .bounds = .{height = 40.0}})
-    Check(fluid.content.x - fluid.bounds.x == ifx width > 820.0 then 20.0 else 0.0,
+    Check(TreeSubmittedBounds(integration_session, boxes[0].after).y == 162.0, "the next sibling starts after the bottom margin")
+    Check(Near(boxes[0].bounded.bounds, 0.0, 172.0, 300.0, 24.0), "min-width and max-height clamp the declared size")
+    Check(boxes[0].fluid.content.x - boxes[0].fluid.bounds.x == ifx width > 820.0 then 20.0 else 0.0,
         "a packed clamp() of vw applies in its media rule and caps at its maximum")
-    Check(End(integration_session), "close fluid column")
-    Check(outer.opened && End(integration_session), "close box column")
+    Check(outer.opened, "close box column")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "box frame")
     face := ResolveInstalledTextStyle(
         .{.kind = StyleKindText(), .class_name = StyleClass("centered")}, TextFace.{})
@@ -407,13 +387,13 @@ PaintedBox :: () {
     env := CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), 400.0)
     Check(CssSheetInstall(*integration_sheet, env, null), "install card styles")
     BeginFrame(integration_session, cast(u64)506, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    outer := Layout.Draw(integration_session, .{.key = 701})
-    before := PendingPaintCount(integration_session)
-    card := Layout.Draw(integration_session, .{.key = 702, .class_name = StyleClass("card")})
-    unused BoxWidget.Draw(integration_session, .{.key = 703, .bounds = .{height = 30.0},
-        .fill = Color.{1, 2, 3, 255}})
-    Check(card.opened && End(integration_session), "close card")
-    Check(Near(TreeSubmittedBounds(integration_session, card.node), 0.0, 0.0, 400.0, 50.0),
+    paints: [1]Fixture.PaintResults
+    outer := Fixture.CardWithChild(integration_session, .{.key = 701},
+        .{.key = 702, .class_name = StyleClass("card")},
+        .{.key = 703, .bounds = .{height = 30.0}, .fill = Color.{1, 2, 3, 255}}, paints[:])
+    before := paints[0].before
+    Check(paints[0].card.opened, "close card")
+    Check(Near(TreeSubmittedBounds(integration_session, paints[0].card.node), 0.0, 0.0, 400.0, 50.0),
         "the card wraps its child and padding")
     fill := PendingPaintAt(integration_session, before)
     line := PendingPaintAt(integration_session, before + 1)
@@ -424,7 +404,7 @@ PaintedBox :: () {
         ColorIs(line.color, cast(u32)0x405060ff), "then its border")
     Check(child.kind == PaintKindRoundedFill && ColorIs(child.color, cast(u32)0x010203ff) &&
         Near(child.bounds, 10.0, 10.0, 380.0, 30.0), "children paint above the box")
-    Check(outer.opened && End(integration_session), "close painted column")
+    Check(outer.opened, "close painted column")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "painted frame")
 }
 
@@ -434,25 +414,29 @@ PaintedBox :: () {
 FillLayout :: () {
     Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install fill styles")
     BeginFrame(integration_session, cast(u64)507, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    shell := Layout.Row(integration_session, .{.key = 801, .bounds = .{0.0, 0.0, 400.0, 300.0}})
-    side := Layout.Draw(integration_session, .{.key = 802, .class_name = StyleClass("side")})
+    fills: [1]Fixture.FillResults
+    shell := Fixture.FillBody(integration_session,
+        .{.key = 801, .bounds = .{0.0, 0.0, 400.0, 300.0}},
+        .{.key = 802, .class_name = StyleClass("side")},
+        .{.key = 803},
+        .{.key = 804, .text = "Services"},
+        .{.key = 805, .class_name = StyleClass("grow")},
+        .{.key = 806},
+        .{.key = 807, .class_name = StyleClass("push")},
+        fills[:])
+    side := fills[0].side
+    main := fills[0].main
+    title := fills[0].title
+    grow := fills[0].grow
+    row := fills[0].row
+    push := fills[0].push
     Check(shell.opened && Near(side.bounds, 0.0, 0.0, 120.0, 300.0), "a fixed-width column stretches to the row")
-    Check(End(integration_session), "close side")
-    main := Layout.Draw(integration_session, .{.key = 803})
     Check(Near(main.bounds, 120.0, 0.0, 280.0, 300.0), "an auto width takes what the row has left")
-    TextWidget.Draw(integration_session, .{.key = 804, .text = "Services"})
-    title := TreeSubmittedBounds(integration_session, TreeSubmittedCount(integration_session) - 1)
     Check(title.x == 120.0 && title.y == 0.0 && title.width == 280.0 && title.height > 0.0,
         "placed text fills the column and takes its line height")
-    grow := Layout.Draw(integration_session, .{.key = 805, .class_name = StyleClass("grow")})
     Check(grow.bounds.y == title.height && grow.bounds.height == 300.0 - title.height,
         "flex: 1 takes the column's remaining height")
-    Check(End(integration_session), "close grow")
-    row := Layout.Row(integration_session, .{.key = 806})
-    push := Layout.Row(integration_session, .{.key = 807, .class_name = StyleClass("push")})
     Check(row.opened && push.bounds.x == 350.0 && push.bounds.width == 50.0, "margin-left: auto pushes to the row end")
-    Check(End(integration_session) && End(integration_session), "close push row")
-    Check(End(integration_session) && End(integration_session), "close main and shell")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "fill frame")
 }
 
@@ -462,33 +446,33 @@ FillLayout :: () {
 PercentLayout :: () {
     Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install percent styles")
     BeginFrame(integration_session, cast(u64)508, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    shell := Layout.Draw(integration_session, .{.key = 901, .bounds = .{0.0, 0.0, 400.0, 300.0}})
-    half := Layout.Draw(integration_session, .{.key = 902, .class_name = StyleClass("half")})
-    Check(shell.opened && Near(half.bounds, 0.0, 0.0, 200.0, 75.0), "width: 50% and height: 25% of the parent")
-    Check(End(integration_session), "close half")
-    limited := Layout.Draw(integration_session, .{.key = 903, .class_name = StyleClass("limited"),
-        .bounds = .{height = 20.0}})
-    Check(Near(limited.bounds, 0.0, 75.0, 120.0, 20.0), "max-width: 30% caps the auto width")
-    Check(End(integration_session), "close limited")
-    loose := Layout.Draw(integration_session, .{.key = 904})
-    tall := Layout.Draw(integration_session, .{.key = 905, .class_name = StyleClass("half-tall")})
-    unused BoxWidget.Draw(integration_session, .{.key = 906, .bounds = .{height = 10.0}})
-    Check(loose.opened && tall.opened && End(integration_session), "close half-tall")
-    Check(TreeSubmittedBounds(integration_session, tall.node).height == 10.0,
-        "a percent height in a content-sized parent sizes to content")
-    Check(End(integration_session), "close loose")
-    share := Layout.Row(integration_session, .{.key = 907, .class_name = StyleClass("share"),
-        .bounds = .{height = 260.0}})
-    Check(share.bounds.height == 240.0, "max-height: 80% caps a declared height")
-    Check(End(integration_session), "close share")
-    Check(End(integration_session), "close percent shell")
     items: [2]Layout.FlexItem = .[.{.kind = StyleKindText(), .class_name = StyleClass("quarter"),
         .width = 50.0, .height = 20.0}, .{.width = 30.0, .height = 20.0}]
     placed: [2]Layout.FlexPlacement
-    row := Layout.Row(integration_session, .{.key = 908, .bounds = .{0.0, 0.0, 400.0, 0.0}}, items[:], placed[:])
-    Check(row.opened && placed[0].bounds.width == 100.0 && placed[1].bounds.width == 30.0,
+    percents: [1]Fixture.PercentResults
+    shell := Fixture.PercentBody(integration_session,
+        .{.key = 901, .bounds = .{0.0, 0.0, 400.0, 300.0}},
+        .{.key = 902, .class_name = StyleClass("half")},
+        .{.key = 903, .class_name = StyleClass("limited"), .bounds = .{height = 20.0}},
+        .{.key = 904},
+        .{.key = 905, .class_name = StyleClass("half-tall")},
+        .{.key = 906, .bounds = .{height = 10.0}},
+        .{.key = 907, .class_name = StyleClass("share"), .bounds = .{height = 260.0}},
+        .{.key = 908, .bounds = .{0.0, 0.0, 400.0, 0.0}},
+        items[:], placed[:], percents[:])
+    half := percents[0].half
+    limited := percents[0].limited
+    loose := percents[0].loose
+    tall := percents[0].tall
+    share := percents[0].share
+    Check(shell.opened && Near(half.bounds, 0.0, 0.0, 200.0, 75.0), "width: 50% and height: 25% of the parent")
+    Check(Near(limited.bounds, 0.0, 75.0, 120.0, 20.0), "max-width: 30% caps the auto width")
+    Check(loose.opened && tall.opened, "close half-tall")
+    Check(TreeSubmittedBounds(integration_session, tall.node).height == 10.0,
+        "a percent height in a content-sized parent sizes to content")
+    Check(share.bounds.height == 240.0, "max-height: 80% caps a declared height")
+    Check(percents[0].basis.opened && placed[0].bounds.width == 100.0 && placed[1].bounds.width == 30.0,
         "flex: 0 0 25% is a quarter of the row")
-    Check(End(integration_session), "close basis row")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "percent frame")
 }
 
@@ -498,9 +482,9 @@ SideBorders :: () {
     Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install border styles")
     BeginFrame(integration_session, cast(u64)509, Rectangle.{0.0, 0.0, 400.0, 300.0})
     before := PendingPaintCount(integration_session)
-    ruled := Layout.Draw(integration_session, .{.key = 951, .class_name = StyleClass("ruled"),
+    ruled := Fixture.OpenColumn(integration_session, .{.key = 951, .class_name = StyleClass("ruled"),
         .bounds = .{10.0, 20.0, 100.0, 50.0}})
-    Check(ruled.opened && End(integration_session), "close ruled")
+    Check(ruled.opened, "close ruled")
     Check(PendingPaintCount(integration_session) == before + 4, "four side bands")
     top := PendingPaintAt(integration_session, before)
     bottom := PendingPaintAt(integration_session, before + 1)
@@ -521,31 +505,20 @@ SideBorders :: () {
     Check(Near(plain.bounds, 8.0, 8.0, 84.0, 34.0) && plain.width == 2.0, "without an outline the ring is 2px")
 }
 
-ContextColor :: (kind: s32, class_name: string, state: s32) -> u32 {
-    facts := StyleDefaultFacts(kind)
-    if class_name != "" { facts.class_name = StyleClass(class_name) }
-    return ResolveInstalledStyleRules(StyleData.{}, facts, state).foreground
-}
 
 // Ancestor, parent, first-child and :not() selectors match the widget about
 // to be built under the open containers.
 ContextSelectors :: () {
     Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install context styles")
+    BeginFrame(integration_session, cast(u64)510, Rectangle.{0.0, 0.0, 400.0, 300.0})
+    contexts: [1]Fixture.ContextResults
+    outer := Fixture.ContextBody(integration_session, .{.key = 961},
+        .{.key = 962, .class_name = StyleClass("panel")},
+        .{.key = 963, .bounds = .{height = 10.0}},
+        .{.key = 964}, contexts[:])
     text := StyleKindText()
     any := StyleStateAny()
-    BeginFrame(integration_session, cast(u64)510, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    outer := Layout.Draw(integration_session, .{.key = 961})
-    Check(ContextColor(text, "", any) != cast(u32)0x010101ff, "no ancestor outside the panel")
-    panel := Layout.Draw(integration_session, .{.key = 962, .class_name = StyleClass("panel")})
-    Check(ContextColor(text, "", any) == cast(u32)0x010101ff, ".panel Text matches inside the panel")
-    Check(ContextColor(text, "direct", any) == cast(u32)0x020202ff, ".panel > .direct matches its child")
-    Check(ContextColor(text, "lead", any) == cast(u32)0x030303ff, ":first-child before any child")
-    unused BoxWidget.Draw(integration_session, .{.key = 963, .bounds = .{height = 10.0}})
-    Check(ContextColor(text, "lead", any) == cast(u32)0x010101ff, "no first child after a sibling")
-    inner := Layout.Draw(integration_session, .{.key = 964})
-    Check(ContextColor(text, "direct", any) == cast(u32)0x010101ff, "a grandchild is a descendant, not a child")
-    Check(outer.opened && panel.opened && inner.opened && End(integration_session) &&
-        End(integration_session) && End(integration_session), "close context containers")
+    Check(outer.opened && contexts[0].panel.opened && contexts[0].inner.opened, "close context containers")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "context frame")
     Check(ContextColor(text, "quiet", any) == cast(u32)0x040404ff &&
         ContextColor(text, "quiet", cast(s32)ButtonStateHover) != cast(u32)0x040404ff, ":not(:hover)")
@@ -555,102 +528,56 @@ ContextSelectors :: () {
 
 // The sibling family: pending facts match while building, late facts
 // (:last-child family) read the committed frame and converge after a
-// structure change on the next frame.
-// The sibling family: pending facts match while building, late facts
-// (:last-child family) read the committed frame and converge after a
 // structure change on the next frame. A leading box separates child
 // positions from of-type positions.
 SiblingSelectors :: () {
     Check(CssSheetLoad(*integration_sheet, StylePackLayout()) &&
         CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install sibling styles")
-    text := StyleKindText()
-    any := StyleStateAny()
+    outer: Layout.Props = .{.key = 970}
+    first: Layout.Props = .{.key = 971}
+    box: BoxWidget.Props = .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}}
+    text_a: TextWidget.Props = .{.key = 973, .text = "a", .class_name = StyleClass("f1")}
+    text_b: TextWidget.Props = .{.key = 974, .text = "b", .class_name = StyleClass("f1")}
+    text_c: TextWidget.Props = .{.key = 975, .text = "c", .class_name = StyleClass("f1")}
+    second: Layout.Props = .{.key = 976}
+    solo: TextWidget.Props = .{.key = 977, .text = "solo", .class_name = StyleClass("f5")}
     BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    outer := Layout.Draw(integration_session, .{.key = 970})
-    unused Layout.Draw(integration_session, .{.key = 971})
-    Check(ContextColor(text, "f1", any) == cast(u32)0x101010ff, ":first-child before any child")
-    Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, ":first-of-type before any child")
-    Check(ContextColor(text, "f2", any) != cast(u32)0x202020ff, ":nth-child(2) misses 1")
-    Check(ContextColor(text, "f4", any) != cast(u32)0x404040ff, "a new container has no committed last child")
-    unused BoxWidget.Draw(integration_session, .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}})
-    Check(ContextColor(text, "f2", any) == cast(u32)0x202020ff, ":nth-child(2) follows any kind of sibling")
-    Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, "a box is not of the text type")
-    Check(ContextColor(text, "f1", any) != cast(u32)0x101010ff, ":first-child misses 2")
-    unused TextWidget.Draw(integration_session, .{.key = 973, .text = "a", .class_name = StyleClass("f1")})
-    Check(ContextColor(text, "f3", any) == cast(u32)0x303030ff, ":nth-child(odd) at 3")
-    unused TextWidget.Draw(integration_session, .{.key = 974, .text = "b", .class_name = StyleClass("f1")})
-    unused TextWidget.Draw(integration_session, .{.key = 975, .text = "c", .class_name = StyleClass("f1")})
-    Check(End(integration_session), "close the first sibling row")
-    unused Layout.Draw(integration_session, .{.key = 976})
-    Check(ContextColor(text, "f5", any) != cast(u32)0x505050ff, "a new container has no committed only child")
-    unused TextWidget.Draw(integration_session, .{.key = 977, .text = "solo", .class_name = StyleClass("f5")})
-    Check(End(integration_session), "close the sibling solo row")
-    Check(outer.opened && End(integration_session), "close the sibling column")
+    unused Fixture.SiblingFrame(integration_session, outer, first, box, text_a, text_b, text_c,
+        second, solo, 0)
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "first sibling frame")
-
-    // The committed row holds the box and three texts; late facts match now.
     BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    outer = Layout.Draw(integration_session, .{.key = 970})
-    unused Layout.Draw(integration_session, .{.key = 971})
-    Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, ":first-of-type keeps matching the text type")
-    Check(ContextColor(text, "f7", any) != cast(u32)0x707070ff, "the committed row holds more than one text")
-    unused BoxWidget.Draw(integration_session, .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}})
-    unused TextWidget.Draw(integration_session, .{.key = 973, .text = "a", .class_name = StyleClass("f1")})
-    unused TextWidget.Draw(integration_session, .{.key = 974, .text = "b", .class_name = StyleClass("f1")})
-    Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, ":last-child converges at the committed count")
-    Check(ContextColor(text, "f7", any) == cast(u32)0x707070ff, ":last-of-type converges at the committed count")
-    unused TextWidget.Draw(integration_session, .{.key = 975, .text = "c", .class_name = StyleClass("f1")})
-    Check(End(integration_session), "close the converged sibling row")
-    unused Layout.Draw(integration_session, .{.key = 976})
-    Check(ContextColor(text, "f5", any) == cast(u32)0x505050ff, ":only-child converges on the committed row")
-    Check(ContextColor(text, "f8", any) == cast(u32)0x808080ff, ":only-of-type converges on the committed row")
-    unused TextWidget.Draw(integration_session, .{.key = 977, .text = "solo", .class_name = StyleClass("f5")})
-    Check(End(integration_session), "close the converged solo row")
-    Check(outer.opened && End(integration_session), "close the converged column")
+    unused Fixture.SiblingFrame(integration_session, outer, first, box, text_a, text_b, text_c,
+        second, solo, 1)
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "converged sibling frame")
-
-    // Dropping the last text still converges this frame: the stale committed
-    // count equals the submitted position for one frame.
     BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    outer = Layout.Draw(integration_session, .{.key = 970})
-    unused Layout.Draw(integration_session, .{.key = 971})
-    unused BoxWidget.Draw(integration_session, .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}})
-    unused TextWidget.Draw(integration_session, .{.key = 973, .text = "a", .class_name = StyleClass("f1")})
-    unused TextWidget.Draw(integration_session, .{.key = 974, .text = "b", .class_name = StyleClass("f1")})
-    Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, "the stale committed count still converges the last position")
-    Check(ContextColor(text, "f5", any) != cast(u32)0x505050ff, "two children are not an only child")
-    Check(End(integration_session) && outer.opened && End(integration_session), "close the changed column")
+    unused Fixture.SiblingFrame(integration_session, outer, first, box, text_a, text_b, text_c,
+        second, solo, 2)
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "changed sibling frame")
     BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    outer = Layout.Draw(integration_session, .{.key = 970})
-    unused Layout.Draw(integration_session, .{.key = 971})
-    unused BoxWidget.Draw(integration_session, .{.key = 972, .bounds = .{0.0, 0.0, 40.0, 10.0}})
-    unused TextWidget.Draw(integration_session, .{.key = 973, .text = "a", .class_name = StyleClass("f1")})
-    Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, "the shorter row's last position converges")
-    unused TextWidget.Draw(integration_session, .{.key = 974, .text = "b", .class_name = StyleClass("f1")})
-    Check(ContextColor(text, "f4", any) != cast(u32)0x404040ff, "a position past the committed row waits one frame")
-    Check(End(integration_session) && outer.opened && End(integration_session), "close the shorter column")
+    unused Fixture.SiblingFrame(integration_session, outer, first, box, text_a, text_b, text_c,
+        second, solo, 3)
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "shorter sibling frame")
 }
 
 // Any-angle and multi-stop gradients paint from vertical gradient strips;
-// a widget's own face paints through Layout.Box, with its elevation, at End.
+// a widget's own face paints through the fixture's styled box, with its
+// elevation, at End.
 Gradients :: () {
     Check(CssSheetInstall(*integration_sheet, CssDefaultEnvironment(), null), "install gradient styles")
     BeginFrame(integration_session, cast(u64)511, Rectangle.{0.0, 0.0, 400.0, 300.0})
     before := PendingPaintCount(integration_session)
-    sunrise := Layout.Draw(integration_session, .{.key = 971, .class_name = StyleClass("sunrise"),
+    sunrise := Fixture.OpenColumn(integration_session, .{.key = 971, .class_name = StyleClass("sunrise"),
         .bounds = .{10.0, 10.0, 256.0, 20.0}})
-    Check(sunrise.opened && End(integration_session), "close sunrise")
+    Check(sunrise.opened, "close sunrise")
     Check(PendingPaintCount(integration_session) == before + 64, "a horizontal gradient is 64 strips")
     first := PendingPaintAt(integration_session, before)
     last := PendingPaintAt(integration_session, before + 63)
     Check(Near(first.bounds, 10.0, 10.0, 4.0, 20.0) && first.color.r < cast(u8)8 && last.color.r > cast(u8)247,
         "strips run dark to light left to right")
     before = PendingPaintCount(integration_session)
-    bands := Layout.Draw(integration_session, .{.key = 972, .class_name = StyleClass("bands"),
+    bands := Fixture.OpenColumn(integration_session, .{.key = 972, .class_name = StyleClass("bands"),
         .bounds = .{10.0, 40.0, 100.0, 60.0}})
-    Check(bands.opened && End(integration_session), "close bands")
+    Check(bands.opened, "close bands")
     top := PendingPaintAt(integration_session, before)
     bottom := PendingPaintAt(integration_session, before + 1)
     Check(PendingPaintCount(integration_session) == before + 2 && top.kind == PaintKindVerticalGradient &&
@@ -658,12 +585,12 @@ Gradients :: () {
         ColorIs(top.end_color, cast(u32)0x00ff00ff) && Near(bottom.bounds, 10.0, 70.0, 100.0, 30.0) &&
         ColorIs(bottom.end_color, cast(u32)0x0000ffff), "a vertical three-stop gradient is two bands")
     before = PendingPaintCount(integration_session)
-    orb := Layout.Draw(integration_session, .{.key = 981, .class_name = StyleClass("orb"),
+    orb := Fixture.OpenColumn(integration_session, .{.key = 981, .class_name = StyleClass("orb"),
         .bounds = .{10.0, 110.0, 64.0, 32.0}})
-    Check(orb.opened && End(integration_session), "close orb")
-    lens := Layout.Draw(integration_session, .{.key = 982, .class_name = StyleClass("lens"),
+    Check(orb.opened, "close orb")
+    lens := Fixture.OpenColumn(integration_session, .{.key = 982, .class_name = StyleClass("lens"),
         .bounds = .{84.0, 110.0, 100.0, 60.0}})
-    Check(lens.opened && End(integration_session), "close lens")
+    Check(lens.opened, "close lens")
     Check(PendingPaintCount(integration_session) > before + 100, "radial gradients paint band fills")
     Check(RadialFillAt(42.0, 126.0).r > cast(u8)200, "the orb's center takes the first color")
     Check(RadialFillAt(10.5, 110.5).r < cast(u8)32, "the orb's corner nears the last color")
@@ -673,9 +600,9 @@ Gradients :: () {
         cast(u32)StylePaddingY, .background = cast(u32)0x223344ff, .elevation = .ElevationRoleFloating,
         .padding_x = 6.0, .padding_y = 4.0}
     before = PendingPaintCount(integration_session)
-    card := Layout.Box(integration_session, .{.key = 973}, face)
-    unused BoxWidget.Draw(integration_session, .{.key = 974, .bounds = .{height = 12.0}, .fill = Color.{9, 9, 9, 255}})
-    Check(card.opened && End(integration_session), "close box")
+    card := Fixture.GradientCard(integration_session, .{.key = 973}, face,
+        .{.key = 974, .bounds = .{height = 12.0}, .fill = Color.{9, 9, 9, 255}})
+    Check(card.opened, "close box")
     Check(TreeSubmittedBounds(integration_session, card.node).height == 20.0, "the box wraps its child and padding")
     fill := PendingPaintAt(integration_session, before + 2)
     child := PendingPaintAt(integration_session, before + 3)
@@ -688,9 +615,8 @@ Gradients :: () {
 TransformFrame :: (key: u64, class_name: string, bounds: Rectangle, text: bool) -> CssButtonRasterState {
     unused CssButtonRasterReset()
     BeginFrame(integration_session, key, Rectangle.{0.0, 0.0, 400.0, 300.0})
-    box := Layout.Draw(integration_session, .{.key = key + 1, .class_name = StyleClass(class_name), .bounds = bounds})
-    if text { TextWidget.Draw(integration_session, .{.key = key + 2, .text = "Save"}) }
-    Check(box.opened && End(integration_session), "close transformed box")
+    box := Fixture.TransformedBox(integration_session, key, class_name, bounds, text)
+    Check(box.opened, "close transformed box")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "transformed frame")
     return CssButtonRasterSample()
 }

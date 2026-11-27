@@ -20,11 +20,6 @@ OUT=build/conformance
 EXPECTED=tests/css_conformance.expected
 INCLUDE="$("$ZIRAN" pkg path ziran 2> /dev/null)/include"
 
-quiet() {
-    # Drop the local-override notes ziran prints during development.
-    grep -v "local override" || true
-}
-
 same() {
     if ! diff -u "$EXPECTED" "$2"; then
         echo "css conformance: $1 differs from $EXPECTED" >&2
@@ -37,14 +32,14 @@ rm -rf build/conformance
 mkdir -p "$OUT"
 
 # C
-"$ZIRAN" build --project --target=c --exe --entry css_conformance_main:main \
-    -o "$OUT/c" tests/css_conformance_main.zi 2>&1 | quiet
+"$ZIRAN" build --project --target=c --emit-main --entry css_conformance_main:main \
+    -o "$OUT/c" tests/css_conformance_main.zi
 "$CC" -std=c11 -O1 -I"$INCLUDE" -I"$OUT/c" "$OUT"/c/*.c -o "$OUT/css_conformance" -lm
 "$OUT/css_conformance" > "$OUT/c.txt"
 same C "$OUT/c.txt"
 
 # C++: the generated C as a library.
-"$ZIRAN" build --project --target=c -o "$OUT/lib" tests/css_conformance.zi 2>&1 | quiet
+"$ZIRAN" build --project --target=c -o "$OUT/lib" tests/css_conformance.zi
 mkdir -p "$OUT/obj"
 for source in "$OUT"/lib/*.c; do
     "$CC" -std=c11 -O1 -I"$INCLUDE" -I"$OUT/lib" -c "$source" -o "$OUT/obj/$(basename "$source" .c).o"
@@ -54,7 +49,7 @@ done
 same C++ "$OUT/cpp.txt"
 
 # Go
-"$ZIRAN" build --project --target=go -o "$OUT/go" tests/css_conformance.zi 2>&1 | quiet
+"$ZIRAN" build --project --target=go -o "$OUT/go" tests/css_conformance.zi
 cp tests/css_conformance_go_test.go "$OUT/go/"
 (cd "$OUT/go" && GO111MODULE=off go test -count=1 -run TestCssConformance -v .) > "$OUT/go.log"
 sed -n 's/^conformance //p' "$OUT/go.log" > "$OUT/go.txt"
@@ -62,15 +57,9 @@ same Go "$OUT/go.txt"
 
 # ZX: the bundle returns the combined digest.
 "$ZIRAN" bundle --project --entry css_conformance:CssConformanceAll -o "$OUT/conformance.zx" \
-    tests/css_conformance.zi 2>&1 | quiet
-# The bundle is run by the toolchain that wrote it, the project's own; where
-# that is not built, the portable runtime runs the entry from source.
-TOOLCHAIN="$("$ZIRAN" pkg path ziran 2> /dev/null)/build/bin/ziran"
-if [ -x "$TOOLCHAIN" ]; then
-    echo "all $("$TOOLCHAIN" run "$OUT/conformance.zx")" > "$OUT/zx.txt"
-else
-    echo "all $("$ZIRAN" run --entry css_conformance:CssConformanceAll tests/css_conformance.zi 2>&1 | quiet)" > "$OUT/zx.txt"
-fi
+    tests/css_conformance.zi
+ZX_RESULT=$("$ZIRAN" run "$OUT/conformance.zx")
+echo "all $ZX_RESULT" > "$OUT/zx.txt"
 if ! grep -qx "$(cat "$OUT/zx.txt")" "$EXPECTED"; then
     echo "css conformance: ZX printed '$(cat "$OUT/zx.txt")', expected the 'all' line of $EXPECTED" >&2
     exit 1

@@ -16,7 +16,7 @@ check: test conformance style-pack-check motion-test fuzz
 # A behavior test: build one Ziran entry to C and run it.
 define native_test
 	rm -rf $(BUILD)/$(1)-c
-	$(ZIRAN) build --project $(2) --target=c --exe --entry $(1):main -o $(BUILD)/$(1)-c tests/$(1).zi
+	$(ZIRAN) build --project $(2) --target=c --emit-main --entry $(1):main -o $(BUILD)/$(1)-c tests/$(1).zi
 	$(CC) -std=c11 -O1 $(INCLUDE) -I$(BUILD)/$(1)-c $(BUILD)/$(1)-c/*.c -o $(BUILD)/$(1) -lm
 	$(BUILD)/$(1)
 endef
@@ -47,10 +47,10 @@ motion-test: $(BUILD)/motion-pack/style_pack_motion.zi
 conformance:
 	ZIRAN=$(ZIRAN) sh tests/css_conformance.sh
 
-$(CSS_TOOL): tools/css_tool.zi src/*.zi src/parser/*.zi
+$(CSS_TOOL): tools/css_tool.zi src/*.zi src/parser/*.zi ziran.toml ziran.lock Makefile
 	rm -rf $@-c
 	mkdir -p $(dir $@)
-	$(ZIRAN) build --project --target=c --exe --entry css_tool:main -o $@-c tools/css_tool.zi
+	$(ZIRAN) build --project --target=c --emit-main --entry css_tool:main -o $@-c tools/css_tool.zi
 	$(CC) -std=c11 -O2 $(INCLUDE) -I$@-c $@-c/*.c -o $@ -lm
 
 diagnostics-test: $(CSS_TOOL)

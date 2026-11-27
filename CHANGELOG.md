@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Build against published Ziran edd7f35a and Kryon 7fc37d68 so consumers resolve one current renderer.
+- Build against published Ziran dc3ecf0a and Kryon e2b0fbd8. Compose the existing integration and motion fixtures through public TSX components; retain native CSS policies and behavior assertions.
+
+- Compile each native behavior test, conformance program, sanitizer fixture and the CSS tool once, keeping their existing C flags and assertions. Rebuild the tool when its manifest, lock or build recipe changes. Run the emitted ZX bundle directly and preserve compiler failures.
 
 - Share the Kryon revision that fixes GPU seams in rounded fills.
 

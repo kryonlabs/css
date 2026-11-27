@@ -6,6 +6,7 @@
 #import "style_pack_motion"
 using RasterHost :: #import "css_button_raster_host";
 CssMotion :: #import "css_motion";
+Fixture :: #import "css_integration_fixture";
 Button :: #import "kryon/button";
 #import "kryon/control_props"
 #import "kryon/frame_motion"
@@ -29,7 +30,7 @@ Draw :: (session: Session, seconds: float64, class_name: string, state: s32) -> 
     SetFrameMotionTime(session, seconds)
     CssButtonRasterReset()
     Check(BeginFrame(session, 1, Rectangle.{0.0, 0.0, 200.0, 100.0}) == cast(FrameStatus)FrameOk, "begin retained frame")
-    unused Button.Draw(session, Button.Props.{.key = 1, .class_name = StyleClass(class_name),
+    unused Fixture.DrawButton(session, Button.Props.{.key = 1, .class_name = StyleClass(class_name),
         .label = "Save", .state = cast(ButtonState)state, .bounds = Rectangle.{10.0, 20.0, 100.0, 48.0}})
     Check(EndFrame(session) == cast(FrameStatus)FrameOk, "commit retained frame")
     raster: CssButtonRasterState = CssButtonRasterSample()

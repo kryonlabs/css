@@ -4,6 +4,9 @@
 #import "css_sheet"
 #import "kryon/style"
 #import "kryon/style_sheet"
+#import "kryon/geometry"
+#import "kryon/drawing_props"
+#import "css_export"
 
 libc :: #system_library "libc";
 RawWrite :: (descriptor: s32, input: *u8, count: u64) -> s64 #foreign libc "write";
@@ -140,4 +143,87 @@ Facts :: (kind: s32, class_name: s32) -> StyleFacts {
 Resolve :: (facts: StyleFacts, state: s32) -> StyleData {
     base: StyleData
     return ResolveStyleRules(test_rules, base, facts, state)
+}
+
+// Geometry and color assertions shared by the behavior tests and the TSX
+// fixture.
+ColorIs :: (color: Color, value: u32) -> bool {
+    return color.r == cast(u8)(value >> cast(u32)24) &&
+        color.g == cast(u8)(value >> cast(u32)16) &&
+        color.b == cast(u8)(value >> cast(u32)8) && color.a == cast(u8)value
+}
+
+Near :: (bounds: Rectangle, x: float32, y: float32, width: float32, height: float32) -> bool {
+    return bounds.x == x && bounds.y == y && bounds.width == width && bounds.height == height
+}
+
+// The foreground the context selectors resolve for `class_name` right now,
+// against the containers the fixture holds open.
+ContextColor :: (kind: s32, class_name: string, state: s32) -> u32 {
+    facts := StyleDefaultFacts(kind)
+    if class_name != "" { facts.class_name = StyleClass(class_name) }
+    return ResolveInstalledStyleRules(StyleData.{}, facts, state).foreground
+}
+
+// Context-selector stages the TSX fixture observes while its containers are
+// open; every line is the original behavior assertion, unchanged.
+CheckContextStage :: (stage: s32) {
+    text := StyleKindText()
+    any := StyleStateAny()
+    if stage == 0 {
+        Check(ContextColor(text, "", any) != cast(u32)0x010101ff, "no ancestor outside the panel")
+    } else if stage == 1 {
+        Check(ContextColor(text, "", any) == cast(u32)0x010101ff, ".panel Text matches inside the panel")
+        Check(ContextColor(text, "direct", any) == cast(u32)0x020202ff, ".panel > .direct matches its child")
+        Check(ContextColor(text, "lead", any) == cast(u32)0x030303ff, ":first-child before any child")
+    } else if stage == 2 {
+        Check(ContextColor(text, "lead", any) == cast(u32)0x010101ff, "no first child after a sibling")
+    } else if stage == 3 {
+        Check(ContextColor(text, "direct", any) == cast(u32)0x010101ff, "a grandchild is a descendant, not a child")
+    }
+}
+
+// Sibling-selector stages across the fixture's four frames.
+CheckSiblingStage :: (stage: s32) {
+    text := StyleKindText()
+    any := StyleStateAny()
+    if stage == 0 {
+        Check(ContextColor(text, "f1", any) == cast(u32)0x101010ff, ":first-child before any child")
+    } else if stage == 1 {
+        Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, ":first-of-type before any child")
+    } else if stage == 2 {
+        Check(ContextColor(text, "f2", any) != cast(u32)0x202020ff, ":nth-child(2) misses 1")
+    } else if stage == 3 {
+        Check(ContextColor(text, "f4", any) != cast(u32)0x404040ff, "a new container has no committed last child")
+    } else if stage == 4 {
+        Check(ContextColor(text, "f2", any) == cast(u32)0x202020ff, ":nth-child(2) follows any kind of sibling")
+    } else if stage == 5 {
+        Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, "a box is not of the text type")
+    } else if stage == 6 {
+        Check(ContextColor(text, "f1", any) != cast(u32)0x101010ff, ":first-child misses 2")
+    } else if stage == 7 {
+        Check(ContextColor(text, "f3", any) == cast(u32)0x303030ff, ":nth-child(odd) at 3")
+    } else if stage == 8 {
+        Check(ContextColor(text, "f5", any) != cast(u32)0x505050ff, "a new container has no committed only child")
+    } else if stage == 9 {
+        Check(ContextColor(text, "f6", any) == cast(u32)0x606060ff, ":first-of-type keeps matching the text type")
+    } else if stage == 10 {
+        Check(ContextColor(text, "f7", any) != cast(u32)0x707070ff, "the committed row holds more than one text")
+    } else if stage == 11 {
+        Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, ":last-child converges at the committed count")
+    } else if stage == 12 {
+        Check(ContextColor(text, "f7", any) == cast(u32)0x707070ff, ":last-of-type converges at the committed count")
+    } else if stage == 13 {
+        Check(ContextColor(text, "f5", any) == cast(u32)0x505050ff, ":only-child converges on the committed row")
+    } else if stage == 14 {
+        Check(ContextColor(text, "f8", any) == cast(u32)0x808080ff, ":only-of-type converges on the committed row")
+    } else if stage == 15 {
+        Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, "the stale committed count still converges the last position")
+    } else if stage == 16 {
+        Check(ContextColor(text, "f5", any) != cast(u32)0x505050ff, "two children are not an only child")
+    } else if stage == 17 {
+        Check(ContextColor(text, "f4", any) == cast(u32)0x404040ff, "the shorter row's last position converges")
+    } else if stage == 18 {
+        Check(ContextColor(text, "f4", any) != cast(u32)0x404040ff, "a position past the committed row waits one frame")
+    }
 }

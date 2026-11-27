@@ -254,19 +254,19 @@ Anything else is browser-only or an error.
   clips descendants. `Text`, `Heading`, `ParagraphText` and `Link` read
   `text-align` (`start`, `left`, `center`, `end`, `right`). Negative margins,
   percentages and `overflow: auto` or `scroll` are browser-only; native
-  scrolling is `Scroll.Draw`.
+  scrolling uses `Scroll` from `kryon/tsx/scroll`.
 - `Grid` supports `1fr`, `minmax(0, 1fr)`, `repeat(N, 1fr)`,
   `repeat(N, minmax(0, 1fr))` and `repeat(auto-fit, minmax(LENGTH, 1fr))`.
   `N` is 1–1024 and `LENGTH` is a positive `px` or `rem` length. The
   responsive spelling `min(LENGTH, 100%)` also works as the minimum.
   Other track expressions remain available to browser export. Choose
-  `Layout.Grid` in the app frame and provide item heights or width-aware
+  `MeasuredGrid` from `kryon/tsx/grid` and provide item heights or width-aware
   measurements and any spans.
-- `display: flex` maps to measured `Layout.Row` and `Layout.Draw` containers.
-  Pass `[]Layout.FlexItem` and `[]Layout.FlexPlacement` to either API, then
-  draw each child in its placement's `bounds`. Set the item's style `kind`,
-  `id` and `class_name` when a selector matches it. `display: grid` maps
-  to `Layout.Grid`. Native code selects the container.
+- `display: flex` maps to `MeasuredRow` and `MeasuredColumn` from
+  `kryon/tsx/layout`. Supply native `FlexItem[]` and `FlexPlacement[]` values
+  from `kryon/layout`, then compose children in their placement's `bounds`.
+  Set each item's style `kind`, `id` and `class_name` when a selector matches
+  it. `display: grid` uses `MeasuredGrid`. The TSX screen selects the container.
 - Flex directions are `row`, `row-reverse`, `column` and `column-reverse`.
   Lines support `wrap`, `wrap-reverse` and `nowrap` and use the main-axis and
   cross-axis gaps. Justification supports `normal`, `flex-start`, `center`,
@@ -445,6 +445,10 @@ compiles a standalone native pack.
 
 Choose the Kryon widget based on what the HTML element does, then use its
 widget name or a class in the stylesheet.
+
+Application composition uses Kryon's `kryon/tsx/*` components. CSS parsing,
+style packs and nonvisual policies remain native Ziran modules; the former
+native widget composition calls are package-private.
 
 | HTML | Kryon CSS selector | Native styling examples |
 | --- | --- | --- |

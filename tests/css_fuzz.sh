@@ -22,8 +22,8 @@ include="$("$ziran" pkg path ziran 2> /dev/null)/include"
 out=$repo/build/css-fuzz
 rm -rf build/css-fuzz/c
 mkdir -p "$out"
-"$ziran" build --project --target=c --exe --entry css_fuzz:main \
-    -o "$out/c" "$repo/tests/css_fuzz.zi" 2>&1 | { grep -v "local override" || true; }
+"$ziran" build --project --target=c --emit-main --entry css_fuzz:main \
+    -o "$out/c" "$repo/tests/css_fuzz.zi"
 "${CC:-cc}" -std=c11 -O1 -g -fno-omit-frame-pointer \
     -fsanitize=address,undefined -fno-sanitize-recover=all \
     -I"$include" -I"$out/c" "$out/c"/*.c -o "$out/css_fuzz" -lm

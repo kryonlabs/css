@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Build against published Ziran edd7f35a and Kryon 7fc37d68 so consumers resolve one current renderer.
+
 - Share the Kryon revision that fixes GPU seams in rounded fills.
 
 - `radial-gradient()` parses and paints natively in `background` and

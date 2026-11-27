@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Build against published Ziran dc3ecf0a and Kryon e2b0fbd8. Compose the existing integration and motion fixtures through public TSX components; retain native CSS policies and behavior assertions.
+- Build against published Ziran fac8a396 and Kryon f4bda473. Compose the existing integration and motion fixtures through public TSX components; retain native CSS policies and behavior assertions. End borrowed style and paint inspections before rebuilding rules or ending their frame.
 
 - Compile each native behavior test, conformance program, sanitizer fixture and the CSS tool once, keeping their existing C flags and assertions. Rebuild the tool when its manifest, lock or build recipe changes. Run the emitted ZX bundle directly and preserve compiler failures.
 

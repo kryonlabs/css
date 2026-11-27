@@ -138,16 +138,20 @@ CSS;
 NativeAuthoring :: () {
     if Builds(native_authoring_css, "native authoring") {
         facts: StyleFacts = Facts(StyleKindButton(), CssClass("primary"))
-        normal: StyleData = Resolve(facts, 1)
-        Check(normal.min_height == 44.0 && Has(normal, cast(u32)StyleMinHeight),
-            "logical size resolves through the minimum-height cascade")
-        Check(normal.background == cast(u32)0x555555ff &&
-            normal.foreground == cast(u32)0x33cccc80, "HWB normalization and alpha token")
-        Check(normal.opacity == 1.0 && Has(normal, cast(u32)StyleOpacity),
-            "opacity token clamps on the typed field")
-        hover: StyleData = Resolve(facts, 2)
-        Check(hover.min_height == 48.0 && hover.opacity == 0.75,
-            "physical size and opacity fallback win on hover")
+        {
+            normal: StyleData = Resolve(facts, 1)
+            Check(normal.min_height == 44.0 && Has(normal, cast(u32)StyleMinHeight),
+                "logical size resolves through the minimum-height cascade")
+            Check(normal.background == cast(u32)0x555555ff &&
+                normal.foreground == cast(u32)0x33cccc80, "HWB normalization and alpha token")
+            Check(normal.opacity == 1.0 && Has(normal, cast(u32)StyleOpacity),
+                "opacity token clamps on the typed field")
+        }
+        {
+            hover: StyleData = Resolve(facts, 2)
+            Check(hover.min_height == 48.0 && hover.opacity == 0.75,
+                "physical size and opacity fallback win on hover")
+        }
         Check(Resolve(Facts(StyleKindButton(), 0), 2).min_height == 32.0,
             "hover rule stays scoped to the class")
     }
@@ -269,14 +273,18 @@ CSS;
 ColorMix :: () {
     if Builds(color_mix_css, "sRGB color mixes") {
         facts: StyleFacts = Facts(StyleKindButton(), 0)
-        button: StyleData = Resolve(facts, 1)
-        Check(button.foreground == cast(u32)0x800080ff, "missing weights default to equal shares")
-        Check(button.background == cast(u32)0x990066ff, "weights above 100% normalize")
-        Check(button.border == cast(u32)0x66009980 && button.border_width == 1.0, "weights below 100% scale alpha")
-        Check(button.focus == cast(u32)0x2468ac40, "transparent stop preserves the other stop's hue")
-        hover: StyleData = Resolve(facts, 2)
-        Check(hover.foreground == cast(u32)0xbf0040ff, "prefix weight, inferred first share and custom property alias")
-        Check(hover.background == cast(u32)0x003300ff, "inferred second share in a var() fallback")
+        {
+            button: StyleData = Resolve(facts, 1)
+            Check(button.foreground == cast(u32)0x800080ff, "missing weights default to equal shares")
+            Check(button.background == cast(u32)0x990066ff, "weights above 100% normalize")
+            Check(button.border == cast(u32)0x66009980 && button.border_width == 1.0, "weights below 100% scale alpha")
+            Check(button.focus == cast(u32)0x2468ac40, "transparent stop preserves the other stop's hue")
+        }
+        {
+            hover: StyleData = Resolve(facts, 2)
+            Check(hover.foreground == cast(u32)0xbf0040ff, "prefix weight, inferred first share and custom property alias")
+            Check(hover.background == cast(u32)0x003300ff, "inferred second share in a var() fallback")
+        }
         text: StyleData = Resolve(Facts(StyleKindText(), 0), 1)
         Check(text.foreground == cast(u32)0x3159c3b1, "translucent stops mix with premultiplied alpha")
         Check(text.background == cast(u32)0x0b1f337f, "channels and alpha keep precision until the final mix")
@@ -570,19 +578,25 @@ MotionMedia :: () {
         return
     }
     facts: StyleFacts = Facts(StyleKindButton(), 0)
-    normal: StyleData = Resolve(facts, 1)
-    Check(normal.motion_duration == 180.0 && cast(s32)normal.motion_easing == cast(s32)MotionEasingLinear &&
-        !normal.motion_reduced, "native default matches no-preference")
+    {
+        normal: StyleData = Resolve(facts, 1)
+        Check(normal.motion_duration == 180.0 && cast(s32)normal.motion_easing == cast(s32)MotionEasingLinear &&
+            !normal.motion_reduced, "native default matches no-preference")
+    }
     env.reduced_motion = true
     Check(CssSheetBuild(*test_sheet, env, null, *test_rules), "rebuild same sheet with reduce")
-    light: StyleData = Resolve(facts, 1)
-    Check(light.motion_duration == 180.0 && !light.motion_reduced && !Has(light, cast(u32)StyleMotionEasing),
-        "native reduce skips no-preference and still requires the other nested feature")
+    {
+        light: StyleData = Resolve(facts, 1)
+        Check(light.motion_duration == 180.0 && !light.motion_reduced && !Has(light, cast(u32)StyleMotionEasing),
+            "native reduce skips no-preference and still requires the other nested feature")
+    }
     env = CssEnvironmentWithNames(env, "dark", "", "", "", "")
     Check(CssSheetBuild(*test_sheet, env, null, *test_rules), "rebuild same sheet with dark and reduce")
-    dark: StyleData = Resolve(facts, 1)
-    Check(dark.motion_duration == 0.0 && dark.motion_reduced && !Has(dark, cast(u32)StyleForeground) &&
-        !Has(dark, cast(u32)StyleOpacity), "native nested boolean reduce cascades duration and policy")
+    {
+        dark: StyleData = Resolve(facts, 1)
+        Check(dark.motion_duration == 0.0 && dark.motion_reduced && !Has(dark, cast(u32)StyleForeground) &&
+            !Has(dark, cast(u32)StyleOpacity), "native nested boolean reduce cascades duration and policy")
+    }
     env.reduced_motion = false
     Check(CssSheetBuild(*test_sheet, env, null, *test_rules) && Resolve(facts, 1).motion_duration == 180.0,
         "switching back re-resolves conditional custom properties")

@@ -420,12 +420,16 @@ DiagnosticRecovery :: () {
     Check(count == DiagnosticIssueCount, "reporting parser visits every independent issue")
     env: CssEnvironment = CssEnvironmentWithViewportWidth(CssDefaultEnvironment(), 1200.0)
     Check(CssSheetBuild(*parsed_sheet, env, null, *test_rules), "recovered sheet builds")
-    row: StyleData = Resolve(Facts(StyleKindRow(), StyleClass("fixture")), 0)
-    Check(row.foreground == 0x123456ff && row.gap == 7.0 && row.row_gap == 7.0 && row.column_gap == 7.0 &&
-        row.padding_x == 4.0 && row.padding_y == 4.0, "invalid shorthand restores var references and later styles apply")
-    text: StyleData = Resolve(Facts(StyleKindText(), 0), 0)
-    Check(text.height == 0.0 && text.typeface == "Inter" && text.foreground != 0xff0000ff,
-        "native style survives skipped media, width, and font fallback")
+    {
+        row: StyleData = Resolve(Facts(StyleKindRow(), StyleClass("fixture")), 0)
+        Check(row.foreground == 0x123456ff && row.gap == 7.0 && row.row_gap == 7.0 && row.column_gap == 7.0 &&
+            row.padding_x == 4.0 && row.padding_y == 4.0, "invalid shorthand restores var references and later styles apply")
+    }
+    {
+        text: StyleData = Resolve(Facts(StyleKindText(), 0), 0)
+        Check(text.height == 0.0 && text.typeface == "Inter" && text.foreground != 0xff0000ff,
+            "native style survives skipped media, width, and font fallback")
+    }
     CssSheetReset(*parsed_sheet)
     count = 0
     options.strict = true

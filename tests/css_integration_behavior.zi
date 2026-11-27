@@ -395,15 +395,17 @@ PaintedBox :: () {
     Check(paints[0].card.opened, "close card")
     Check(Near(TreeSubmittedBounds(integration_session, paints[0].card.node), 0.0, 0.0, 400.0, 50.0),
         "the card wraps its child and padding")
-    fill := PendingPaintAt(integration_session, before)
-    line := PendingPaintAt(integration_session, before + 1)
-    child := PendingPaintAt(integration_session, before + 2)
-    Check(fill.kind == PaintKindRoundedFill && Near(fill.bounds, 0.0, 0.0, 400.0, 50.0) &&
-        fill.radius == 8.0 && ColorIs(fill.color, cast(u32)0x102030ff), "the card fill paints first")
-    Check(line.kind == PaintKindRoundedOutline && line.line_width == 1.0 &&
-        ColorIs(line.color, cast(u32)0x405060ff), "then its border")
-    Check(child.kind == PaintKindRoundedFill && ColorIs(child.color, cast(u32)0x010203ff) &&
-        Near(child.bounds, 10.0, 10.0, 380.0, 30.0), "children paint above the box")
+    {
+        fill := PendingPaintAt(integration_session, before)
+        line := PendingPaintAt(integration_session, before + 1)
+        child := PendingPaintAt(integration_session, before + 2)
+        Check(fill.kind == PaintKindRoundedFill && Near(fill.bounds, 0.0, 0.0, 400.0, 50.0) &&
+            fill.radius == 8.0 && ColorIs(fill.color, cast(u32)0x102030ff), "the card fill paints first")
+        Check(line.kind == PaintKindRoundedOutline && line.line_width == 1.0 &&
+            ColorIs(line.color, cast(u32)0x405060ff), "then its border")
+        Check(child.kind == PaintKindRoundedFill && ColorIs(child.color, cast(u32)0x010203ff) &&
+            Near(child.bounds, 10.0, 10.0, 380.0, 30.0), "children paint above the box")
+    }
     Check(outer.opened, "close painted column")
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "painted frame")
 }
@@ -486,17 +488,19 @@ SideBorders :: () {
         .bounds = .{10.0, 20.0, 100.0, 50.0}})
     Check(ruled.opened, "close ruled")
     Check(PendingPaintCount(integration_session) == before + 4, "four side bands")
-    top := PendingPaintAt(integration_session, before)
-    bottom := PendingPaintAt(integration_session, before + 1)
-    left := PendingPaintAt(integration_session, before + 2)
-    right := PendingPaintAt(integration_session, before + 3)
-    Check(Near(top.bounds, 10.0, 20.0, 100.0, 1.0) && ColorIs(top.color, cast(u32)0x101010ff),
-        "a side without its own border takes the uniform one")
-    Check(Near(bottom.bounds, 10.0, 68.0, 100.0, 2.0) && ColorIs(bottom.color, cast(u32)0xff0000ff),
-        "border-bottom paints its own band")
-    Check(Near(left.bounds, 10.0, 21.0, 4.0, 47.0) && ColorIs(left.color, cast(u32)0x00ff00ff),
-        "side longhands set the left band between top and bottom")
-    Check(Near(right.bounds, 109.0, 21.0, 1.0, 47.0), "the right band keeps the uniform width")
+    {
+        top := PendingPaintAt(integration_session, before)
+        bottom := PendingPaintAt(integration_session, before + 1)
+        left := PendingPaintAt(integration_session, before + 2)
+        right := PendingPaintAt(integration_session, before + 3)
+        Check(Near(top.bounds, 10.0, 20.0, 100.0, 1.0) && ColorIs(top.color, cast(u32)0x101010ff),
+            "a side without its own border takes the uniform one")
+        Check(Near(bottom.bounds, 10.0, 68.0, 100.0, 2.0) && ColorIs(bottom.color, cast(u32)0xff0000ff),
+            "border-bottom paints its own band")
+        Check(Near(left.bounds, 10.0, 21.0, 4.0, 47.0) && ColorIs(left.color, cast(u32)0x00ff00ff),
+            "side longhands set the left band between top and bottom")
+        Check(Near(right.bounds, 109.0, 21.0, 1.0, 47.0), "the right band keeps the uniform width")
+    }
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "border frame")
     ring := FocusRingFor(StyleKindButton(), 0, StyleClass("ringed"), Rectangle.{10.0, 10.0, 80.0, 30.0}, 6.0)
     Check(Near(ring.bounds, 5.0, 5.0, 90.0, 40.0) && ring.width == 3.0 && ring.radius == 11.0,
@@ -570,20 +574,24 @@ Gradients :: () {
         .bounds = .{10.0, 10.0, 256.0, 20.0}})
     Check(sunrise.opened, "close sunrise")
     Check(PendingPaintCount(integration_session) == before + 64, "a horizontal gradient is 64 strips")
-    first := PendingPaintAt(integration_session, before)
-    last := PendingPaintAt(integration_session, before + 63)
-    Check(Near(first.bounds, 10.0, 10.0, 4.0, 20.0) && first.color.r < cast(u8)8 && last.color.r > cast(u8)247,
-        "strips run dark to light left to right")
+    {
+        first := PendingPaintAt(integration_session, before)
+        last := PendingPaintAt(integration_session, before + 63)
+        Check(Near(first.bounds, 10.0, 10.0, 4.0, 20.0) && first.color.r < cast(u8)8 && last.color.r > cast(u8)247,
+            "strips run dark to light left to right")
+    }
     before = PendingPaintCount(integration_session)
     bands := Fixture.OpenColumn(integration_session, .{.key = 972, .class_name = StyleClass("bands"),
         .bounds = .{10.0, 40.0, 100.0, 60.0}})
     Check(bands.opened, "close bands")
-    top := PendingPaintAt(integration_session, before)
-    bottom := PendingPaintAt(integration_session, before + 1)
-    Check(PendingPaintCount(integration_session) == before + 2 && top.kind == PaintKindVerticalGradient &&
-        Near(top.bounds, 10.0, 40.0, 100.0, 30.0) && ColorIs(top.color, cast(u32)0xff0000ff) &&
-        ColorIs(top.end_color, cast(u32)0x00ff00ff) && Near(bottom.bounds, 10.0, 70.0, 100.0, 30.0) &&
-        ColorIs(bottom.end_color, cast(u32)0x0000ffff), "a vertical three-stop gradient is two bands")
+    {
+        top := PendingPaintAt(integration_session, before)
+        bottom := PendingPaintAt(integration_session, before + 1)
+        Check(PendingPaintCount(integration_session) == before + 2 && top.kind == PaintKindVerticalGradient &&
+            Near(top.bounds, 10.0, 40.0, 100.0, 30.0) && ColorIs(top.color, cast(u32)0xff0000ff) &&
+            ColorIs(top.end_color, cast(u32)0x00ff00ff) && Near(bottom.bounds, 10.0, 70.0, 100.0, 30.0) &&
+            ColorIs(bottom.end_color, cast(u32)0x0000ffff), "a vertical three-stop gradient is two bands")
+    }
     before = PendingPaintCount(integration_session)
     orb := Fixture.OpenColumn(integration_session, .{.key = 981, .class_name = StyleClass("orb"),
         .bounds = .{10.0, 110.0, 64.0, 32.0}})
@@ -604,11 +612,13 @@ Gradients :: () {
         .{.key = 974, .bounds = .{height = 12.0}, .fill = Color.{9, 9, 9, 255}})
     Check(card.opened, "close box")
     Check(TreeSubmittedBounds(integration_session, card.node).height == 20.0, "the box wraps its child and padding")
-    fill := PendingPaintAt(integration_session, before + 2)
-    child := PendingPaintAt(integration_session, before + 3)
-    Check(PendingPaintCount(integration_session) == before + 4 && ColorIs(fill.color, cast(u32)0x223344ff) &&
-        Near(fill.bounds, 0.0, 0.0, 400.0, 20.0) && Near(child.bounds, 6.0, 4.0, 388.0, 12.0),
-        "two elevation edges, then the face fill, beneath the child")
+    {
+        fill := PendingPaintAt(integration_session, before + 2)
+        child := PendingPaintAt(integration_session, before + 3)
+        Check(PendingPaintCount(integration_session) == before + 4 && ColorIs(fill.color, cast(u32)0x223344ff) &&
+            Near(fill.bounds, 0.0, 0.0, 400.0, 20.0) && Near(child.bounds, 6.0, 4.0, 388.0, 12.0),
+            "two elevation edges, then the face fill, beneath the child")
+    }
     Check(EndFrame(integration_session) == cast(FrameStatus)FrameOk, "gradient frame")
 }
 

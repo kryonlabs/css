@@ -4,11 +4,11 @@ module_roots = ["src", "tests", "tools"]
 
 [toolchain]
 git = "https://git.waozi.xyz/ziranlang/ziran.git"
-ref = "dc3ecf0aabd1630881c13783a660ca8b298eff88"
+ref = "fac8a39688135feb38671553fb288887170575ab"
 
 [dependencies.kryon]
 git = "https://git.waozi.xyz/kryonlabs/kryon.git"
-ref = "e2b0fbd89167f9bf599efed1865f198ba715786e"
+ref = "f4bda4733366bea32e64fa632906410242230122"
 
 [exports]
 Css = "src/Css/module.zi"
